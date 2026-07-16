@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Env & secrets
+.env
+.env.*
+
+# Never commit generated/filled PDFs or anything derived from patient data
+forms/output/
