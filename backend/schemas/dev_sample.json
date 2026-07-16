@@ -1,0 +1,39 @@
+{
+  "form_id": "dev_sample_v1",
+  "pdf_path": "forms/dev_sample.pdf",
+  "fields": [
+    {
+      "id": "patient_name",
+      "pdf_field_name": "Text_PatientName",
+      "type": "text",
+      "source": "demographics.full_name"
+    },
+    {
+      "id": "patient_dob",
+      "pdf_field_name": "Text_DOB",
+      "type": "date",
+      "source": "demographics.dob"
+    },
+    {
+      "id": "diagnosis_primary",
+      "pdf_field_name": "Text_Diagnosis1",
+      "type": "text",
+      "source": "llm",
+      "description": "Primary diagnosis for this claim, with ICD code if stated in the notes"
+    },
+    {
+      "id": "date_first_consult",
+      "pdf_field_name": "Date_FirstConsult",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient FIRST consulted this doctor for this condition (not the latest visit)"
+    },
+    {
+      "id": "symptoms_preexisting",
+      "pdf_field_name": "Check_PreExisting",
+      "type": "checkbox",
+      "source": "llm",
+      "description": "Did symptoms exist before, or is this a pre-existing condition per the notes?"
+    }
+  ]
+}
