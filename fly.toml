@@ -1,0 +1,33 @@
+# Fly.io config — backend only (frontend deploys to Vercel).
+#
+# Singapore region: clinical text must not leave SG-adjacent infrastructure
+# unnecessarily, and latency to the clinic matters.
+#
+# Exactly ONE machine, never auto-stopped: claims live in an in-memory store
+# (a privacy feature — nothing persists), so a second machine or a mid-review
+# stop/start would lose or split claims.
+#
+# Required secrets (fly secrets set NAME=value):
+#   ANTHROPIC_API_KEY          - LLM calls
+#   FORMFILL_ALLOWED_ORIGINS   - deployed frontend origin, e.g.
+#                                https://formfill.vercel.app
+
+app = "formfill-backend"
+primary_region = "sin"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

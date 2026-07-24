@@ -1,0 +1,8 @@
+.git
+.venv
+frontend
+tests
+scripts
+forms/scans_unsupported
+**/__pycache__
+*.pyc
