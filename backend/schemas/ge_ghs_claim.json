@@ -1,0 +1,109 @@
+{
+  "form_id": "ge_ghs_claim",
+  "pdf_path": "forms/ge_ghs_claim.pdf",
+  "fields": [
+    {
+      "id": "patient_name",
+      "pdf_field_name": "1a Patients Full Name",
+      "type": "text",
+      "source": "demographics.full_name"
+    },
+    {
+      "id": "patient_nric",
+      "pdf_field_name": "1b NRICPPBC No",
+      "type": "text",
+      "source": "demographics.nric"
+    },
+    {
+      "id": "hospital_name",
+      "pdf_field_name": "2a Name of Hospital Admitted",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the hospital the patient was admitted to"
+    },
+    {
+      "id": "diagnosis_and_symptoms",
+      "pdf_field_name": "description of the symptoms of illness or injury 1",
+      "type": "text",
+      "source": "llm",
+      "description": "Diagnosis of all conditions treated plus a brief description of the symptoms — keep to one concise line"
+    },
+    {
+      "id": "diagnosis_code",
+      "pdf_field_name": "3b Diagnosis Code",
+      "type": "text",
+      "source": "llm",
+      "description": "ICD-10 code for the primary diagnosis, if stated or clearly determinable"
+    },
+    {
+      "id": "onset_and_duration",
+      "pdf_field_name": "4a Please give the date of onset and duration of complaints If no complaints give reasons for seeking medical attention 1",
+      "type": "text",
+      "source": "llm",
+      "description": "Date of onset and duration of complaints; if no complaints, the reason for seeking medical attention — one concise line"
+    },
+    {
+      "id": "previous_treatment_dates",
+      "pdf_field_name": "5a Please give dates of previous treatment if patient has a history of these complaints before",
+      "type": "text",
+      "source": "llm",
+      "description": "Dates of previous treatment if the patient has a history of these complaints; leave missing if none stated"
+    },
+    {
+      "id": "previous_doctor",
+      "pdf_field_name": "5b Please give the names and address of the doctor who treated the patient previously or referred the patient to you 1",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the doctor who previously treated or referred the patient; leave missing if none stated"
+    },
+    {
+      "id": "operation_date",
+      "pdf_field_name": "ddmmyyyy",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the operation/surgical procedure was performed (DD/MM/YYYY); leave missing if no surgery"
+    },
+    {
+      "id": "operation_type",
+      "pdf_field_name": "Surgical Procedures 1",
+      "type": "text",
+      "source": "llm",
+      "description": "Type of operation(s)/surgical procedure(s) performed — one concise line; leave missing if no surgery"
+    },
+    {
+      "id": "operation_codes",
+      "pdf_field_name": "Operation Codes",
+      "type": "text",
+      "source": "llm",
+      "description": "Surgical operation code(s), if stated in the notes"
+    },
+    {
+      "id": "operation_tables",
+      "pdf_field_name": "Tables",
+      "type": "text",
+      "source": "llm",
+      "description": "Surgical operation table(s) (Medisave table), if stated in the notes"
+    },
+    {
+      "id": "treatment_no_surgery",
+      "pdf_field_name": "Please indicate treatment rendered if no surgery was done",
+      "type": "text",
+      "source": "llm",
+      "description": "Treatment rendered if no surgery was done"
+    },
+    {
+      "id": "medical_leave",
+      "pdf_field_name": "Please advise period of medical leave given",
+      "type": "text",
+      "source": "llm",
+      "description": "Period of medical leave given, e.g. 5 days (12/03/26 to 16/03/26)"
+    },
+    {
+      "id": "doctor_details",
+      "pdf_field_name": "Name Address and Qualification of DoctorSurgeon",
+      "type": "text",
+      "source": "llm",
+      "description": "Attending doctor's name, address and qualification, if stated in the notes"
+    }
+  ]
+}

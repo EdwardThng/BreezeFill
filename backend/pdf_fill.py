@@ -19,8 +19,13 @@ from pathlib import Path
 from typing import Any
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, NumberObject
 
 from redaction import TOKEN_RE
+
+# Text-field flag bits (PDF 32000-1 table 228).
+_FF_DO_NOT_SCROLL = 1 << 23
+_FF_COMB = 1 << 24
 
 
 class PdfFillError(Exception):
@@ -50,6 +55,28 @@ def _checkbox_on_state(field: dict[str, Any], name: str) -> str:
     if not on_states:
         raise PdfFillError(f"checkbox {name!r} has no on-state export value")
     return on_states[0]
+
+
+def _flatten_comb_fields(page, updates: dict[str, str]) -> None:
+    """Comb fields carve the box into /MaxLen letter-cells; when the value is
+    longer than the cell count (routine on Great Eastern's official form,
+    e.g. a 6-cell NRIC box) viewers render only a clipped tail. For text
+    fields we are about to fill, drop the comb + scroll-lock flags and the
+    /MaxLen cap so the full value renders as plain left-aligned text."""
+    for ref in page["/Annots"]:
+        obj = ref.get_object()
+        field = obj if "/T" in obj else (
+            obj["/Parent"].get_object() if "/Parent" in obj else None
+        )
+        if field is None or str(field.get("/T")) not in updates:
+            continue
+        if field.get("/FT") != "/Tx":
+            continue
+        ff = int(field.get("/Ff") or 0)
+        if ff & _FF_COMB:
+            field[NameObject("/Ff")] = NumberObject(ff & ~(_FF_COMB | _FF_DO_NOT_SCROLL))
+            if "/MaxLen" in field:
+                del field["/MaxLen"]
 
 
 def fill_pdf(pdf_path: str | Path, values: dict[str, str | bool | None]) -> bytes:
@@ -93,6 +120,7 @@ def fill_pdf(pdf_path: str | Path, values: dict[str, str | bool | None]) -> byte
     writer.set_need_appearances_writer(True)
     for page in writer.pages:
         if page.get("/Annots"):
+            _flatten_comb_fields(page, updates)
             writer.update_page_form_field_values(page, updates, auto_regenerate=False)
 
     buffer = io.BytesIO()

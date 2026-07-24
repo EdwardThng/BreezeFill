@@ -40,9 +40,15 @@ SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 CLAIM_TTL_SECONDS = 60 * 60  # zero long-term retention; 1h working window
 
 app = FastAPI(title="FormFill", version="0.1.0")
+# Comma-separated list of extra allowed origins, e.g. the deployed frontend URL.
+_extra_origins = [
+    o.strip()
+    for o in os.environ.get("FORMFILL_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *_extra_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )

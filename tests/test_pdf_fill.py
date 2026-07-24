@@ -79,6 +79,39 @@ def test_type_mismatches_rejected():
         fill_pdf(DEV_PDF, {"Text_DOB": True})
 
 
+def test_comb_fields_flattened_when_filled():
+    # Great Eastern's official form uses comb (letter-per-cell) fields whose
+    # cell counts are shorter than real values, so viewers clip the value to
+    # a tail. Filled text fields must lose comb + scroll-lock + /MaxLen;
+    # untouched fields keep theirs.
+    import io
+
+    ge_pdf = REPO_ROOT / "forms" / "ge_ghs_claim.pdf"
+    comb = 1 << 24
+    do_not_scroll = 1 << 23
+
+    def raw_field(reader, name):
+        for page in reader.pages:
+            for ref in page.get("/Annots") or []:
+                obj = ref.get_object()
+                if str(obj.get("/T")) == name:
+                    return obj
+        raise AssertionError(f"field {name!r} not found")
+
+    before = raw_field(PdfReader(str(ge_pdf)), "1a Patients Full Name")
+    assert int(before.get("/Ff") or 0) & comb, "fixture no longer comb-flagged"
+    assert before.get("/MaxLen") is not None
+
+    pdf_bytes = fill_pdf(ge_pdf, {"1a Patients Full Name": "Tan Wei Ming"})
+    filled_reader = PdfReader(io.BytesIO(pdf_bytes))
+    filled = raw_field(filled_reader, "1a Patients Full Name")
+    assert filled["/V"] == "Tan Wei Ming"
+    assert int(filled.get("/Ff") or 0) & (comb | do_not_scroll) == 0
+    assert filled.get("/MaxLen") is None
+    untouched = raw_field(filled_reader, "1b NRICPPBC No")
+    assert int(untouched.get("/Ff") or 0) & comb
+
+
 def test_missing_pdf_is_loud():
     with pytest.raises(PdfFillError, match="not found"):
         fill_pdf(REPO_ROOT / "forms" / "nope.pdf", {})

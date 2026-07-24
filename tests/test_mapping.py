@@ -101,21 +101,26 @@ def make_record(**overrides) -> PatientRecord:
 
 GOOD_LLM_JSON = json.dumps(
     {
-        "diagnosis_primary": {
-            "value": "Acute appendicitis",
-            "status": "extracted",
-            "source": "Dx: acute appendicitis",
-        },
-        "date_first_consult": {
-            "value": "02/06/2026",
-            "status": "extracted",
-            "source": "First seen 02/06/2026",
-        },
-        "symptoms_preexisting": {
-            "value": False,
-            "status": "inferred",
-            "source": "acute onset",
-        },
+        "fields": [
+            {
+                "id": "diagnosis_primary",
+                "value": "Acute appendicitis",
+                "status": "extracted",
+                "source": "Dx: acute appendicitis",
+            },
+            {
+                "id": "date_first_consult",
+                "value": "02/06/2026",
+                "status": "extracted",
+                "source": "First seen 02/06/2026",
+            },
+            {
+                "id": "symptoms_preexisting",
+                "value": "false",
+                "status": "inferred",
+                "source": "acute onset",
+            },
+        ]
     }
 )
 
@@ -127,13 +132,66 @@ GOOD_LLM_JSON = json.dumps(
 
 def test_output_schema_covers_llm_fields_only():
     schema = build_output_schema(SAMPLE_SCHEMA.llm_fields)
-    assert set(schema["properties"]) == {
+    item = schema["properties"]["fields"]["items"]
+    assert set(item["properties"]["id"]["enum"]) == {
         "diagnosis_primary", "date_first_consult", "symptoms_preexisting",
     }
-    assert schema["additionalProperties"] is False
-    assert schema["required"] == list(schema["properties"])
-    checkbox = schema["properties"]["symptoms_preexisting"]["properties"]["value"]
-    assert {"type": "boolean"} in checkbox["anyOf"]
+    assert item["additionalProperties"] is False
+    assert set(item["required"]) == {"id", "value", "status", "source"}
+    # Values are always strings; checkbox booleans travel as "true"/"false".
+    assert item["properties"]["value"] == {"type": "string"}
+
+
+def test_output_schema_has_no_union_types():
+    # The structured-output API rejects schemas with >16 union-typed
+    # parameters; a real form has 20+ fields, so no anyOf/type-arrays at all.
+    schema = build_output_schema(SAMPLE_SCHEMA.llm_fields)
+
+    def walk(node):
+        if isinstance(node, dict):
+            assert "anyOf" not in node
+            assert not isinstance(node.get("type"), list)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(schema)
+
+
+def test_map_fields_normalizes_empty_string_to_missing():
+    # "" is the no-answer sentinel (schema forbids nulls) — it must come back
+    # as a clean missing answer, never an empty value on the form.
+    reply = {
+        "fields": [
+            {"id": "diagnosis_primary", "value": "", "status": "extracted", "source": ""},
+            {"id": "date_first_consult", "value": "01/07/2026", "status": "extracted", "source": ""},
+            {"id": "symptoms_preexisting", "value": "false", "status": "missing", "source": ""},
+        ]
+    }
+    client = FakeClient(json.dumps(reply))
+    answers = map_fields(SAMPLE_SCHEMA, "redacted notes", client=client)
+    assert answers["diagnosis_primary"].value is None
+    assert answers["diagnosis_primary"].status == "missing"
+    assert answers["date_first_consult"].value == "01/07/2026"
+    assert answers["date_first_consult"].source is None
+    assert answers["symptoms_preexisting"].value is None
+    assert answers["symptoms_preexisting"].status == "missing"
+
+
+def test_map_fields_checkbox_string_coercion():
+    reply = {
+        "fields": [
+            {"id": "symptoms_preexisting", "value": "True", "status": "extracted", "source": "s"},
+        ]
+    }
+    answers = map_fields(SAMPLE_SCHEMA, "notes", client=FakeClient(json.dumps(reply)))
+    assert answers["symptoms_preexisting"].value is True
+    # Non-boolean text in a checkbox field is a malformed answer -> missing.
+    reply["fields"][0]["value"] = "probably"
+    answers = map_fields(SAMPLE_SCHEMA, "notes", client=FakeClient(json.dumps(reply)))
+    assert answers["symptoms_preexisting"].status == "missing"
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +221,11 @@ def test_map_fields_sends_only_redacted_text_and_llm_fields():
 def test_map_fields_malformed_field_becomes_missing():
     bad = json.dumps(
         {
-            "diagnosis_primary": {"value": "X", "status": "not_a_status", "source": None},
-            "date_first_consult": {"value": "02/06/2026", "status": "extracted", "source": "s"},
-            # symptoms_preexisting omitted entirely
+            "fields": [
+                {"id": "diagnosis_primary", "value": "X", "status": "not_a_status", "source": None},
+                {"id": "date_first_consult", "value": "02/06/2026", "status": "extracted", "source": "s"},
+                # symptoms_preexisting omitted entirely
+            ]
         }
     )
     answers = map_fields(SAMPLE_SCHEMA, "notes", client=FakeClient(bad))

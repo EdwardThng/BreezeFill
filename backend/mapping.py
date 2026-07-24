@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from redaction import PatientRecord, remerge
 
@@ -33,20 +33,22 @@ SWEEP_MODEL = os.environ.get("FORMFILL_SWEEP_MODEL", "claude-haiku-4-5")
 SYSTEM_PROMPT = """\
 You fill medical insurance forms from clinical notes. You will receive a form \
 schema and de-identified clinical notes in which identifiers appear as tokens \
-like [PATIENT] or [NRIC]. For each form field, return:
-- value: the answer, formatted per the field type (text: plain string; \
-date: DD/MM/YYYY; checkbox: true or false)
+like [PATIENT] or [NRIC]. Return a JSON object with a "fields" array holding \
+exactly one entry per form field id. Each entry has:
+- id: the form field id
+- value: the answer as a string, formatted per the field type (text: plain \
+string; date: DD/MM/YYYY; checkbox: "true" or "false")
 - status: "extracted" (directly stated in the notes) | "inferred" (a \
 reasonable clinical inference from the notes) | "missing" (not determinable)
 - source: the verbatim snippet from the notes that supports the value, or \
-null when status is "missing"
+an empty string when status is "missing"
 
 Rules:
 - Never invent clinical facts. If the notes are ambiguous, prefer "missing" \
 over guessing.
 - Dates must be DD/MM/YYYY.
 - Use [TOKENS] exactly as they appear if a token belongs in a field.
-- For status "missing", set value to null.
+- For status "missing", set value to an empty string.
 """
 
 
@@ -103,31 +105,36 @@ def load_form_schema(path: str | Path) -> FormSchema:
 # Structured-output schema, built per form
 # ---------------------------------------------------------------------------
 
-_VALUE_TYPES = {
-    "text": [{"type": "string"}, {"type": "null"}],
-    "date": [{"type": "string"}, {"type": "null"}],
-    "checkbox": [{"type": "boolean"}, {"type": "null"}],
-}
-
-
 def build_output_schema(fields: list[FormField]) -> dict[str, Any]:
-    properties = {}
-    for field in fields:
-        properties[field.id] = {
-            "type": "object",
-            "description": field.description or "",
-            "properties": {
-                "value": {"anyOf": _VALUE_TYPES[field.type]},
-                "status": {"type": "string", "enum": ["extracted", "inferred", "missing"]},
-                "source": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-            },
-            "required": ["value", "status", "source"],
-            "additionalProperties": False,
-        }
+    # One shared array-item definition with the field ids as an enum, instead
+    # of a per-field object property. The structured-output API compiles the
+    # schema to a grammar with hard size limits (no more than 16 union-typed
+    # parameters, bounded total grammar size) — a real insurer form has 20+
+    # fields and blows both limits under the per-field-object shape. Values
+    # are always strings ("true"/"false" for checkboxes, "" for no answer)
+    # and get coerced back to their real types on parse.
     return {
         "type": "object",
-        "properties": properties,
-        "required": list(properties),
+        "properties": {
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "enum": [f.id for f in fields]},
+                        "value": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["extracted", "inferred", "missing"],
+                        },
+                        "source": {"type": "string"},
+                    },
+                    "required": ["id", "value", "status", "source"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["fields"],
         "additionalProperties": False,
     }
 
@@ -192,13 +199,39 @@ def map_fields(
     except json.JSONDecodeError as exc:
         raise MappingError("mapping call returned invalid JSON") from exc
 
-    answers: dict[str, FieldAnswer] = {}
-    for field in llm_fields:
-        try:
-            answers[field.id] = FieldAnswer.model_validate(raw.get(field.id))
-        except ValidationError:
-            answers[field.id] = FieldAnswer(value=None, status="missing", source=None)
-    return answers
+    items = raw.get("fields") if isinstance(raw, dict) else None
+    by_id: dict[str, Any] = {}
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and isinstance(item.get("id"), str):
+                by_id.setdefault(item["id"], item)
+
+    return {field.id: _coerce_answer(field, by_id.get(field.id)) for field in llm_fields}
+
+
+def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
+    """One parsed array entry -> FieldAnswer. Anything malformed, empty, or
+    marked missing collapses to a clean status="missing" answer — never a
+    crash, never a silent guess."""
+    missing = FieldAnswer(value=None, status="missing", source=None)
+    if not isinstance(item, dict):
+        return missing
+    status = item.get("status")
+    value = item.get("value")
+    if status not in ("extracted", "inferred") or not isinstance(value, str) or value == "":
+        return missing
+    parsed: str | bool = value
+    if field.type == "checkbox":
+        flag = value.strip().lower()
+        if flag not in ("true", "false"):
+            return missing
+        parsed = flag == "true"
+    source = item.get("source")
+    return FieldAnswer(
+        value=parsed,
+        status=status,
+        source=source if isinstance(source, str) and source else None,
+    )
 
 
 def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
