@@ -63,12 +63,28 @@ class FormField(BaseModel):
     type: Literal["text", "date", "checkbox"]
     source: str  # "llm" or "demographics.<attr>"
     description: str | None = None
+    # Human wording for the review screen. Falls back to a prettified id so a
+    # half-written schema still renders something readable.
+    label: str | None = None
+
+    @property
+    def display_label(self) -> str:
+        if self.label:
+            return self.label
+        words = self.id.replace("_", " ")
+        return words[:1].upper() + words[1:]
 
 
 class FormSchema(BaseModel):
     form_id: str
     pdf_path: str
     fields: list[FormField]
+    # Shown in the form picker instead of the raw form_id.
+    display_name: str | None = None
+    insurer: str | None = None
+    # Test/dev fixtures stay usable by form_id but are kept out of the picker,
+    # so a doctor is never offered a form that isn't a real insurer's.
+    internal: bool = False
 
     @property
     def llm_fields(self) -> list[FormField]:
@@ -88,6 +104,9 @@ class MappedField(BaseModel):
     field_id: str
     pdf_field_name: str
     field_type: Literal["text", "date", "checkbox"]
+    # What the doctor reads: a plain label plus the question the form asks.
+    label: str
+    help: str | None
     value: str | bool | None
     # "demographic" = deterministic copy, pre-approved green in the UI
     status: Literal["extracted", "inferred", "missing", "demographic"]
@@ -292,6 +311,8 @@ def assemble_claim(
                     field_id=field.id,
                     pdf_field_name=field.pdf_field_name,
                     field_type=field.type,
+                    label=field.display_label,
+                    help=field.description,
                     value=_demographic_value(record, attr),
                     status="demographic",
                     source=None,
@@ -316,6 +337,8 @@ def assemble_claim(
                 field_id=field.id,
                 pdf_field_name=field.pdf_field_name,
                 field_type=field.type,
+                label=field.display_label,
+                help=field.description,
                 value=value,
                 status=status,
                 source=answer.source,

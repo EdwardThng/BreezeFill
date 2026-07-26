@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { approveClaim, createClaim, discardClaim, getForms } from "./api";
 import PatientForm from "./PatientForm";
-import ReviewTable from "./ReviewTable";
+import ReviewScreen from "./ReviewScreen";
+import Stepper from "./Stepper";
 import type { ClaimResponse, FormInfo, PatientInput } from "./types";
 
 type Stage =
   | { name: "input" }
   | { name: "review"; claim: ClaimResponse }
   | { name: "done"; fileName: string };
+
+const STEP_OF: Record<Stage["name"], number> = { input: 1, review: 2, done: 3 };
 
 export default function App() {
   const [forms, setForms] = useState<FormInfo[] | null>(null);
@@ -18,8 +21,11 @@ export default function App() {
   useEffect(() => {
     getForms()
       .then(setForms)
-      .catch((e: Error) =>
-        setError(`Could not reach the FormFill backend: ${e.message}`),
+      .catch(() =>
+        setError(
+          "Can't reach the FormFill server. Check your internet connection, " +
+            "then reload this page.",
+        ),
       );
   }, []);
 
@@ -29,6 +35,7 @@ export default function App() {
     try {
       const claim = await createClaim(formId, patient);
       setStage({ name: "review", claim });
+      window.scrollTo({ top: 0 });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -52,6 +59,7 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(url);
       setStage({ name: "done", fileName });
+      window.scrollTo({ top: 0 });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -72,28 +80,45 @@ export default function App() {
     }
   };
 
+  // The LLM call takes 10-30s. Without a full-screen state people click twice
+  // or assume it has hung.
+  if (stage.name === "input" && busy) {
+    return (
+      <main>
+        <Header />
+        <Stepper current={1} />
+        <div className="card center waiting">
+          <div className="spinner" aria-hidden="true" />
+          <h2>Reading the notes…</h2>
+          <p className="hint">
+            This usually takes 10 to 30 seconds. You'll get a chance to check
+            and correct every answer on the next screen.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main>
-      <header>
-        <h1>FormFill</h1>
-        <p>Insurance forms from clinical notes — reviewed and approved by you.</p>
-      </header>
+      <Header />
+      <Stepper current={STEP_OF[stage.name]} />
 
       {stage.name === "input" && (
         <>
           {error && <div className="error">{error}</div>}
           {forms === null && !error && <p className="hint">Loading forms…</p>}
           {forms !== null && forms.length === 0 && (
-            <p className="hint">No form schemas found on the server.</p>
+            <p className="hint">No insurance forms are set up on the server yet.</p>
           )}
           {forms !== null && forms.length > 0 && (
-            <PatientForm forms={forms} busy={busy} onSubmit={handleCreate} />
+            <PatientForm forms={forms} onSubmit={handleCreate} />
           )}
         </>
       )}
 
       {stage.name === "review" && (
-        <ReviewTable
+        <ReviewScreen
           claim={stage.claim}
           busy={busy}
           error={error}
@@ -103,15 +128,40 @@ export default function App() {
       )}
 
       {stage.name === "done" && (
-        <div className="card center">
-          <h2>PDF downloaded</h2>
-          <p className="hint">
-            {stage.fileName} has been downloaded. All patient data for this
-            claim has been deleted from the server.
+        <div className="card">
+          <h2>Done — your form has downloaded</h2>
+          <p>
+            <code>{stage.fileName}</code> is in your Downloads folder.
           </p>
-          <button onClick={() => setStage({ name: "input" })}>Start a new claim</button>
+          <ol className="next-steps">
+            <li>Open the PDF and read it once more.</li>
+            <li>
+              Fill in anything left blank by hand — tick boxes and small
+              day/month/year boxes aren't filled automatically.
+            </li>
+            <li>Print, sign and stamp it as usual.</li>
+          </ol>
+          <p className="hint">
+            This patient's details have already been deleted from the server.
+            Nothing was saved.
+          </p>
+          <button onClick={() => setStage({ name: "input" })}>
+            Start another claim
+          </button>
         </div>
       )}
     </main>
+  );
+}
+
+function Header() {
+  return (
+    <header>
+      <h1>FormFill</h1>
+      <p>
+        Paste your clinical notes, check what's been filled in, download the
+        insurance form ready to sign.
+      </p>
+    </header>
   );
 }

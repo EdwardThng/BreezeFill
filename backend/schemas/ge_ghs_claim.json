@@ -1,21 +1,26 @@
 {
   "form_id": "ge_ghs_claim",
+  "display_name": "Great Eastern — Group Hospital & Surgical claim",
+  "insurer": "Great Eastern",
   "pdf_path": "forms/ge_ghs_claim.pdf",
   "fields": [
     {
       "id": "patient_name",
+      "label": "Patient name",
       "pdf_field_name": "1a Patients Full Name",
       "type": "text",
       "source": "demographics.full_name"
     },
     {
       "id": "patient_nric",
+      "label": "NRIC / FIN",
       "pdf_field_name": "1b NRICPPBC No",
       "type": "text",
       "source": "demographics.nric"
     },
     {
       "id": "hospital_name",
+      "label": "Hospital name",
       "pdf_field_name": "2a Name of Hospital Admitted",
       "type": "text",
       "source": "llm",
@@ -23,6 +28,7 @@
     },
     {
       "id": "diagnosis_and_symptoms",
+      "label": "Diagnosis and symptoms",
       "pdf_field_name": "description of the symptoms of illness or injury 1",
       "type": "text",
       "source": "llm",
@@ -30,6 +36,7 @@
     },
     {
       "id": "diagnosis_code",
+      "label": "ICD-10 code",
       "pdf_field_name": "3b Diagnosis Code",
       "type": "text",
       "source": "llm",
@@ -37,6 +44,7 @@
     },
     {
       "id": "onset_and_duration",
+      "label": "Onset and duration",
       "pdf_field_name": "4a Please give the date of onset and duration of complaints If no complaints give reasons for seeking medical attention 1",
       "type": "text",
       "source": "llm",
@@ -44,6 +52,7 @@
     },
     {
       "id": "previous_treatment_dates",
+      "label": "Dates of previous treatment",
       "pdf_field_name": "5a Please give dates of previous treatment if patient has a history of these complaints before",
       "type": "text",
       "source": "llm",
@@ -51,6 +60,7 @@
     },
     {
       "id": "previous_doctor",
+      "label": "Previous / referring doctor",
       "pdf_field_name": "5b Please give the names and address of the doctor who treated the patient previously or referred the patient to you 1",
       "type": "text",
       "source": "llm",
@@ -58,6 +68,7 @@
     },
     {
       "id": "operation_date",
+      "label": "Date of operation",
       "pdf_field_name": "ddmmyyyy",
       "type": "date",
       "source": "llm",
@@ -65,6 +76,7 @@
     },
     {
       "id": "operation_type",
+      "label": "Type of operation",
       "pdf_field_name": "Surgical Procedures 1",
       "type": "text",
       "source": "llm",
@@ -72,6 +84,7 @@
     },
     {
       "id": "operation_codes",
+      "label": "Operation code(s)",
       "pdf_field_name": "Operation Codes",
       "type": "text",
       "source": "llm",
@@ -79,6 +92,7 @@
     },
     {
       "id": "operation_tables",
+      "label": "Operation table(s) (Medisave)",
       "pdf_field_name": "Tables",
       "type": "text",
       "source": "llm",
@@ -86,6 +100,7 @@
     },
     {
       "id": "treatment_no_surgery",
+      "label": "Treatment given (no surgery)",
       "pdf_field_name": "Please indicate treatment rendered if no surgery was done",
       "type": "text",
       "source": "llm",
@@ -93,6 +108,7 @@
     },
     {
       "id": "medical_leave",
+      "label": "Medical leave given",
       "pdf_field_name": "Please advise period of medical leave given",
       "type": "text",
       "source": "llm",
@@ -100,6 +116,7 @@
     },
     {
       "id": "doctor_details",
+      "label": "Your name, address and qualification",
       "pdf_field_name": "Name Address and Qualification of DoctorSurgeon",
       "type": "text",
       "source": "llm",

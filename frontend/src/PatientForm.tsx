@@ -3,116 +3,162 @@ import type { FormInfo, PatientInput } from "./types";
 
 interface Props {
   forms: FormInfo[];
-  busy: boolean;
   onSubmit: (formId: string, patient: PatientInput) => void;
 }
 
-const EMPTY: PatientInput = {
+type Draft = Omit<PatientInput, "insurer">;
+
+const EMPTY: Draft = {
   full_name: "",
   nric: "",
   dob: "",
   phone: "",
   address: "",
   policy_number: "",
-  insurer: "",
   clinical_text: "",
 };
 
-export default function PatientForm({ forms, busy, onSubmit }: Props) {
+export default function PatientForm({ forms, onSubmit }: Props) {
   const [formId, setFormId] = useState(forms[0]?.form_id ?? "");
-  const [patient, setPatient] = useState<PatientInput>(EMPTY);
+  const [draft, setDraft] = useState<Draft>(EMPTY);
 
-  const set = (key: keyof PatientInput) =>
+  const set = (key: keyof Draft) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setPatient({ ...patient, [key]: e.target.value });
+      setDraft({ ...draft, [key]: e.target.value });
 
-  const canSubmit =
-    !busy &&
-    formId !== "" &&
-    patient.full_name.trim() !== "" &&
-    patient.nric.trim() !== "" &&
-    patient.dob !== "" &&
-    patient.insurer.trim() !== "" &&
-    patient.clinical_text.trim() !== "";
+  const selected = forms.find((f) => f.form_id === formId);
+
+  // Spell out what is still missing rather than just greying the button out —
+  // a disabled button with no explanation is the classic first-use dead end.
+  const missing: string[] = [];
+  if (!selected) missing.push("an insurance form");
+  if (draft.full_name.trim() === "") missing.push("patient name");
+  if (draft.nric.trim() === "") missing.push("NRIC / FIN");
+  if (draft.dob === "") missing.push("date of birth");
+  if (draft.clinical_text.trim() === "") missing.push("clinical notes");
+  const ready = missing.length === 0;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!ready || !selected) return;
     onSubmit(formId, {
-      ...patient,
-      phone: patient.phone?.trim() || null,
-      address: patient.address?.trim() || null,
-      policy_number: patient.policy_number?.trim() || null,
+      ...draft,
+      insurer: selected.insurer,
+      phone: draft.phone?.trim() || null,
+      address: draft.address?.trim() || null,
+      policy_number: draft.policy_number?.trim() || null,
     });
   };
 
   return (
-    <form className="card" onSubmit={submit}>
-      <h2>New claim</h2>
-      <p className="hint">
-        Demographics are copied onto the form directly and used to strip
-        identifiers from the notes — they are never sent to the AI model.
-      </p>
-
-      <label>
-        Insurance form
-        <select value={formId} onChange={(e) => setFormId(e.target.value)}>
+    <form onSubmit={submit}>
+      <section className="card">
+        <h2>1. Which form are you filling in?</h2>
+        <div className="form-choices">
           {forms.map((f) => (
-            <option key={f.form_id} value={f.form_id}>
-              {f.form_id}
-            </option>
+            <label
+              key={f.form_id}
+              className={`choice ${f.form_id === formId ? "choice-on" : ""}`}
+            >
+              <input
+                type="radio"
+                name="form"
+                value={f.form_id}
+                checked={f.form_id === formId}
+                onChange={() => setFormId(f.form_id)}
+              />
+              <span>
+                <strong>{f.insurer}</strong>
+                <span className="choice-sub">{f.display_name}</span>
+              </span>
+            </label>
           ))}
-        </select>
-      </label>
+        </div>
+      </section>
 
-      <div className="grid2">
-        <label>
-          Full name (as registered) *
-          <input value={patient.full_name} onChange={set("full_name")} autoComplete="off" />
-        </label>
-        <label>
-          NRIC / FIN *
-          <input value={patient.nric} onChange={set("nric")} autoComplete="off" />
-        </label>
-        <label>
-          Date of birth *
-          <input type="date" value={patient.dob} onChange={set("dob")} />
-        </label>
-        <label>
-          Phone
-          <input value={patient.phone ?? ""} onChange={set("phone")} autoComplete="off" />
-        </label>
-        <label>
-          Address
-          <input value={patient.address ?? ""} onChange={set("address")} autoComplete="off" />
-        </label>
-        <label>
-          Policy number
-          <input
-            value={patient.policy_number ?? ""}
-            onChange={set("policy_number")}
-            autoComplete="off"
+      <section className="card">
+        <h2>2. Patient details</h2>
+        <p className="hint">
+          These are copied onto the form exactly as you type them. They are also
+          used to strip names and identifiers out of the notes — they are never
+          sent to the AI.
+        </p>
+
+        <div className="grid2">
+          <label>
+            Patient name <Req />
+            <input
+              value={draft.full_name}
+              onChange={set("full_name")}
+              autoComplete="off"
+              placeholder="As it appears on the policy"
+            />
+          </label>
+          <label>
+            NRIC / FIN <Req />
+            <input
+              value={draft.nric}
+              onChange={set("nric")}
+              autoComplete="off"
+              placeholder="S1234567D"
+            />
+          </label>
+          <label>
+            Date of birth <Req />
+            <input type="date" value={draft.dob} onChange={set("dob")} />
+          </label>
+          <label>
+            Policy number <Opt />
+            <input
+              value={draft.policy_number ?? ""}
+              onChange={set("policy_number")}
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            Phone <Opt />
+            <input value={draft.phone ?? ""} onChange={set("phone")} autoComplete="off" />
+          </label>
+          <label>
+            Address <Opt />
+            <input
+              value={draft.address ?? ""}
+              onChange={set("address")}
+              autoComplete="off"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>3. Clinical notes</h2>
+        <p className="hint">
+          Copy the consultation notes straight from your clinic system and paste
+          them below — untidy is fine. Include the diagnosis, dates, treatment
+          and any operation details, and the answers will be more complete.
+        </p>
+        <label className="sr-label">
+          Clinical notes <Req />
+          <textarea
+            rows={12}
+            value={draft.clinical_text}
+            onChange={set("clinical_text")}
+            placeholder={"Paste the patient's notes here…"}
           />
         </label>
-        <label>
-          Insurer *
-          <input value={patient.insurer} onChange={set("insurer")} autoComplete="off" />
-        </label>
+      </section>
+
+      <div className="submit-bar">
+        <button type="submit" disabled={!ready}>
+          Read the notes and fill the form
+        </button>
+        {!ready && (
+          <p className="hint">Still needed: {missing.join(", ")}.</p>
+        )}
       </div>
-
-      <label>
-        Clinical notes (paste from your clinic system) *
-        <textarea
-          rows={12}
-          value={patient.clinical_text}
-          onChange={set("clinical_text")}
-          placeholder="Paste the patient's clinical notes here…"
-        />
-      </label>
-
-      <button type="submit" disabled={!canSubmit}>
-        {busy ? "Extracting…" : "Extract form fields"}
-      </button>
     </form>
   );
 }
+
+const Req = () => <span className="req">required</span>;
+const Opt = () => <span className="opt">optional</span>;

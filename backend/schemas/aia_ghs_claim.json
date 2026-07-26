@@ -1,27 +1,33 @@
 {
   "form_id": "aia_ghs_claim",
+  "display_name": "AIA — Group Hospital & Surgical claim",
+  "insurer": "AIA",
   "pdf_path": "forms/aia_ghs_claim.pdf",
   "fields": [
     {
       "id": "patient_name",
+      "label": "Patient name",
       "pdf_field_name": "1 Name of Patient",
       "type": "text",
       "source": "demographics.full_name"
     },
     {
       "id": "patient_nric",
+      "label": "NRIC / FIN",
       "pdf_field_name": "NRIC  FIN  Passport No_3",
       "type": "text",
       "source": "demographics.nric"
     },
     {
       "id": "policy_no",
+      "label": "Policy number",
       "pdf_field_name": "Policy No",
       "type": "text",
       "source": "demographics.policy_number"
     },
     {
       "id": "company_name",
+      "label": "Employer / company",
       "pdf_field_name": "Company Name",
       "type": "text",
       "source": "llm",
@@ -29,6 +35,7 @@
     },
     {
       "id": "final_diagnosis",
+      "label": "Final diagnosis",
       "pdf_field_name": "2 Final Diagnosis of illness or extent of injury",
       "type": "text",
       "source": "llm",
@@ -36,6 +43,7 @@
     },
     {
       "id": "icd_code",
+      "label": "ICD-10 code",
       "pdf_field_name": "ICD Code",
       "type": "text",
       "source": "llm",
@@ -43,6 +51,7 @@
     },
     {
       "id": "cause_of_illness",
+      "label": "Cause of illness or injury",
       "pdf_field_name": "3 What is the cause of illness  injury",
       "type": "text",
       "source": "llm",
@@ -50,6 +59,7 @@
     },
     {
       "id": "date_of_discovery",
+      "label": "Date condition was discovered",
       "pdf_field_name": "4 Please specify the approximate date of discovery of the illness or injury",
       "type": "text",
       "source": "llm",
@@ -57,6 +67,7 @@
     },
     {
       "id": "duration_before_consult",
+      "label": "How long before the patient consulted you",
       "pdf_field_name": "5 How long has the illness  injury been existing prior to consulting you",
       "type": "text",
       "source": "llm",
@@ -64,6 +75,7 @@
     },
     {
       "id": "prior_symptoms",
+      "label": "Symptoms before consulting",
       "pdf_field_name": "6 Did the patient have any symptoms prior to consulting you Yes No If Yes please indicate the nature of Symptoms and date Symptoms first started",
       "type": "text",
       "source": "llm",
@@ -71,6 +83,7 @@
     },
     {
       "id": "first_consult_date",
+      "label": "Date of first consultation",
       "pdf_field_name": "7 When did the patient first consult you for this condition",
       "type": "date",
       "source": "llm",
@@ -78,6 +91,7 @@
     },
     {
       "id": "treatment_rendered",
+      "label": "Treatment given",
       "pdf_field_name": "8 Nature and Date of Treatment rendered",
       "type": "text",
       "source": "llm",
@@ -85,6 +99,7 @@
     },
     {
       "id": "similar_condition_history",
+      "label": "History of a similar condition",
       "pdf_field_name": "9 Has the patient ever had the same or similar condition  symptom Yes No Not to my knowledge If Yes please indicate when and describe",
       "type": "text",
       "source": "llm",
@@ -92,6 +107,7 @@
     },
     {
       "id": "prior_treatment",
+      "label": "Previous doctor and treatment",
       "pdf_field_name": "10 Has the patient had any prior treatment for this condition Yes No Not to my knowledge If Yes please state the following  Name of Doctor First Consultation Date Name of Clinic Address",
       "type": "text",
       "source": "llm",
@@ -99,6 +115,7 @@
     },
     {
       "id": "admission_period",
+      "label": "Hospital admission dates",
       "pdf_field_name": "11 Admission Period",
       "type": "text",
       "source": "llm",
@@ -106,6 +123,7 @@
     },
     {
       "id": "hospital_name",
+      "label": "Hospital name",
       "pdf_field_name": "12 Name of Hospital",
       "type": "text",
       "source": "llm",
@@ -113,6 +131,7 @@
     },
     {
       "id": "procedure_date",
+      "label": "Date of procedure",
       "pdf_field_name": "13 Date of surgical procedures or treatment rendered",
       "type": "date",
       "source": "llm",
@@ -120,6 +139,7 @@
     },
     {
       "id": "excision_size",
+      "label": "Size of excision",
       "pdf_field_name": "14 If excision was performed please indicate the size of the lesion  tumor Please attach a copy of the histology report",
       "type": "text",
       "source": "llm",
@@ -127,6 +147,7 @@
     },
     {
       "id": "procedures",
+      "label": "Procedures performed",
       "pdf_field_name": "15 Describe the surgical procedures or treatment rendered If no surgery was performed please state treatment  medication given",
       "type": "text",
       "source": "llm",
@@ -134,6 +155,7 @@
     },
     {
       "id": "operation_code",
+      "label": "Operation code",
       "pdf_field_name": "Operation Code",
       "type": "text",
       "source": "llm",
@@ -141,6 +163,7 @@
     },
     {
       "id": "operation_table",
+      "label": "Operation table (Medisave)",
       "pdf_field_name": "Operation Table",
       "type": "text",
       "source": "llm",
@@ -148,6 +171,7 @@
     },
     {
       "id": "followup_status",
+      "label": "Follow-up / referral",
       "pdf_field_name": "19  Is the patient still under your care for this condition Yes No If No please give date service was terminated and furnished name and address of doctor if the patient has been referred to another doctor for followup",
       "type": "text",
       "source": "llm",
@@ -155,6 +179,7 @@
     },
     {
       "id": "doctor_name_designation",
+      "label": "Your name and designation",
       "pdf_field_name": "Name  Designation",
       "type": "text",
       "source": "llm",
@@ -162,6 +187,7 @@
     },
     {
       "id": "clinic_name_address",
+      "label": "Clinic name and address",
       "pdf_field_name": "Name and Address of Clinic  Hospital  Stamp",
       "type": "text",
       "source": "llm",

@@ -129,15 +129,25 @@ class ApproveClaimRequest(BaseModel):
 
 @app.get("/forms")
 def list_forms() -> list[dict]:
+    """Forms offered in the picker — internal fixtures are excluded."""
     return [
         {
             "form_id": s.form_id,
+            "display_name": s.display_name or s.form_id,
+            "insurer": s.insurer or "",
             "fields": [
-                {"id": f.id, "type": f.type, "source": f.source, "description": f.description}
+                {
+                    "id": f.id,
+                    "type": f.type,
+                    "source": f.source,
+                    "label": f.display_label,
+                    "description": f.description,
+                }
                 for f in s.fields
             ],
         }
         for s in FORM_SCHEMAS.values()
+        if not s.internal
     ]
 
 

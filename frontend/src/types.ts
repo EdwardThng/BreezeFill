@@ -5,6 +5,10 @@ export interface MappedField {
   field_id: string;
   pdf_field_name: string;
   field_type: FieldType;
+  /** Plain wording for the doctor, e.g. "Date of first consultation". */
+  label: string;
+  /** The question the insurer's form actually asks. */
+  help: string | null;
   value: string | boolean | null;
   status: FieldStatus;
   source: string | null;
@@ -21,11 +25,14 @@ export interface FormFieldInfo {
   id: string;
   type: FieldType;
   source: string;
+  label: string;
   description: string | null;
 }
 
 export interface FormInfo {
   form_id: string;
+  display_name: string;
+  insurer: string;
   fields: FormFieldInfo[];
 }
 

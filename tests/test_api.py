@@ -64,7 +64,23 @@ def create_claim():
 def test_health_and_forms():
     assert client.get("/health").json()["forms_loaded"] >= 1
     forms = client.get("/forms").json()
-    assert any(f["form_id"] == "dev_sample_v1" for f in forms)
+    # Real insurer forms are offered; the dev fixture is loaded (claims below
+    # use it) but hidden from the picker so the doctor never sees a fake form.
+    assert forms, "no forms offered"
+    assert all(f["form_id"] != "dev_sample_v1" for f in forms)
+    for form in forms:
+        assert form["display_name"] and form["insurer"]
+        assert all(f["label"] for f in form["fields"])
+
+
+def test_review_rows_carry_human_labels(stub_llm):
+    """The review screen renders row["label"], never the raw field_id."""
+    fields = {f["field_id"]: f for f in create_claim()["fields"]}
+    assert fields["patient_name"]["label"] == "Patient name"
+    assert fields["diagnosis_primary"]["label"] == "Primary diagnosis"
+    # LLM fields also carry the form's own question as help text.
+    assert fields["diagnosis_primary"]["help"]
+    assert all(row["label"] for row in fields.values())
 
 
 def test_create_claim_returns_review_rows(stub_llm):

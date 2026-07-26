@@ -1,21 +1,27 @@
 {
   "form_id": "dev_sample_v1",
+  "display_name": "Sample form (testing only)",
+  "insurer": "Sample Insurance",
+  "internal": true,
   "pdf_path": "forms/dev_sample.pdf",
   "fields": [
     {
       "id": "patient_name",
+      "label": "Patient name",
       "pdf_field_name": "Text_PatientName",
       "type": "text",
       "source": "demographics.full_name"
     },
     {
       "id": "patient_dob",
+      "label": "Date of birth",
       "pdf_field_name": "Text_DOB",
       "type": "date",
       "source": "demographics.dob"
     },
     {
       "id": "diagnosis_primary",
+      "label": "Primary diagnosis",
       "pdf_field_name": "Text_Diagnosis1",
       "type": "text",
       "source": "llm",
@@ -23,6 +29,7 @@
     },
     {
       "id": "date_first_consult",
+      "label": "Date of first consultation",
       "pdf_field_name": "Date_FirstConsult",
       "type": "date",
       "source": "llm",
@@ -30,6 +37,7 @@
     },
     {
       "id": "symptoms_preexisting",
+      "label": "Pre-existing condition",
       "pdf_field_name": "Check_PreExisting",
       "type": "checkbox",
       "source": "llm",
