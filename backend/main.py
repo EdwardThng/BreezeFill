@@ -21,6 +21,7 @@ from pathlib import Path
 import anthropic
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from mapping import (
@@ -37,6 +38,7 @@ from redaction import PatientRecord, redact
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
+FRONTEND_DIR = REPO_ROOT / "frontend" / "dist"
 CLAIM_TTL_SECONDS = 60 * 60  # zero long-term retention; 1h working window
 
 app = FastAPI(title="FormFill", version="0.1.0")
@@ -239,3 +241,16 @@ def discard_claim(claim_id: str) -> Response:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "forms_loaded": len(FORM_SCHEMAS)}
+
+
+# ---------------------------------------------------------------------------
+# Static frontend
+# ---------------------------------------------------------------------------
+#
+# In production the React build is served from this same app, so the doctor
+# visits one URL and there is no cross-origin call to configure. Mounted LAST
+# so every API route above wins; the catch-all only sees what they didn't
+# match. Absent in local dev (Vite serves the frontend on :5173 instead).
+
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
