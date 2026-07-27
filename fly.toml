@@ -1,4 +1,5 @@
-# Fly.io config — backend only (frontend deploys to Vercel).
+# Fly.io config — the whole product: the API plus the React app it serves.
+# One origin means no CORS to configure and one URL for the clinic.
 #
 # Singapore region: clinical text must not leave SG-adjacent infrastructure
 # unnecessarily, and latency to the clinic matters.
@@ -7,10 +8,8 @@
 # (a privacy feature — nothing persists), so a second machine or a mid-review
 # stop/start would lose or split claims.
 #
-# Required secrets (fly secrets set NAME=value):
-#   ANTHROPIC_API_KEY          - LLM calls
-#   FORMFILL_ALLOWED_ORIGINS   - deployed frontend origin, e.g.
-#                                https://formfill.vercel.app
+# Required secret (fly secrets set NAME=value):
+#   ANTHROPIC_API_KEY   - LLM calls
 
 app = "formfill-backend"
 primary_region = "sin"
