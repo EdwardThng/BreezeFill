@@ -1,7 +1,11 @@
 import type { ClaimResponse, FormInfo, PatientInput } from "./types";
 
+// In production the API and this page are served by the same app, so relative
+// URLs are correct and there is nothing to configure. In dev, Vite serves this
+// on :5173 while uvicorn runs on :8000.
 const API_BASE: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 async function ensureOk(res: Response): Promise<Response> {
   if (!res.ok) {
