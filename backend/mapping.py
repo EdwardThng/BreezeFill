@@ -20,8 +20,9 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
+from overlay_fill import FieldBox
 from redaction import PatientRecord, remerge
 
 # Top-tier model first, optimize cost later (spec 5). The sweep is the cheap
@@ -59,7 +60,10 @@ class MappingError(Exception):
 
 class FormField(BaseModel):
     id: str
-    pdf_field_name: str
+    # AcroForm forms address fields by name; overlay forms address them by
+    # box, so exactly one of these is set (enforced on FormSchema below).
+    pdf_field_name: str = ""
+    box: FieldBox | None = None
     type: Literal["text", "date", "checkbox"]
     source: str  # "llm" or "demographics.<attr>"
     description: str | None = None
@@ -89,6 +93,21 @@ class FormSchema(BaseModel):
     @property
     def llm_fields(self) -> list[FormField]:
         return [f for f in self.fields if f.source == "llm"]
+
+    @property
+    def boxes(self) -> dict[str, FieldBox]:
+        return {f.id: f.box for f in self.fields if f.box is not None}
+
+    @model_validator(mode="after")
+    def _check_addressing(self) -> FormSchema:
+        """Catch a half-written schema at load time rather than at the moment
+        a doctor clicks Approve."""
+        for field in self.fields:
+            if self.fill_mode == "overlay" and field.box is None:
+                raise ValueError(f"overlay field {field.id!r} has no box")
+            if self.fill_mode == "acroform" and not field.pdf_field_name:
+                raise ValueError(f"acroform field {field.id!r} has no pdf_field_name")
+        return self
 
 
 class FieldAnswer(BaseModel):
