@@ -655,6 +655,68 @@
       "source": "llm",
       "description": "Date of that earlier consultation (DD/MM/YYYY)",
       "box": { "page": 5, "x": 431, "y": 666, "w": 95, "h": 45 }
+    },
+
+    {
+      "id": "header_name_p6",
+      "label": "Patient name (header, page 6)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 6, "x": 180, "y": 82, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p6",
+      "label": "NRIC (header, page 6)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 6, "x": 190, "y": 91, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p6",
+      "label": "Policy number (header, page 6)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 6, "x": 180, "y": 100, "w": 180, "h": 11 }
+    },
+    {
+      "id": "recovered_from_illness",
+      "label": "Fully recovered from the illness",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the patient has fully recovered from the illness. Elaborate only if they have not.",
+      "box": { "page": 6, "x": 214, "y": 138, "w": 312, "h": 26 }
+    },
+    {
+      "id": "other_illness_diagnosis",
+      "label": "Other contributing illness",
+      "type": "text",
+      "source": "llm",
+      "description": "Any other illness that would have contributed to the patient's condition. Leave missing if the notes record none.",
+      "box": { "page": 6, "x": 215, "y": 240, "w": 98, "h": 58 }
+    },
+    {
+      "id": "other_illness_date",
+      "label": "Date that illness was diagnosed",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the other contributing illness was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 6, "x": 321, "y": 240, "w": 80, "h": 58 }
+    },
+    {
+      "id": "other_illness_doctor",
+      "label": "Doctor who made that diagnosis",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the doctor who diagnosed that other illness",
+      "box": { "page": 6, "x": 408, "y": 240, "w": 118, "h": 58 }
+    },
+    {
+      "id": "other_illness_informed_date",
+      "label": "Date patient informed of that diagnosis",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was informed of that other diagnosis (DD/MM/YYYY)",
+      "box": { "page": 6, "x": 262, "y": 375, "w": 100, "h": 12 }
     }
   ]
 }
