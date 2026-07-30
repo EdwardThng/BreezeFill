@@ -1,0 +1,239 @@
+{
+  "form_id": "prudential_medical_report",
+  "display_name": "Prudential — Accident/Hospitalisation medical report",
+  "insurer": "Prudential",
+  "pdf_path": "forms/scans_unsupported/prudential_accident_hosp.pdf",
+  "fill_mode": "overlay",
+  "fields": [
+    {
+      "id": "patient_name",
+      "label": "Patient name",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 5, "x": 205, "y": 113, "w": 200, "h": 18 }
+    },
+    {
+      "id": "patient_nric",
+      "label": "NRIC / FIN",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 5, "x": 470, "y": 113, "w": 85, "h": 18 }
+    },
+    {
+      "id": "occupation_employer",
+      "label": "Occupation and employer",
+      "type": "text",
+      "source": "llm",
+      "description": "Patient's occupation, employer name and company address, only if stated in the notes",
+      "box": { "page": 5, "x": 205, "y": 140, "w": 350, "h": 22 }
+    },
+    {
+      "id": "specialist_name",
+      "label": "Name of specialist",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the attending doctor or specialist completing this report, if stated in the notes",
+      "box": { "page": 5, "x": 205, "y": 170, "w": 200, "h": 18 }
+    },
+    {
+      "id": "mcr_no",
+      "label": "MCR number",
+      "type": "text",
+      "source": "llm",
+      "description": "The doctor's Medical Council Registration (MCR) number, only if stated in the notes",
+      "box": { "page": 5, "x": 470, "y": 170, "w": 85, "h": 18 }
+    },
+    {
+      "id": "field_of_specialty",
+      "label": "Field of specialty",
+      "type": "text",
+      "source": "llm",
+      "description": "The doctor's field of specialty, e.g. Family Medicine or General Surgery, if stated",
+      "box": { "page": 5, "x": 205, "y": 199, "w": 350, "h": 16 }
+    },
+    {
+      "id": "medical_institution",
+      "label": "Medical institution",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the clinic or hospital completing this report, if stated in the notes",
+      "box": { "page": 5, "x": 205, "y": 225, "w": 350, "h": 16 }
+    },
+    {
+      "id": "relates_to_accident",
+      "label": "Report relates to an accident",
+      "type": "checkbox",
+      "source": "llm",
+      "description": "Tick only if the notes describe an accident or injury rather than an illness",
+      "box": { "page": 5, "x": 292, "y": 275, "w": 13, "h": 10 }
+    },
+    {
+      "id": "relates_to_illness",
+      "label": "Report relates to an illness",
+      "type": "checkbox",
+      "source": "llm",
+      "description": "Tick only if the notes describe an illness rather than an accident or injury",
+      "box": { "page": 5, "x": 437, "y": 275, "w": 13, "h": 10 }
+    },
+    {
+      "id": "accident_or_consult_date",
+      "label": "Date of accident / first consultation",
+      "type": "date",
+      "source": "llm",
+      "description": "Date of the accident if this is an injury claim, otherwise the date of first consultation for the illness (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 272, "y": 315, "w": 280, "h": 14 }
+    },
+    {
+      "id": "how_accident_happened",
+      "label": "How it happened / symptoms and duration",
+      "type": "text",
+      "source": "llm",
+      "description": "How the accident happened, plus the symptoms the patient experienced and how long they lasted",
+      "box": { "page": 5, "x": 272, "y": 356, "w": 282, "h": 44 }
+    },
+    {
+      "id": "injury_details",
+      "label": "Nature and extent of injury",
+      "type": "text",
+      "source": "llm",
+      "description": "Details, nature and extent of the injury sustained, and the underlying cause of the patient's condition",
+      "box": { "page": 5, "x": 272, "y": 412, "w": 282, "h": 50 }
+    },
+    {
+      "id": "diagnosis",
+      "label": "Diagnosis",
+      "type": "text",
+      "source": "llm",
+      "description": "The final diagnosis, with ICD-10 code if stated or clearly implied",
+      "box": { "page": 5, "x": 272, "y": 472, "w": 282, "h": 24 }
+    },
+    {
+      "id": "injury_consistent",
+      "label": "Injury consistent with the accident",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injury and the symptoms/duration are consistent with the accident described and with your diagnosis. Answer Yes or No, elaborating if No.",
+      "box": { "page": 5, "x": 272, "y": 506, "w": 282, "h": 62 }
+    },
+    {
+      "id": "caused_solely_by_accident",
+      "label": "Caused solely by the accident",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injury was caused solely by the accident described. Answer Yes or No, elaborating if No.",
+      "box": { "page": 5, "x": 272, "y": 580, "w": 282, "h": 32 }
+    },
+
+    {
+      "id": "patient_name_page2",
+      "label": "Patient name (page 2)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 6, "x": 273, "y": 99, "w": 285, "h": 16 }
+    },
+    {
+      "id": "self_inflicted",
+      "label": "Self-inflicted / excluded cause",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the condition resulted from self-inflicted injury, suicide, drug or alcohol abuse, STD, childbirth, pregnancy or miscarriage. Answer No unless the notes say otherwise.",
+      "box": { "page": 6, "x": 273, "y": 125, "w": 285, "h": 50 }
+    },
+    {
+      "id": "referred_for_management",
+      "label": "Referred for further management",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the patient was referred to you for further management, and by whom if stated",
+      "box": { "page": 6, "x": 273, "y": 186, "w": 285, "h": 28 }
+    },
+    {
+      "id": "admission_date",
+      "label": "Date of admission",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was admitted to hospital (DD/MM/YYYY). Leave missing if not hospitalised.",
+      "box": { "page": 6, "x": 275, "y": 240, "w": 135, "h": 16 }
+    },
+    {
+      "id": "discharge_date",
+      "label": "Date of discharge",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was discharged from hospital (DD/MM/YYYY). Leave missing if not hospitalised.",
+      "box": { "page": 6, "x": 420, "y": 240, "w": 135, "h": 16 }
+    },
+    {
+      "id": "treatment_performed",
+      "label": "Treatment / surgical procedure",
+      "type": "text",
+      "source": "llm",
+      "description": "The type of treatment and/or surgery performed",
+      "box": { "page": 6, "x": 275, "y": 320, "w": 135, "h": 70 }
+    },
+    {
+      "id": "treatment_dates",
+      "label": "Date(s) of treatment / operation",
+      "type": "text",
+      "source": "llm",
+      "description": "Date(s) the treatment or operation was performed (DD/MM/YYYY)",
+      "box": { "page": 6, "x": 420, "y": 320, "w": 135, "h": 70 }
+    },
+    {
+      "id": "mc_from",
+      "label": "Medical leave from",
+      "type": "date",
+      "source": "llm",
+      "description": "First day of medical leave issued (DD/MM/YYYY). Leave missing if no MC was issued.",
+      "box": { "page": 6, "x": 275, "y": 418, "w": 135, "h": 20 }
+    },
+    {
+      "id": "mc_to",
+      "label": "Medical leave to",
+      "type": "date",
+      "source": "llm",
+      "description": "Last day of medical leave issued (DD/MM/YYYY). Leave missing if no MC was issued.",
+      "box": { "page": 6, "x": 420, "y": 418, "w": 135, "h": 20 }
+    },
+    {
+      "id": "prevents_occupation",
+      "label": "Prevents patient's occupation",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injuries would prevent the patient from engaging in their occupation, elaborating if Yes",
+      "box": { "page": 6, "x": 273, "y": 452, "w": 285, "h": 38 }
+    },
+    {
+      "id": "fully_recovered",
+      "label": "Fully recovered",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the patient has fully recovered from the injuries. Answer Yes or No.",
+      "box": { "page": 6, "x": 273, "y": 500, "w": 285, "h": 24 }
+    },
+    {
+      "id": "return_to_work_date",
+      "label": "Date returned / expected to return to work",
+      "type": "text",
+      "source": "llm",
+      "description": "Date the patient returned to work, or the date they are expected to (DD/MM/YYYY)",
+      "box": { "page": 6, "x": 273, "y": 534, "w": 285, "h": 45 }
+    },
+    {
+      "id": "contributing_illness",
+      "label": "Illness prolonging disability",
+      "type": "text",
+      "source": "llm",
+      "description": "Any illness the patient was suffering from that would contribute to or prolong the period of disability. Answer No unless the notes say otherwise.",
+      "box": { "page": 6, "x": 273, "y": 591, "w": 285, "h": 45 }
+    },
+    {
+      "id": "additional_information",
+      "label": "Additional information",
+      "type": "text",
+      "source": "llm",
+      "description": "Any further information that would assist assessment of the claim, only if the notes support it",
+      "box": { "page": 6, "x": 273, "y": 649, "w": 285, "h": 24 }
+    }
+  ]
+}
