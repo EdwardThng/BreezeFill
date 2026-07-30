@@ -223,11 +223,44 @@ def _pass3_llm_sweep(text: str, redaction_map: dict[str, str], sweep: LlmSweep) 
 # ---------------------------------------------------------------------------
 
 
+# Institution names routinely contain what is also somebody's surname —
+# "Tan Tock Seng Hospital", "Ng Teng Fong General Hospital". Pass 1 redacts
+# each part of the patient's name, so a patient surnamed Tan turned that
+# hospital into "[PATIENT] Tock Seng Hospital" and the form lost the hospital
+# field. These spans are shielded for the duration of the passes and restored
+# afterwards. A facility name is not a patient identifier.
+_INSTITUTION_RE = re.compile(
+    r"\b[A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,4}\s+"
+    r"(?:Hospital|Polyclinic|Clinic|Medical\s+Cent(?:re|er)|Specialist\s+Cent(?:re|er))\b"
+)
+_SHIELD = "\x00INST{}\x00"
+
+
+def _shield_institutions(text: str) -> tuple[str, list[str]]:
+    spans: list[str] = []
+
+    def take(match: re.Match[str]) -> str:
+        spans.append(match.group(0))
+        return _SHIELD.format(len(spans) - 1)
+
+    return _INSTITUTION_RE.sub(take, text), spans
+
+
+def _restore_institutions(text: str, spans: list[str]) -> str:
+    for i, span in enumerate(spans):
+        text = text.replace(_SHIELD.format(i), span)
+    return text
+
+
 def redact(record: PatientRecord, llm_sweep: LlmSweep | None = None) -> RedactionResult:
     """Run all redaction passes over the clinical text."""
-    text, redaction_map = _pass1_known_identifiers(record, record.clinical_text)
+    shielded, spans = _shield_institutions(record.clinical_text)
+    text, redaction_map = _pass1_known_identifiers(record, shielded)
     text = _pass2_patterns(text, redaction_map)
+    text = _restore_institutions(text, spans)
     if llm_sweep is not None:
+        # After restoring, so the sweep sees real institution names and can
+        # judge them — it is the pass that understands context.
         text = _pass3_llm_sweep(text, redaction_map, llm_sweep)
     return RedactionResult(redacted_text=text, redaction_map=redaction_map)
 
