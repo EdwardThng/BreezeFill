@@ -33,6 +33,7 @@ from mapping import (
     map_fields,
     MappedField,
 )
+from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
 from redaction import PatientRecord, redact
 
@@ -201,20 +202,25 @@ def approve_claim(claim_id: str, request: ApproveClaimRequest) -> Response:
     claim = _get_claim(claim_id)
     schema = _get_schema(claim.form_id)
 
-    values: dict[str, str | bool | None] = {}
-    known_ids = set()
+    # Overlay forms address fields by id (the schema carries the box);
+    # AcroForm forms address them by the PDF's own field name.
+    by_id: dict[str, str | bool | None] = {}
     for row in claim.rows:
-        known_ids.add(row.field_id)
-        final = request.values[row.field_id] if row.field_id in request.values else row.value
-        values[row.pdf_field_name] = final
-    unknown = sorted(set(request.values) - known_ids)
+        by_id[row.field_id] = (
+            request.values[row.field_id] if row.field_id in request.values else row.value
+        )
+    unknown = sorted(set(request.values) - set(by_id))
     if unknown:
         raise HTTPException(status_code=422, detail=f"unknown field ids: {unknown}")
 
     pdf_path = (REPO_ROOT / schema.pdf_path).resolve()
     try:
-        pdf_bytes = fill_pdf(pdf_path, values)
-    except PdfFillError as exc:
+        if schema.fill_mode == "overlay":
+            pdf_bytes = overlay_fill(pdf_path, schema.boxes, by_id)
+        else:
+            named = {row.pdf_field_name: by_id[row.field_id] for row in claim.rows}
+            pdf_bytes = fill_pdf(pdf_path, named)
+    except (PdfFillError, OverlayFillError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Success: the claim is done — delete server-side state (guardrail:
