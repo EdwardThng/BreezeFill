@@ -18,13 +18,19 @@ a Singapore GP.
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Rebuilt for first-time clarity |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
-| Fly deploy | **Not deployed.** Blocked on `fly auth login` (needs a browser) |
-| `ANTHROPIC_API_KEY` | **Unset** — the owner removed it. `POST /claims` fails until restored |
+| Fly deploy | **Live** at https://formfill-backend.fly.dev — 1 machine in `sin`, health check passing |
+| `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` fails until set |
 
-Commit `ec7c09c` is named "full deployment on fly.io" but only adds the static
-mount to `main.py`. Nothing has ever been deployed; the Dockerfile has never
-been built (Docker Desktop was not running, so Fly's remote builder will
-compile it for the first time during the first `fly deploy`).
+Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
+static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
+Verify deploy state with `flyctl`, not commit titles.
+
+**Always deploy with `fly deploy --ha=false`.** Fly's default adds a second
+machine for high availability, which silently breaks this app: a claim created
+on machine A 404s when the approve request lands on machine B. `fly.toml`'s
+`min_machines_running = 1` does *not* prevent it. The first deploy created two
+machines and needed `fly scale count 1` to undo. Check with `fly status` after
+every deploy.
 
 ---
 
@@ -151,16 +157,14 @@ node stage.
 
 ## Next steps
 
-1. **Deploy.** Needs the owner's browser: `flyctl auth login`, then
-   `fly apps create` (the name `formfill-backend` may collide — Fly app names
-   are global), `fly secrets set ANTHROPIC_API_KEY=...`, `fly deploy`. Watch
-   the node build stage; it has never run.
-2. **Restore `ANTHROPIC_API_KEY` locally** if the full flow needs exercising
-   before deploy — screens 2 and 3 are unreachable without it.
-3. **Paste-and-parse demographics** — the agreed next feature. One pasted
+1. **Set the Fly secret** — the only thing standing between the live site and
+   a working claim: `fly secrets set ANTHROPIC_API_KEY=...`. Must be run by
+   the owner in their own terminal, never through Claude Code's `!` prefix
+   (which writes the command into the transcript).
+2. **Paste-and-parse demographics** — the agreed next feature. One pasted
    block from ClinicAssist fills name/NRIC/DOB/phone instead of six fields.
-4. **SG-region inference** before any real patient note.
-5. Deferred: coordinate-overlay fill for the three scanned forms.
+3. **SG-region inference** before any real patient note.
+4. Deferred: coordinate-overlay fill for the three scanned forms.
 
 ---
 

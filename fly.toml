@@ -8,6 +8,12 @@
 # (a privacy feature — nothing persists), so a second machine or a mid-review
 # stop/start would lose or split claims.
 #
+# ALWAYS DEPLOY WITH:  fly deploy --ha=false
+# min_machines_running below does NOT stop this. Fly's default is to add a
+# second machine for high availability, which silently breaks the app: a claim
+# created on machine A 404s when the approve request lands on machine B. The
+# first deploy did exactly that and needed `fly scale count 1` to undo.
+#
 # Required secret (fly secrets set NAME=value):
 #   ANTHROPIC_API_KEY   - LLM calls
 
