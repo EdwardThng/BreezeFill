@@ -25,11 +25,22 @@ from pydantic import BaseModel, model_validator
 from overlay_fill import FieldBox
 from redaction import PatientRecord, remerge
 
-# Top-tier model first, optimize cost later (spec 5). The sweep is the cheap
-# safety-net call (spec 3.3 pass 3). Both overridable via env for the
-# SG-region switch before real patient data.
-MAPPING_MODEL = os.environ.get("FORMFILL_MAPPING_MODEL", "claude-opus-4-8")
-SWEEP_MODEL = os.environ.get("FORMFILL_SWEEP_MODEL", "claude-haiku-4-5")
+# Top-tier model on both calls: the sweep is the last line of defence against
+# an identifier reaching the LLM-facing text, so it is worth Opus rates.
+# Overridable via env — drop the sweep to a cheaper model if cost bites.
+MAPPING_MODEL = os.environ.get("FORMFILL_MAPPING_MODEL", "claude-opus-5")
+SWEEP_MODEL = os.environ.get("FORMFILL_SWEEP_MODEL", "claude-opus-5")
+
+# Where inference runs. The API accepts only "us" and "global" today —
+# there is no Singapore value, so in-region SG inference is NOT reachable
+# from the first-party API and would need Bedrock ap-southeast-1 instead.
+# Unset means the workspace default (global routing). "us" costs 1.1x.
+# Requires a 4.6+ model: older models 400 on this parameter.
+INFERENCE_GEO = os.environ.get("FORMFILL_INFERENCE_GEO") or None
+
+
+def _geo_kwargs() -> dict[str, str]:
+    return {"inference_geo": INFERENCE_GEO} if INFERENCE_GEO else {}
 
 SYSTEM_PROMPT = """\
 You fill medical insurance forms from clinical notes. You will receive a form \
@@ -225,6 +236,7 @@ def map_fields(
         system=SYSTEM_PROMPT,
         output_config={"format": {"type": "json_schema", "schema": build_output_schema(llm_fields)}},
         messages=[{"role": "user", "content": _build_user_prompt(schema, redacted_text)}],
+        **_geo_kwargs(),
     )
 
     if response.stop_reason == "refusal":
@@ -295,6 +307,7 @@ def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
                 ),
             }
         ],
+        **_geo_kwargs(),
     )
     reply = next((b.text for b in response.content if b.type == "text"), "").strip()
     if not reply or reply.upper() == "NONE":
