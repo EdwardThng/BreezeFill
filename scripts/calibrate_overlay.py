@@ -14,9 +14,13 @@ Then, after writing the schema, check the result with:
 which fills every box with its own field id and renders the pages, so a
 misplaced box is obvious at a glance.
 
-These scans embed one full-page JPEG per page, so the page image is used
-directly rather than rasterizing the PDF (no poppler/PyMuPDF needed). The
-proof mode is the check that this assumption holds for a given form.
+Pages are rasterized with PyMuPDF. An earlier version pulled the embedded
+full-page JPEG out of the PDF instead, which is fine for the blank form but
+renders the proof mode useless: the overlay is vector text drawn *on top* of
+that image, so extracting the image showed a blank form every time.
+
+PyMuPDF is a calibration-only dependency (`pip install pymupdf`) — the server
+never rasterizes, so it stays out of backend/requirements.txt.
 """
 
 from __future__ import annotations
@@ -27,8 +31,8 @@ import json
 import sys
 from pathlib import Path
 
+import fitz  # PyMuPDF
 from PIL import Image, ImageDraw
-from pypdf import PdfReader
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
@@ -42,19 +46,18 @@ LABEL = (220, 0, 0)
 
 
 def page_images(pdf_path: Path, zoom: float) -> list[tuple[Image.Image, float, float]]:
-    """One PIL image per page, scaled so 1 point == `zoom` pixels."""
-    reader = PdfReader(str(pdf_path))
+    """One PIL image per page, rasterized so 1 point == `zoom` pixels.
+
+    Rasterizing (rather than extracting the embedded scan) is what makes the
+    proof mode meaningful — it composites the overlay text with the page.
+    """
     out = []
-    for page in reader.pages:
-        pw, ph = float(page.mediabox.width), float(page.mediabox.height)
-        target = (int(pw * zoom), int(ph * zoom))
-        # Largest embedded image is the scan; the small one is a watermark.
-        images = sorted(page.images, key=lambda im: im.image.width * im.image.height)
-        if images:
-            img = images[-1].image.convert("RGB").resize(target)
-        else:
-            img = Image.new("RGB", target, "white")
-        out.append((img, pw, ph))
+    with fitz.open(str(pdf_path)) as doc:
+        for page in doc:
+            pw, ph = page.rect.width, page.rect.height
+            pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            out.append((img, pw, ph))
     return out
 
 
