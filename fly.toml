@@ -17,7 +17,7 @@
 # Required secret (fly secrets set NAME=value):
 #   ANTHROPIC_API_KEY   - LLM calls
 
-app = "formfill-backend"
+app = "claimfill"
 primary_region = "sin"
 
 [http_service]
