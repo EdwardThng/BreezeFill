@@ -261,6 +261,124 @@
       "source": "llm",
       "description": "Name and address of the regular doctor's clinic or hospital",
       "box": { "page": 2, "x": 315, "y": 690, "w": 210, "h": 50 }
+    },
+
+    {
+      "id": "header_name_p3",
+      "label": "Patient name (header, page 3)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 3, "x": 175, "y": 25, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p3",
+      "label": "NRIC (header, page 3)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 3, "x": 185, "y": 34, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p3",
+      "label": "Policy number (header, page 3)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 3, "x": 175, "y": 43, "w": 180, "h": 11 }
+    },
+    {
+      "id": "accident_date",
+      "label": "Date of accident",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the accident occurred (DD/MM/YYYY). Leave missing if this is an illness, not an accident.",
+      "box": { "page": 3, "x": 205, "y": 100, "w": 95, "h": 12 }
+    },
+    {
+      "id": "accident_time",
+      "label": "Time of accident",
+      "type": "text",
+      "source": "llm",
+      "description": "Time the accident occurred, only if stated in the notes",
+      "box": { "page": 3, "x": 335, "y": 100, "w": 70, "h": 12 }
+    },
+    {
+      "id": "accident_first_consult_date",
+      "label": "Date of first consultation for injury",
+      "type": "date",
+      "source": "llm",
+      "description": "Date of the first consultation for this injury (DD/MM/YYYY)",
+      "box": { "page": 3, "x": 205, "y": 125, "w": 95, "h": 12 }
+    },
+    {
+      "id": "how_accident_occurred",
+      "label": "How the accident occurred",
+      "type": "text",
+      "source": "llm",
+      "description": "Description of how the accident occurred",
+      "box": { "page": 3, "x": 195, "y": 157, "w": 330, "h": 48 }
+    },
+    {
+      "id": "injuries_and_site",
+      "label": "Injuries and anatomical site",
+      "type": "text",
+      "source": "llm",
+      "description": "The injuries sustained and the anatomical site involved",
+      "box": { "page": 3, "x": 195, "y": 218, "w": 330, "h": 28 }
+    },
+    {
+      "id": "accident_diagnosis",
+      "label": "Diagnosis (accident)",
+      "type": "text",
+      "source": "llm",
+      "description": "The exact diagnosis of the condition resulting from the accident",
+      "box": { "page": 3, "x": 195, "y": 278, "w": 128, "h": 48 }
+    },
+    {
+      "id": "accident_icd_code",
+      "label": "ICD-10-AM code",
+      "type": "text",
+      "source": "llm",
+      "description": "ICD-10-AM code for the diagnosis, if stated or clearly implied",
+      "box": { "page": 3, "x": 331, "y": 278, "w": 82, "h": 48 }
+    },
+    {
+      "id": "accident_diagnosis_date",
+      "label": "Date of diagnosis",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the condition was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 3, "x": 421, "y": 278, "w": 100, "h": 48 }
+    },
+    {
+      "id": "injury_consistent_with_accident",
+      "label": "Injury consistent with the accident",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injury sustained is consistent with the accident described. Elaborate only if it is not.",
+      "box": { "page": 3, "x": 195, "y": 352, "w": 330, "h": 38 }
+    },
+    {
+      "id": "cause_of_injury",
+      "label": "Cause of the injury",
+      "type": "text",
+      "source": "llm",
+      "description": "The cause of the injury",
+      "box": { "page": 3, "x": 195, "y": 402, "w": 330, "h": 30 }
+    },
+    {
+      "id": "substance_type",
+      "label": "Alcohol / drug consumed",
+      "type": "text",
+      "source": "llm",
+      "description": "Type of alcohol or drug consumed at the time of the accident. Leave missing unless the notes state the patient was under the influence.",
+      "box": { "page": 3, "x": 195, "y": 655, "w": 160, "h": 45 }
+    },
+    {
+      "id": "substance_level",
+      "label": "Blood alcohol level / quantity",
+      "type": "text",
+      "source": "llm",
+      "description": "Blood alcohol level or quantity consumed, only if stated in the notes",
+      "box": { "page": 3, "x": 363, "y": 655, "w": 160, "h": 45 }
     }
   ]
 }
