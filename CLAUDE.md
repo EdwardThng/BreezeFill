@@ -95,11 +95,33 @@ mangled real values on the Great Eastern form: `S1234567D` → `345670`).
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
 
-**Three of the clinic's five forms cannot be filled.** Prudential, Henner and
-the AIA Medical Report are flat CamScanner scans with zero AcroForm fields,
-and no public fillable versions exist. They sit in `forms/scans_unsupported/`
-and need a coordinate-overlay fill feature or stay manual. The two live forms
-are official fillable PDFs downloaded from the insurers.
+**Two fill modes.** `fill_mode: "acroform"` writes into the PDF's own fields
+(AIA GHS, GE GHS — official fillable PDFs). `fill_mode: "overlay"` stamps text
+at coordinates onto flat CamScanner scans that have no fields at all
+(Prudential, Henner, AIA Medical Report). Overlay boxes are **points from the
+page top-left**, not PDF's bottom-left origin — the conversion happens once in
+`overlay_fill._box_to_pdf_rect`.
+
+**Never eyeball overlay coordinates — use the proof loop.**
+`python scripts/calibrate_overlay.py <pdf> <out>` renders each page with a
+labelled point grid; `--proof <schema.json> <out>` stamps every box with its
+own field id so a misplaced box is obvious. Two traps this caught, both of
+which will recur on any new overlay form:
+
+- The embedded page scan does **not** fill the mediabox — it is inset. Boxes
+  measured off an extracted page image are systematically ~30pt out. Only the
+  rasterized proof render is authoritative.
+- Adjacent boxes are usually *different questions*, so text overflow puts an
+  answer under the wrong heading. `_hard_wrap` breaks mid-token and clips
+  rather than spilling; `test_unbreakable_token_never_exceeds_box_width`
+  guards it.
+
+`scripts/calibrate_overlay.py` needs PyMuPDF (`pip install pymupdf`), which is
+deliberately **not** in `backend/requirements.txt` — the server never
+rasterizes.
+
+**AIA Medical Report pages 3–7 are not yet calibrated** (accident/illness
+sections C and D). Pages 1–2 are done. Henner and Prudential are complete.
 
 **Schemas deliberately skip some fields.** Great Eastern's tiny
 day/month/year triplet boxes and ambiguous Yes/No checkboxes are left for the
