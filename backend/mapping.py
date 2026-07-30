@@ -83,6 +83,9 @@ class FormSchema(BaseModel):
     form_id: str
     pdf_path: str
     fields: list[FormField]
+    # "acroform" writes into the PDF's own fields; "overlay" stamps text at
+    # coordinates, for insurers who publish no fillable version.
+    fill_mode: Literal["acroform", "overlay"] = "acroform"
     # Shown in the form picker instead of the raw form_id.
     display_name: str | None = None
     insurer: str | None = None
