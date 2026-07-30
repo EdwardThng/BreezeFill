@@ -1,6 +1,6 @@
 # Test notes for the pilot
 
-Six synthetic cases for trying FormFill at **https://formfill-backend.fly.dev**.
+Six synthetic cases for trying ClaimFill at **https://claimfill.fly.dev**.
 
 **Every patient here is invented.** The names, NRICs, phone numbers, addresses
 and dates are all made up, and no case is drawn from a real consultation. Use
