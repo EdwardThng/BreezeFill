@@ -142,10 +142,15 @@ omission to "fix".
   deleted on download, purged after 1h.
 - No patient data in logs or error messages. LLM failures return a generic
   `"LLM call failed"`.
-- **No real patient data until inference is confirmed in-region.** The default
-  `claude-opus-4-8` via the standard API is not SG-region.
-  `FORMFILL_MAPPING_MODEL` / `FORMFILL_SWEEP_MODEL` are the switch point.
-  Synthetic or anonymised notes only until then.
+- **No real patient data until inference is confirmed in-region.** Both calls
+  run `claude-opus-5` on the first-party API, which is not SG-region.
+  **`inference_geo` cannot solve this** — verified against the docs, it accepts
+  only `"us"` and `"global"`; there is no Singapore value, and workspace geo is
+  US-only too. It is wired up behind `FORMFILL_INFERENCE_GEO` (unset by
+  default) for whenever more geos land. Real SG-region inference needs
+  **Amazon Bedrock `ap-southeast-1`**, where the region comes from the endpoint
+  rather than a parameter — that means the `AnthropicBedrockMantle` client and
+  `anthropic.`-prefixed model ids. Synthetic or anonymised notes until then.
 - The API key belongs in a Fly secret, never in a repo file, and never pasted
   into a chat transcript (including via the `!` prefix, which is logged).
 - Repo fixtures are synthetic only.
