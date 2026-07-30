@@ -505,6 +505,156 @@
       "source": "llm",
       "description": "Whether the injuries would have prevented the patient from working in their occupation, and how",
       "box": { "page": 4, "x": 204, "y": 690, "w": 322, "h": 26 }
+    },
+
+    {
+      "id": "header_name_p5",
+      "label": "Patient name (header, page 5)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 5, "x": 175, "y": 23, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p5",
+      "label": "NRIC (header, page 5)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 5, "x": 185, "y": 32, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p5",
+      "label": "Policy number (header, page 5)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 5, "x": 175, "y": 41, "w": 180, "h": 11 }
+    },
+    {
+      "id": "illness_first_consult_date",
+      "label": "Date of first consultation",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient FIRST consulted you for this condition (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 238, "y": 98, "w": 100, "h": 12 }
+    },
+    {
+      "id": "first_consult_symptoms",
+      "label": "Signs and symptoms at first visit",
+      "type": "text",
+      "source": "llm",
+      "description": "The signs and symptoms the patient presented with at the first consultation",
+      "box": { "page": 5, "x": 214, "y": 118, "w": 312, "h": 50 }
+    },
+    {
+      "id": "symptoms_first_noticed_date",
+      "label": "Date symptoms first noticed",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient first noticed the symptoms of the diagnosed condition (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 238, "y": 204, "w": 100, "h": 12 }
+    },
+    {
+      "id": "symptom_duration_before_consult",
+      "label": "How long symptoms lasted before consulting",
+      "type": "text",
+      "source": "llm",
+      "description": "In your opinion, how long the symptoms had lasted before the first consultation",
+      "box": { "page": 5, "x": 214, "y": 233, "w": 312, "h": 26 }
+    },
+    {
+      "id": "illness_diagnosis",
+      "label": "Diagnosis (illness)",
+      "type": "text",
+      "source": "llm",
+      "description": "The exact diagnosis of the condition",
+      "box": { "page": 5, "x": 214, "y": 290, "w": 132, "h": 30 }
+    },
+    {
+      "id": "illness_icd_code",
+      "label": "ICD-10-AM code",
+      "type": "text",
+      "source": "llm",
+      "description": "ICD-10-AM code for the diagnosis, if stated or clearly implied",
+      "box": { "page": 5, "x": 354, "y": 290, "w": 72, "h": 30 }
+    },
+    {
+      "id": "illness_diagnosis_date",
+      "label": "Date of diagnosis",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the condition was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 434, "y": 290, "w": 92, "h": 30 }
+    },
+    {
+      "id": "date_patient_informed",
+      "label": "Date patient was informed",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was informed of the diagnosis (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 396, "y": 328, "w": 78, "h": 12 }
+    },
+    {
+      "id": "advice_to_patient",
+      "label": "Advice given to the patient",
+      "type": "text",
+      "source": "llm",
+      "description": "What advice you gave the patient",
+      "box": { "page": 5, "x": 214, "y": 372, "w": 312, "h": 36 }
+    },
+    {
+      "id": "underlying_condition",
+      "label": "Underlying cause of the condition",
+      "type": "text",
+      "source": "llm",
+      "description": "The underlying condition causing the diagnosed condition, if the notes identify one",
+      "box": { "page": 5, "x": 214, "y": 456, "w": 182, "h": 42 }
+    },
+    {
+      "id": "underlying_condition_date",
+      "label": "Date underlying condition diagnosed",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the underlying condition was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 406, "y": 456, "w": 120, "h": 42 }
+    },
+    {
+      "id": "urgent_treatment_required",
+      "label": "Urgent remedial treatment required",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the condition required urgent remedial treatment to avoid death or serious impairment, elaborating if so",
+      "box": { "page": 5, "x": 214, "y": 530, "w": 312, "h": 20 }
+    },
+    {
+      "id": "aware_prior_to_consult",
+      "label": "Patient aware of condition beforehand",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the patient was already aware of the condition before seeing you, elaborating if so",
+      "box": { "page": 5, "x": 214, "y": 585, "w": 312, "h": 30 }
+    },
+    {
+      "id": "prior_doctor_name",
+      "label": "Other doctor consulted beforehand",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of any other doctor the patient consulted for these symptoms before seeing you",
+      "box": { "page": 5, "x": 214, "y": 666, "w": 98, "h": 45 }
+    },
+    {
+      "id": "prior_doctor_clinic",
+      "label": "That doctor's clinic / hospital",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of that doctor's clinic or hospital",
+      "box": { "page": 5, "x": 318, "y": 666, "w": 105, "h": 45 }
+    },
+    {
+      "id": "prior_consult_date",
+      "label": "Date of that consultation",
+      "type": "date",
+      "source": "llm",
+      "description": "Date of that earlier consultation (DD/MM/YYYY)",
+      "box": { "page": 5, "x": 431, "y": 666, "w": 95, "h": 45 }
     }
   ]
 }
