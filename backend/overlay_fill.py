@@ -68,22 +68,43 @@ def _box_to_pdf_rect(box: FieldBox, page_height: float) -> tuple[float, float]:
     return left, top
 
 
+def _hard_wrap(text: str, size: float, usable_w: float) -> list[str]:
+    """Wrap to `usable_w`, breaking mid-word when a single token is wider than
+    the box.
+
+    simpleSplit only breaks on spaces, so an unbreakable token — a long
+    surgical code, a hyphen-free hospital name — silently overflowed into the
+    neighbouring field. On a form where adjacent boxes are different questions
+    that puts text under the wrong heading, so it is cut instead.
+    """
+    lines: list[str] = []
+    for line in simpleSplit(text, FONT, size, usable_w):
+        while len(line) > 1 and stringWidth(line, FONT, size) > usable_w:
+            cut = len(line)
+            while cut > 1 and stringWidth(line[:cut], FONT, size) > usable_w:
+                cut -= 1
+            lines.append(line[:cut])
+            line = line[cut:]
+        lines.append(line)
+    return lines
+
+
 def _fit_lines(text: str, box: FieldBox) -> tuple[list[str], float]:
-    """Largest font size at which `text` wraps into the box, and the lines at
-    that size. Falls back to MIN_FONT_SIZE with the lines clipped to the box."""
+    """Largest font size at which `text` fits the box, and the lines at that
+    size. Falls back to MIN_FONT_SIZE with the lines clipped to the box."""
     usable_w = box.w - 2 * PADDING
     usable_h = box.h - 2 * PADDING
     ceiling = box.size or MAX_FONT_SIZE
 
     size = ceiling
     while size >= MIN_FONT_SIZE:
-        lines = simpleSplit(text, FONT, size, usable_w)
+        lines = _hard_wrap(text, size, usable_w)
         if len(lines) * size * 1.15 <= usable_h:
             return lines, size
         size -= 0.5
 
     # Nothing fits: keep as many lines as the box holds rather than spilling.
-    lines = simpleSplit(text, FONT, MIN_FONT_SIZE, usable_w)
+    lines = _hard_wrap(text, MIN_FONT_SIZE, usable_w)
     max_lines = max(1, int(usable_h // (MIN_FONT_SIZE * 1.15)))
     return lines[:max_lines], MIN_FONT_SIZE
 
