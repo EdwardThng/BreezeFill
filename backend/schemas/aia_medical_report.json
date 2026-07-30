@@ -379,6 +379,132 @@
       "source": "llm",
       "description": "Blood alcohol level or quantity consumed, only if stated in the notes",
       "box": { "page": 3, "x": 363, "y": 655, "w": 160, "h": 45 }
+    },
+
+    {
+      "id": "header_name_p4",
+      "label": "Patient name (header, page 4)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 4, "x": 180, "y": 81, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p4",
+      "label": "NRIC (header, page 4)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 4, "x": 190, "y": 90, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p4",
+      "label": "Policy number (header, page 4)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 4, "x": 180, "y": 99, "w": 180, "h": 11 }
+    },
+    {
+      "id": "contributing_diagnosis",
+      "label": "Contributing illness / infirmity",
+      "type": "text",
+      "source": "llm",
+      "description": "Any pre-existing illness or infirmity that contributed to the injury or prolonged the disability. Leave missing if the notes record none.",
+      "box": { "page": 4, "x": 204, "y": 190, "w": 126, "h": 52 }
+    },
+    {
+      "id": "contributing_diagnosis_date",
+      "label": "Date that illness was diagnosed",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the contributing illness was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 4, "x": 338, "y": 190, "w": 68, "h": 52 }
+    },
+    {
+      "id": "contributing_doctor",
+      "label": "Doctor consulted for that illness",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the doctor(s) consulted for the contributing illness",
+      "box": { "page": 4, "x": 414, "y": 190, "w": 112, "h": 52 }
+    },
+    {
+      "id": "how_illness_contributed",
+      "label": "How the illness contributed",
+      "type": "text",
+      "source": "llm",
+      "description": "How the illness or infirmity contributed to the injuries or prolonged the disability",
+      "box": { "page": 4, "x": 204, "y": 268, "w": 322, "h": 24 }
+    },
+    {
+      "id": "usual_recovery_time",
+      "label": "Usual recovery time without it",
+      "type": "text",
+      "source": "llm",
+      "description": "What the usual recovery time would have been if not for that illness or infirmity",
+      "box": { "page": 4, "x": 204, "y": 310, "w": 322, "h": 18 }
+    },
+    {
+      "id": "ttd_start_date",
+      "label": "Total disability — start date",
+      "type": "date",
+      "source": "llm",
+      "description": "Start of the period the patient could not perform any duties of their occupation (DD/MM/YYYY)",
+      "box": { "page": 4, "x": 204, "y": 362, "w": 155, "h": 14 }
+    },
+    {
+      "id": "ttd_end_date",
+      "label": "Total disability — end date",
+      "type": "date",
+      "source": "llm",
+      "description": "End of the period the patient could not perform any duties of their occupation (DD/MM/YYYY)",
+      "box": { "page": 4, "x": 368, "y": 362, "w": 155, "h": 14 }
+    },
+    {
+      "id": "tpd_start_date",
+      "label": "Partial disability — start date",
+      "type": "date",
+      "source": "llm",
+      "description": "Start of the period the patient could perform some but not all duties (DD/MM/YYYY)",
+      "box": { "page": 4, "x": 204, "y": 437, "w": 155, "h": 14 }
+    },
+    {
+      "id": "tpd_end_date",
+      "label": "Partial disability — end date",
+      "type": "date",
+      "source": "llm",
+      "description": "End of the period the patient could perform some but not all duties (DD/MM/YYYY)",
+      "box": { "page": 4, "x": 368, "y": 430, "w": 155, "h": 14 }
+    },
+    {
+      "id": "mc_issued",
+      "label": "Medical certificates issued",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether medical certificates were issued for the stated period. Elaborate only if they were not.",
+      "box": { "page": 4, "x": 204, "y": 520, "w": 322, "h": 22 }
+    },
+    {
+      "id": "fully_recovered",
+      "label": "Fully recovered from injuries",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the patient has fully recovered from the injuries. Elaborate only if they have not.",
+      "box": { "page": 4, "x": 204, "y": 570, "w": 322, "h": 26 }
+    },
+    {
+      "id": "permanent_loss_of_use",
+      "label": "Permanent loss of use",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injuries caused permanent and total loss of use of the organ or limb. If not, state the extent of loss of use.",
+      "box": { "page": 4, "x": 204, "y": 628, "w": 322, "h": 24 }
+    },
+    {
+      "id": "prevented_from_occupation",
+      "label": "Prevented from working",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether the injuries would have prevented the patient from working in their occupation, and how",
+      "box": { "page": 4, "x": 204, "y": 690, "w": 322, "h": 26 }
     }
   ]
 }
