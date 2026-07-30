@@ -717,6 +717,44 @@
       "source": "llm",
       "description": "Date the patient was informed of that other diagnosis (DD/MM/YYYY)",
       "box": { "page": 6, "x": 262, "y": 375, "w": 100, "h": 12 }
+    },
+
+    {
+      "id": "header_name_p7",
+      "label": "Patient name (header, page 7)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 7, "x": 175, "y": 24, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p7",
+      "label": "NRIC (header, page 7)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 7, "x": 185, "y": 33, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p7",
+      "label": "Policy number (header, page 7)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 7, "x": 175, "y": 42, "w": 180, "h": 11 }
+    },
+    {
+      "id": "attending_doctor_name",
+      "label": "Your name (attending doctor)",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the attending doctor completing and signing this report, if stated in the notes",
+      "box": { "page": 7, "x": 118, "y": 530, "w": 165, "h": 12 }
+    },
+    {
+      "id": "attending_doctor_mcr",
+      "label": "Your MCR number",
+      "type": "text",
+      "source": "llm",
+      "description": "The attending doctor's Medical Council Registration (MCR) number, only if stated in the notes",
+      "box": { "page": 7, "x": 118, "y": 549, "w": 165, "h": 12 }
     }
   ]
 }
