@@ -6,33 +6,33 @@
   "fill_mode": "overlay",
   "fields": [
     {
-      "id": "patient_name",
-      "label": "Patient name",
-      "type": "text",
-      "source": "demographics.full_name",
-      "box": { "page": 1, "x": 37, "y": 281, "w": 245, "h": 13 }
-    },
-    {
-      "id": "patient_dob",
-      "label": "Date of birth",
-      "type": "date",
-      "source": "demographics.dob",
-      "box": { "page": 1, "x": 296, "y": 281, "w": 150, "h": 13 }
-    },
-    {
       "id": "insured_name",
       "label": "Insured person's name",
       "type": "text",
       "source": "llm",
       "description": "Name of the insured person (the policyholder), only if stated in the notes. Often the patient themselves.",
-      "box": { "page": 1, "x": 37, "y": 256, "w": 245, "h": 13 }
+      "box": { "page": 1, "x": 176, "y": 237, "w": 104, "h": 12 }
     },
     {
       "id": "insured_id_number",
       "label": "Insured ID number",
       "type": "text",
       "source": "demographics.nric",
-      "box": { "page": 1, "x": 292, "y": 256, "w": 245, "h": 13 }
+      "box": { "page": 1, "x": 335, "y": 237, "w": 195, "h": 12 }
+    },
+    {
+      "id": "patient_name",
+      "label": "Patient name",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 1, "x": 157, "y": 258, "w": 123, "h": 12 }
+    },
+    {
+      "id": "patient_dob",
+      "label": "Date of birth",
+      "type": "date",
+      "source": "demographics.dob",
+      "box": { "page": 1, "x": 365, "y": 258, "w": 100, "h": 12 }
     },
     {
       "id": "patient_sex",
@@ -40,7 +40,7 @@
       "type": "text",
       "source": "llm",
       "description": "Patient's sex as M or F, only if stated or unambiguous from the notes",
-      "box": { "page": 1, "x": 470, "y": 281, "w": 95, "h": 13 }
+      "box": { "page": 1, "x": 492, "y": 258, "w": 40, "h": 12 }
     },
     {
       "id": "accident_related",
@@ -48,7 +48,7 @@
       "type": "checkbox",
       "source": "llm",
       "description": "Tick only if the notes state the condition resulted from an accident",
-      "box": { "page": 1, "x": 431, "y": 315, "w": 11, "h": 11 }
+      "box": { "page": 1, "x": 424, "y": 296, "w": 11, "h": 10 }
     },
     {
       "id": "place_of_hospitalisation",
@@ -56,7 +56,7 @@
       "type": "text",
       "source": "llm",
       "description": "Name and address of the hospital the patient will be admitted to, if stated in the notes",
-      "box": { "page": 1, "x": 37, "y": 382, "w": 490, "h": 22 }
+      "box": { "page": 1, "x": 52, "y": 366, "w": 480, "h": 14 }
     },
     {
       "id": "attending_physician",
@@ -64,7 +64,7 @@
       "type": "text",
       "source": "llm",
       "description": "Attending physician's name, address and telephone, if stated in the notes",
-      "box": { "page": 1, "x": 37, "y": 418, "w": 490, "h": 22 }
+      "box": { "page": 1, "x": 52, "y": 398, "w": 480, "h": 14 }
     },
     {
       "id": "reason_and_diagnosis",
@@ -72,7 +72,7 @@
       "type": "text",
       "source": "llm",
       "description": "Reason for the hospitalisation: clinical symptoms presented and the precise medical diagnosis",
-      "box": { "page": 1, "x": 37, "y": 453, "w": 490, "h": 33 }
+      "box": { "page": 1, "x": 52, "y": 432, "w": 480, "h": 28 }
     },
     {
       "id": "operation_and_treatment",
@@ -80,7 +80,7 @@
       "type": "text",
       "source": "llm",
       "description": "Nature of the proposed operation and the treatment programme",
-      "box": { "page": 1, "x": 37, "y": 507, "w": 490, "h": 42 }
+      "box": { "page": 1, "x": 52, "y": 482, "w": 480, "h": 45 }
     },
     {
       "id": "additional_examinations",
@@ -88,7 +88,7 @@
       "type": "text",
       "source": "llm",
       "description": "Nature of any additional examinations to be carried out, if stated in the notes",
-      "box": { "page": 1, "x": 37, "y": 577, "w": 490, "h": 20 }
+      "box": { "page": 1, "x": 52, "y": 548, "w": 480, "h": 11 }
     },
     {
       "id": "date_of_admission",
@@ -96,7 +96,7 @@
       "type": "date",
       "source": "llm",
       "description": "Date the patient was or will be admitted (DD/MM/YYYY)",
-      "box": { "page": 1, "x": 140, "y": 613, "w": 140, "h": 13 }
+      "box": { "page": 1, "x": 102, "y": 576, "w": 110, "h": 11 }
     },
     {
       "id": "number_of_days",
@@ -104,7 +104,7 @@
       "type": "text",
       "source": "llm",
       "description": "Expected length of stay in days, if stated in the notes",
-      "box": { "page": 1, "x": 270, "y": 613, "w": 100, "h": 13 }
+      "box": { "page": 1, "x": 275, "y": 576, "w": 85, "h": 11 }
     },
     {
       "id": "is_extension",
@@ -112,7 +112,7 @@
       "type": "text",
       "source": "llm",
       "description": "y or n — whether this is an extension of an existing stay. Leave missing unless the notes say.",
-      "box": { "page": 1, "x": 460, "y": 613, "w": 60, "h": 13 }
+      "box": { "page": 1, "x": 462, "y": 576, "w": 60, "h": 11 }
     },
     {
       "id": "hospital_charges",
@@ -120,7 +120,7 @@
       "type": "text",
       "source": "llm",
       "description": "Estimated hospital charges, only if stated in the notes",
-      "box": { "page": 1, "x": 140, "y": 663, "w": 110, "h": 13 }
+      "box": { "page": 1, "x": 107, "y": 623, "w": 90, "h": 11 }
     },
     {
       "id": "physicians_fees",
@@ -128,7 +128,7 @@
       "type": "text",
       "source": "llm",
       "description": "Estimated physicians' fees, only if stated in the notes",
-      "box": { "page": 1, "x": 270, "y": 663, "w": 110, "h": 13 }
+      "box": { "page": 1, "x": 262, "y": 623, "w": 90, "h": 11 }
     },
     {
       "id": "other_expenses",
@@ -136,7 +136,7 @@
       "type": "text",
       "source": "llm",
       "description": "Other estimated expenses, only if stated in the notes",
-      "box": { "page": 1, "x": 430, "y": 663, "w": 110, "h": 13 }
+      "box": { "page": 1, "x": 420, "y": 623, "w": 100, "h": 11 }
     }
   ]
 }
