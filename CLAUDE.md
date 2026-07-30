@@ -58,6 +58,17 @@ id so a half-written schema still renders.
 fake form, but claims can still be created against `dev_sample_v1` by id,
 which is what the API tests do.
 
+**Precision over coverage — this is the product's core bet.** The owner's rule
+(2026-07-30): *"it's much more important to get the fields that are being
+filled right rather than filling all the fields up. Doctors don't mind filling
+additional fields themselves."* A blank costs the doctor seconds of
+handwriting; a wrong value gets signed and submitted to an insurer as their
+own clinical statement. So never tune for fill rate. If a change would fill
+more fields at any cost to correctness, it is the wrong change. `SYSTEM_PROMPT`
+states this asymmetry explicitly and holds `inferred` to what a clinician
+would conclude without hesitation. `docs/test_notes.md` case 5 is the
+regression check: a one-line note should come back almost entirely `missing`.
+
 **Doctors confirm, they don't just read.** Anything not directly `extracted`
 requires an explicit confirm click before the PDF can be generated. Editing a
 value counts as confirming it. Do not "helpfully" pre-confirm inferred fields.
