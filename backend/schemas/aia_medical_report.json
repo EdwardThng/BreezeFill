@@ -1,0 +1,266 @@
+{
+  "form_id": "aia_medical_report",
+  "display_name": "AIA — Part II Medical Report (attending doctor)",
+  "insurer": "AIA",
+  "pdf_path": "forms/scans_unsupported/aia_medical_report.pdf",
+  "fill_mode": "overlay",
+  "fields": [
+    {
+      "id": "header_name_p1",
+      "label": "Patient name (header, page 1)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 1, "x": 175, "y": 29, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p1",
+      "label": "NRIC (header, page 1)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 1, "x": 185, "y": 38, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p1",
+      "label": "Policy number (header, page 1)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 1, "x": 175, "y": 47, "w": 180, "h": 11 }
+    },
+    {
+      "id": "patient_name",
+      "label": "Patient name",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 1, "x": 108, "y": 101, "w": 165, "h": 14 }
+    },
+    {
+      "id": "patient_nric",
+      "label": "NRIC / FIN",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 1, "x": 390, "y": 101, "w": 140, "h": 14 }
+    },
+    {
+      "id": "hospitalisation_details",
+      "label": "Hospitalisation details",
+      "type": "text",
+      "source": "llm",
+      "description": "If the patient was hospitalised, the details of that admission. Leave missing if not hospitalised.",
+      "box": { "page": 1, "x": 197, "y": 165, "w": 328, "h": 32 }
+    },
+    {
+      "id": "hospital_name",
+      "label": "Hospital admitted to",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the hospital the patient was admitted to",
+      "box": { "page": 1, "x": 197, "y": 208, "w": 328, "h": 32 }
+    },
+    {
+      "id": "admission_date",
+      "label": "Date of admission",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was admitted (DD/MM/YYYY)",
+      "box": { "page": 1, "x": 197, "y": 265, "w": 180, "h": 20 }
+    },
+    {
+      "id": "discharge_date",
+      "label": "Date of discharge",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was discharged (DD/MM/YYYY)",
+      "box": { "page": 1, "x": 395, "y": 265, "w": 130, "h": 20 }
+    },
+    {
+      "id": "attending_doctors",
+      "label": "Attending doctor(s)",
+      "type": "text",
+      "source": "llm",
+      "description": "Name(s) of the attending doctor(s), if stated in the notes",
+      "box": { "page": 1, "x": 197, "y": 323, "w": 328, "h": 45 }
+    },
+    {
+      "id": "treatment_type",
+      "label": "Type of treatment / surgery",
+      "type": "text",
+      "source": "llm",
+      "description": "Type of treatment or surgery performed",
+      "box": { "page": 1, "x": 197, "y": 485, "w": 100, "h": 55 }
+    },
+    {
+      "id": "surgical_code",
+      "label": "Surgical code",
+      "type": "text",
+      "source": "llm",
+      "description": "Surgical operation code, only if stated in the notes",
+      "box": { "page": 1, "x": 303, "y": 485, "w": 50, "h": 55 }
+    },
+    {
+      "id": "treating_doctor",
+      "label": "Name of doctor(s)",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the doctor who performed the treatment or surgery",
+      "box": { "page": 1, "x": 358, "y": 485, "w": 82, "h": 55 }
+    },
+    {
+      "id": "treatment_date",
+      "label": "Date of treatment",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the treatment or surgery was performed (DD/MM/YYYY)",
+      "box": { "page": 1, "x": 445, "y": 485, "w": 80, "h": 55 }
+    },
+    {
+      "id": "other_doctor",
+      "label": "Other doctor for same condition",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of any other doctor who treated the patient for this same condition",
+      "box": { "page": 1, "x": 197, "y": 590, "w": 240, "h": 55 }
+    },
+    {
+      "id": "other_doctor_date",
+      "label": "Date of that consultation",
+      "type": "date",
+      "source": "llm",
+      "description": "Date of consultation with that other doctor (DD/MM/YYYY)",
+      "box": { "page": 1, "x": 445, "y": 590, "w": 80, "h": 55 }
+    },
+
+    {
+      "id": "header_name_p2",
+      "label": "Patient name (header, page 2)",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 2, "x": 175, "y": 80, "w": 180, "h": 11 }
+    },
+    {
+      "id": "header_nric_p2",
+      "label": "NRIC (header, page 2)",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 2, "x": 185, "y": 89, "w": 170, "h": 11 }
+    },
+    {
+      "id": "header_policy_p2",
+      "label": "Policy number (header, page 2)",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "box": { "page": 2, "x": 175, "y": 98, "w": 180, "h": 11 }
+    },
+    {
+      "id": "prev_condition_diagnosis",
+      "label": "Previous serious condition",
+      "type": "text",
+      "source": "llm",
+      "description": "Diagnosis or illness the patient was previously treated for, if the notes mention any prior serious condition",
+      "box": { "page": 2, "x": 200, "y": 155, "w": 105, "h": 42 }
+    },
+    {
+      "id": "prev_condition_doctor",
+      "label": "Doctor for previous condition",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the doctor who treated that previous condition",
+      "box": { "page": 2, "x": 315, "y": 155, "w": 125, "h": 42 }
+    },
+    {
+      "id": "prev_condition_date",
+      "label": "Date of previous diagnosis",
+      "type": "date",
+      "source": "llm",
+      "description": "Date that previous condition was diagnosed (DD/MM/YYYY)",
+      "box": { "page": 2, "x": 450, "y": 155, "w": 75, "h": 42 }
+    },
+    {
+      "id": "test_name",
+      "label": "Diagnostic test(s)",
+      "type": "text",
+      "source": "llm",
+      "description": "Diagnostic tests or scans performed, e.g. CT abdomen, full blood count",
+      "box": { "page": 2, "x": 200, "y": 250, "w": 115, "h": 55 }
+    },
+    {
+      "id": "test_result",
+      "label": "Test result(s)",
+      "type": "text",
+      "source": "llm",
+      "description": "Results of those diagnostic tests or scans",
+      "box": { "page": 2, "x": 325, "y": 250, "w": 115, "h": 55 }
+    },
+    {
+      "id": "test_date",
+      "label": "Date of test",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the diagnostic test was performed (DD/MM/YYYY)",
+      "box": { "page": 2, "x": 450, "y": 250, "w": 75, "h": 55 }
+    },
+    {
+      "id": "complications",
+      "label": "Complications prolonging healing",
+      "type": "text",
+      "source": "llm",
+      "description": "Any complications that prolonged healing. Leave missing if the notes record none.",
+      "box": { "page": 2, "x": 200, "y": 330, "w": 325, "h": 38 }
+    },
+    {
+      "id": "relapse_possibility",
+      "label": "Possibility of relapse",
+      "type": "text",
+      "source": "llm",
+      "description": "Whether a relapse is possible, and the details if so. Leave missing unless the notes address it.",
+      "box": { "page": 2, "x": 200, "y": 388, "w": 325, "h": 42 }
+    },
+    {
+      "id": "referring_doctor",
+      "label": "Referring doctor",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the doctor who referred the patient to you, if the notes mention a referral",
+      "box": { "page": 2, "x": 200, "y": 480, "w": 105, "h": 55 }
+    },
+    {
+      "id": "referring_clinic",
+      "label": "Referring clinic / hospital",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the referring doctor's clinic or hospital",
+      "box": { "page": 2, "x": 315, "y": 480, "w": 210, "h": 55 }
+    },
+    {
+      "id": "physio_name",
+      "label": "Physiotherapist",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the physiotherapist the patient was referred to, if any",
+      "box": { "page": 2, "x": 200, "y": 580, "w": 105, "h": 60 }
+    },
+    {
+      "id": "physio_clinic",
+      "label": "Physiotherapy clinic",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the physiotherapy clinic or hospital",
+      "box": { "page": 2, "x": 315, "y": 580, "w": 210, "h": 60 }
+    },
+    {
+      "id": "regular_doctor",
+      "label": "Patient's regular doctor",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the patient's regular doctor, if you are not their regular doctor",
+      "box": { "page": 2, "x": 200, "y": 690, "w": 105, "h": 50 }
+    },
+    {
+      "id": "regular_doctor_clinic",
+      "label": "Regular doctor's clinic",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the regular doctor's clinic or hospital",
+      "box": { "page": 2, "x": 315, "y": 690, "w": 210, "h": 50 }
+    }
+  ]
+}
