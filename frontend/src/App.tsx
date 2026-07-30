@@ -23,7 +23,7 @@ export default function App() {
       .then(setForms)
       .catch(() =>
         setError(
-          "Can't reach the FormFill server. Check your internet connection, " +
+          "Can't reach the ClaimFill server. Check your internet connection, " +
             "then reload this page.",
         ),
       );
@@ -157,7 +157,7 @@ export default function App() {
 function Header() {
   return (
     <header>
-      <h1>FormFill</h1>
+      <h1>ClaimFill</h1>
       <p>
         Paste your clinical notes, check what's been filled in, download the
         insurance form ready to sign.
