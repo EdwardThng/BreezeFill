@@ -120,8 +120,12 @@ which will recur on any new overlay form:
 deliberately **not** in `backend/requirements.txt` — the server never
 rasterizes.
 
-**AIA Medical Report pages 3–7 are not yet calibrated** (accident/illness
-sections C and D). Pages 1–2 are done. Henner and Prudential are complete.
+**All three overlay forms are fully calibrated.** AIA Medical Report covers all
+7 pages (96 boxes). Three blocks are skipped on purpose, not overlooked: the
+Q8 dental tooth-number diagram, Section E organ transplantation (completed by
+a transplant recipient's and donor's doctors, not a GP), and every Yes/No
+checkbox pair. The doctor's signature and signing date are also left blank — a
+pre-printed date that disagrees with the signature date is worse than a blank.
 
 **Schemas deliberately skip some fields.** Great Eastern's tiny
 day/month/year triplet boxes and ambiguous Yes/No checkboxes are left for the
