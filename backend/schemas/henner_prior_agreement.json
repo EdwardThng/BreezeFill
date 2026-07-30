@@ -1,0 +1,142 @@
+{
+  "form_id": "henner_prior_agreement",
+  "display_name": "Henner — Prior agreement application (hospitalisation)",
+  "insurer": "Henner",
+  "pdf_path": "forms/scans_unsupported/henner_prior_agreement.pdf",
+  "fill_mode": "overlay",
+  "fields": [
+    {
+      "id": "patient_name",
+      "label": "Patient name",
+      "type": "text",
+      "source": "demographics.full_name",
+      "box": { "page": 1, "x": 37, "y": 281, "w": 245, "h": 13 }
+    },
+    {
+      "id": "patient_dob",
+      "label": "Date of birth",
+      "type": "date",
+      "source": "demographics.dob",
+      "box": { "page": 1, "x": 296, "y": 281, "w": 150, "h": 13 }
+    },
+    {
+      "id": "insured_name",
+      "label": "Insured person's name",
+      "type": "text",
+      "source": "llm",
+      "description": "Name of the insured person (the policyholder), only if stated in the notes. Often the patient themselves.",
+      "box": { "page": 1, "x": 37, "y": 256, "w": 245, "h": 13 }
+    },
+    {
+      "id": "insured_id_number",
+      "label": "Insured ID number",
+      "type": "text",
+      "source": "demographics.nric",
+      "box": { "page": 1, "x": 292, "y": 256, "w": 245, "h": 13 }
+    },
+    {
+      "id": "patient_sex",
+      "label": "Sex",
+      "type": "text",
+      "source": "llm",
+      "description": "Patient's sex as M or F, only if stated or unambiguous from the notes",
+      "box": { "page": 1, "x": 470, "y": 281, "w": 95, "h": 13 }
+    },
+    {
+      "id": "accident_related",
+      "label": "Related to an accident",
+      "type": "checkbox",
+      "source": "llm",
+      "description": "Tick only if the notes state the condition resulted from an accident",
+      "box": { "page": 1, "x": 431, "y": 315, "w": 11, "h": 11 }
+    },
+    {
+      "id": "place_of_hospitalisation",
+      "label": "Proposed place of hospitalisation",
+      "type": "text",
+      "source": "llm",
+      "description": "Name and address of the hospital the patient will be admitted to, if stated in the notes",
+      "box": { "page": 1, "x": 37, "y": 382, "w": 490, "h": 22 }
+    },
+    {
+      "id": "attending_physician",
+      "label": "Attending physician",
+      "type": "text",
+      "source": "llm",
+      "description": "Attending physician's name, address and telephone, if stated in the notes",
+      "box": { "page": 1, "x": 37, "y": 418, "w": 490, "h": 22 }
+    },
+    {
+      "id": "reason_and_diagnosis",
+      "label": "Reason for hospitalisation / diagnosis",
+      "type": "text",
+      "source": "llm",
+      "description": "Reason for the hospitalisation: clinical symptoms presented and the precise medical diagnosis",
+      "box": { "page": 1, "x": 37, "y": 453, "w": 490, "h": 33 }
+    },
+    {
+      "id": "operation_and_treatment",
+      "label": "Proposed operation and treatment",
+      "type": "text",
+      "source": "llm",
+      "description": "Nature of the proposed operation and the treatment programme",
+      "box": { "page": 1, "x": 37, "y": 507, "w": 490, "h": 42 }
+    },
+    {
+      "id": "additional_examinations",
+      "label": "Additional examinations",
+      "type": "text",
+      "source": "llm",
+      "description": "Nature of any additional examinations to be carried out, if stated in the notes",
+      "box": { "page": 1, "x": 37, "y": 577, "w": 490, "h": 20 }
+    },
+    {
+      "id": "date_of_admission",
+      "label": "Date of admission",
+      "type": "date",
+      "source": "llm",
+      "description": "Date the patient was or will be admitted (DD/MM/YYYY)",
+      "box": { "page": 1, "x": 140, "y": 613, "w": 140, "h": 13 }
+    },
+    {
+      "id": "number_of_days",
+      "label": "Number of days",
+      "type": "text",
+      "source": "llm",
+      "description": "Expected length of stay in days, if stated in the notes",
+      "box": { "page": 1, "x": 270, "y": 613, "w": 100, "h": 13 }
+    },
+    {
+      "id": "is_extension",
+      "label": "Is this an extension?",
+      "type": "text",
+      "source": "llm",
+      "description": "y or n — whether this is an extension of an existing stay. Leave missing unless the notes say.",
+      "box": { "page": 1, "x": 460, "y": 613, "w": 60, "h": 13 }
+    },
+    {
+      "id": "hospital_charges",
+      "label": "Estimated hospital charges",
+      "type": "text",
+      "source": "llm",
+      "description": "Estimated hospital charges, only if stated in the notes",
+      "box": { "page": 1, "x": 140, "y": 663, "w": 110, "h": 13 }
+    },
+    {
+      "id": "physicians_fees",
+      "label": "Estimated physicians' fees",
+      "type": "text",
+      "source": "llm",
+      "description": "Estimated physicians' fees, only if stated in the notes",
+      "box": { "page": 1, "x": 270, "y": 663, "w": 110, "h": 13 }
+    },
+    {
+      "id": "other_expenses",
+      "label": "Other expenses",
+      "type": "text",
+      "source": "llm",
+      "description": "Other estimated expenses, only if stated in the notes",
+      "box": { "page": 1, "x": 430, "y": 663, "w": 110, "h": 13 }
+    }
+  ]
+}
