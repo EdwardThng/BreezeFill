@@ -1,0 +1,138 @@
+{
+  "_comment": "Adversarial redaction corpus. Every patient is invented. Each case declares ground truth: strings that MUST be gone after redaction (identifiers) and strings that MUST survive (clinical content the mapping call needs). Passes 1-2 are deterministic and run offline; third-party names depend on the pass-3 LLM sweep, which is why those cases are tagged sweep_only.",
+  "cases": [
+    {
+      "id": "chinese_name_3part",
+      "category": "name",
+      "patient": {
+        "full_name": "Tan Ah Kow", "nric": "S6211043C", "dob": "1962-11-04",
+        "phone": "91112233", "address": "18 Toa Payoh Lorong 4", "policy_number": "GHS-4471902"
+      },
+      "note": "14/03/2026. Tan Ah Kow, 63M, NRIC S6211043C, DOB 04/11/1962, contact 91112233. RIF pain 2 days. CT: acute appendicitis. Admitted Mount Elizabeth Hospital.",
+      "must_not_survive": ["Tan Ah Kow", "S6211043C", "04/11/1962", "91112233"],
+      "must_survive": ["acute appendicitis", "Mount Elizabeth Hospital", "RIF pain"]
+    },
+    {
+      "id": "surname_collides_with_hospital",
+      "category": "over_redaction",
+      "patient": {
+        "full_name": "Tan Wei Ming", "nric": "S7433221B", "dob": "1974-03-12",
+        "phone": "98887777", "address": "5 Ang Mo Kio Ave 3", "policy_number": "GE-1122"
+      },
+      "note": "Referred to Tan Tock Seng Hospital 12/05/2026 for further management. Previously seen at Ng Teng Fong General Hospital.",
+      "must_not_survive": [],
+      "must_survive": ["Tan Tock Seng Hospital", "Ng Teng Fong General Hospital"]
+    },
+    {
+      "id": "malay_name_binte",
+      "category": "name",
+      "patient": {
+        "full_name": "Nurul Aisyah Binte Rahman", "nric": "S8830517D", "dob": "1988-05-17",
+        "phone": "98765432", "address": "5 Tampines Street 21", "policy_number": "GE-88213"
+      },
+      "note": "02/04/2026. Nurul Aisyah Binte Rahman, 37F. Also recorded elsewhere as Nurul Aisyah Bte Rahman. Dengue NS1 positive. Platelet 92.",
+      "must_not_survive": ["Nurul Aisyah Binte Rahman", "Nurul", "Aisyah", "Rahman"],
+      "must_survive": ["Dengue NS1 positive", "Platelet 92"]
+    },
+    {
+      "id": "tamil_patronymic",
+      "category": "name",
+      "patient": {
+        "full_name": "Devi Shanmugam", "nric": "S7712258E", "dob": "1977-12-25",
+        "phone": "91234567", "address": "30 Clementi Avenue 4", "policy_number": "GE-55190"
+      },
+      "note": "19/06/2026. Devi d/o Shanmugam, 48F. Right ureteric colic, 6mm VUJ calculus on CT KUB.",
+      "must_not_survive": ["Devi", "Shanmugam"],
+      "must_survive": ["ureteric colic", "VUJ calculus", "CT KUB"]
+    },
+    {
+      "id": "honorific_and_partial_name",
+      "category": "name",
+      "patient": {
+        "full_name": "Lim Hwee Kiat", "nric": "S6503219A", "dob": "1965-03-21",
+        "phone": "90011223", "address": "77 Ang Mo Kio Avenue 3", "policy_number": "GHS-2210873"
+      },
+      "note": "Mr Lim reviewed 20/01/2026. Hwee Kiat reports the neck lump is unchanged. Lipoma posterior neck, 4cm.",
+      "must_not_survive": ["Lim", "Hwee Kiat"],
+      "must_survive": ["Lipoma posterior neck"]
+    },
+    {
+      "id": "nric_spacing_and_case",
+      "category": "nric",
+      "patient": {
+        "full_name": "Foo Sok Cheng", "nric": "S5907114B", "dob": "1959-07-11",
+        "phone": "96543210", "address": "9 Bedok North Street 1", "policy_number": "GHS-9910244"
+      },
+      "note": "NRIC S5907114B. Also written S 5907114 B and s5907114b in earlier records. Epigastric discomfort, started omeprazole 20mg om.",
+      "must_not_survive": ["S5907114B", "S 5907114 B", "s5907114b"],
+      "must_survive": ["omeprazole 20mg", "Epigastric discomfort"]
+    },
+    {
+      "id": "phone_formats",
+      "category": "phone",
+      "patient": {
+        "full_name": "Chua Beng Huat", "nric": "S7211043C", "dob": "1972-11-04",
+        "phone": "91112233", "address": "18 Toa Payoh Lorong 4", "policy_number": "P-1"
+      },
+      "note": "Contact 9111 2233, alternate +65 91112233, home 6255 1234. Clinic line 62551234. Reviewed for gastritis.",
+      "must_not_survive": ["9111 2233", "+65 91112233", "6255 1234"],
+      "must_survive": ["gastritis"]
+    },
+    {
+      "id": "dob_renderings",
+      "category": "dob",
+      "patient": {
+        "full_name": "Goh Kah Meng", "nric": "S8001019F", "dob": "1980-01-01",
+        "phone": "90001111", "address": "1 Serangoon Road", "policy_number": "P-2"
+      },
+      "note": "DOB 01/01/1980, also 1 Jan 1980 and 1980-01-01 in prior records. Presented 01/01/2026 with chest pain. ECG normal.",
+      "must_not_survive": ["01/01/1980", "1 Jan 1980", "1980-01-01"],
+      "must_survive": ["chest pain", "ECG normal"]
+    },
+    {
+      "id": "third_party_relative",
+      "category": "third_party",
+      "sweep_only": true,
+      "patient": {
+        "full_name": "Wong Mei Fong", "nric": "S6644110G", "dob": "1966-04-11",
+        "phone": "93334444", "address": "12 Hougang Ave 8", "policy_number": "P-3"
+      },
+      "note": "Attended with daughter Michelle Yeo, contact 92225555. Husband Mr Sivakumar hospitalised last month at Changi General Hospital. Patient has T2DM.",
+      "must_not_survive": ["Michelle Yeo", "92225555", "Sivakumar"],
+      "must_survive": ["T2DM", "Changi General Hospital"]
+    },
+    {
+      "id": "third_party_nric_and_email",
+      "category": "third_party",
+      "patient": {
+        "full_name": "Ong Chee Keong", "nric": "S7155667H", "dob": "1971-05-06",
+        "phone": "94445555", "address": "45 Yishun Ring Road", "policy_number": "P-4"
+      },
+      "note": "Employer contact hr@acmecorp.com.sg. Caregiver NRIC S8899001K provided for records. Patient reviewed for lower back pain, MRI L4/L5 disc bulge.",
+      "must_not_survive": ["hr@acmecorp.com.sg", "S8899001K"],
+      "must_survive": ["lower back pain", "L4/L5 disc bulge"]
+    },
+    {
+      "id": "short_surname_not_pronoun",
+      "category": "over_redaction",
+      "patient": {
+        "full_name": "Ng Li Hua", "nric": "S9022334J", "dob": "1990-02-23",
+        "phone": "95556666", "address": "3 Bukit Batok St 25", "policy_number": "P-5"
+      },
+      "note": "Patient reports angina on exertion. No anginal equivalent at rest. Angiogram arranged.",
+      "must_not_survive": [],
+      "must_survive": ["angina on exertion", "anginal equivalent", "Angiogram"]
+    },
+    {
+      "id": "expat_name",
+      "category": "name",
+      "patient": {
+        "full_name": "Michael OBrien", "nric": "F4455667K", "dob": "1983-09-14",
+        "phone": "88889999", "address": "20 Orchard Road", "policy_number": "P-6"
+      },
+      "note": "Michael OBrien, FIN F4455667K, presented 14/09/2026. Right ankle sprain after fall. No fracture on X-ray.",
+      "must_not_survive": ["Michael OBrien", "F4455667K"],
+      "must_survive": ["ankle sprain", "No fracture"]
+    }
+  ]
+}
