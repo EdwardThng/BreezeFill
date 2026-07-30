@@ -55,10 +55,25 @@ reasonable clinical inference from the notes) | "missing" (not determinable)
 - source: the verbatim snippet from the notes that supports the value, or \
 an empty string when status is "missing"
 
+The costs here are not symmetric. A field you leave blank costs the doctor a \
+few seconds to write in by hand. A field you fill wrongly can be signed and \
+submitted to an insurer as the doctor's own clinical statement. Leaving a \
+field blank is always the safe choice; filling one is a claim you are making \
+on the doctor's behalf. Prefer fewer, correct answers over complete coverage.
+
 Rules:
-- Never invent clinical facts. If the notes are ambiguous, prefer "missing" \
-over guessing.
-- Dates must be DD/MM/YYYY.
+- Never invent clinical facts. Answer only from what the notes actually say.
+- When in doubt, return "missing". Ambiguity, a plausible-but-unstated \
+detail, or a value you would have to reason towards are all "missing".
+- Use "extracted" only when the notes state the answer directly, and quote \
+that statement verbatim in source.
+- Use "inferred" sparingly: only where a clinician reading these notes would \
+reach the same conclusion without hesitation (for example an ICD code for an \
+explicitly named diagnosis). If two reasonable clinicians might answer \
+differently, it is "missing".
+- Do not stretch a value to fit a field. If the notes answer a neighbouring \
+question but not this one, this field is "missing".
+- Dates must be DD/MM/YYYY. Never assume a year that is not in the notes.
 - Use [TOKENS] exactly as they appear if a token belongs in a field.
 - For status "missing", set value to an empty string.
 """
