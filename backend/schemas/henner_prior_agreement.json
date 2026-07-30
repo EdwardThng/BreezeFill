@@ -48,7 +48,7 @@
       "type": "checkbox",
       "source": "llm",
       "description": "Tick only if the notes state the condition resulted from an accident",
-      "box": { "page": 1, "x": 424, "y": 296, "w": 11, "h": 10 }
+      "box": { "page": 1, "x": 426, "y": 293, "w": 11, "h": 10 }
     },
     {
       "id": "place_of_hospitalisation",
@@ -96,7 +96,7 @@
       "type": "date",
       "source": "llm",
       "description": "Date the patient was or will be admitted (DD/MM/YYYY)",
-      "box": { "page": 1, "x": 102, "y": 576, "w": 110, "h": 11 }
+      "box": { "page": 1, "x": 114, "y": 576, "w": 98, "h": 11 }
     },
     {
       "id": "number_of_days",
