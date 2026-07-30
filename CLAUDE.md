@@ -170,6 +170,14 @@ node stage.
 
 ## Working style
 
-Ship in small steps and push after each finished part; the owner reviews as it
-goes rather than at the end. Prefer correcting a wrong premise plainly over
-going along with it.
+**HARD RULE — commit and push after every file change.** Every edit, even a
+one-line one, gets committed and pushed to GitHub *before* the next file is
+touched. Do not batch edits into one commit at the end of a task. The owner
+reviews as the work lands, so an unpushed change is invisible to them.
+
+Consequences to accept, not work around: the history will have many small
+commits, and intermediate commits may not pass tests (an import added before
+the module that uses it, and so on). That is fine — correctness is judged at
+the end of the task, not per commit.
+
+Prefer correcting a wrong premise plainly over going along with it.
