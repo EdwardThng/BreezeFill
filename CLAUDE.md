@@ -14,7 +14,8 @@ a Singapore GP.
 
 | Piece | State |
 |---|---|
-| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 78 offline tests pass |
+| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 112 backend tests pass (1 skipped) |
+| Extension: learn-mode dumper + hybrid matcher + value application | Built and green, 67 tests. No manifest, no orchestrator, never run on a real portal |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Rebuilt for first-time clarity |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
@@ -126,6 +127,30 @@ page:
 A dump gets pasted into a model to draft a schema, which makes it an LLM input
 and subject to the same rules as clinical text. See `extension/README.md` for
 the residual risks that remain.
+
+**The filler is hybrid: live structure locates, the schema means.** The owner's
+design (2026-08-01). The extension reads the form structure *at fill time*
+rather than trusting a selector map authored months earlier, which is what
+stops the map rotting when an insurer redesigns. But the live page cannot
+supply *meaning*: with structure alone, the model's whole instruction for a
+field is whatever text the page renders — sometimes `4a`, sometimes a truncated
+string — and it would be inferring what an unfamiliar field wants before a
+doctor signs the result. So the schema still supplies each field's
+`description`, and the two are joined by label text (`extension/fill/locate.js`).
+
+Two consequences worth keeping:
+
+- **Page structure never leaves the browser.** The server sees the schema (no
+  patient data) and the redacted note, and returns values keyed by field id,
+  exactly as today. Locating happens client-side where the structure already
+  is. A pure live-read design would have made page structure an unreviewed LLM
+  input on *every* claim; this way that path does not exist.
+- **A live field with no schema match is left blank**, and reported as a
+  schema-authoring candidate. Precision over coverage, applied to matching.
+
+`MIN_MATCH_RATE` is the important knob: below it the filler writes *nothing*
+rather than filling the part that still matches, because a partial fill is
+indistinguishable from a complete one to someone reviewing quickly.
 
 ---
 
@@ -267,7 +292,13 @@ node stage.
    (which writes the command into the transcript).
 2. **Browser extension for link-delivered forms** — now the main line of work,
    because it is the channel AIA actually uses. Learn mode
-   (`extension/learn/dump.js`) is built and tested; the filler is not started.
+   (`extension/learn/dump.js`), the hybrid matcher (`extension/fill/locate.js`)
+   and value application (`extension/fill/apply.js`) are built and green. Still
+   missing: `manifest.json`, the content script that wires the three together,
+   the `externally_connectable` handoff from the website, proof mode (outline
+   each filled control and stamp its field id — the port of
+   `calibrate_overlay.py --proof`), and a `MutationObserver` re-run as wizard
+   steps render. None of it has run against a real portal.
    **Blocked on one thing: a learn-mode dump from a live ClaimEZ page.** An
    expired link renders an error page with no fields, `submit-offline` is
    post-submission only, and the portal is a JS-rendered SPA so no fetch-based
