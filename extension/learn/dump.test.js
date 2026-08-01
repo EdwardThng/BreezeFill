@@ -19,7 +19,14 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import learn from "./dump.js";
+// Imported for side effects, then read off the global — dump.js is a plain
+// IIFE that attaches itself to globalThis, because it has to run three ways:
+// pasted into a DevTools console, injected as a content script, and here.
+// Adding ESM exports for the test's benefit alone would mean the tested file
+// is not the file that ships.
+import "./dump.js";
+
+const learn = globalThis.claimfillLearn;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "../../tests/fixtures/portal_like.html");
@@ -81,21 +88,37 @@ describe("content boundary", () => {
     expect(byName(dump, "diagnosis").hasValue).toBe(false);
   });
 
-  test("PHI in a heading is scrubbed, not carried as a section label", () => {
+  test("page prose is never read, so a heading naming the patient cannot leak", () => {
     // Leak route 2: the fixture's <h1> is "Claim for Tan Wei Ming (S1234567D)".
+    // Scrubbing alone would not save us here — it would strip the NRIC and
+    // leave the name, because a name has no shape. The guarantee comes from
+    // reading <legend> and never prose.
     const dump = learn.dump();
-    expect(dump.stepHint).not.toContain("Tan Wei Ming");
-    expect(dump.stepHint).not.toContain("S1234567D");
-    expect(dump.stepHint).toContain("[NRIC]");
+    expect(JSON.stringify(dump)).not.toContain("Claim for");
+    expect(dump.stepHint).toBe("Section A — Patient details");
   });
 
-  test("PHI in select options is scrubbed", () => {
-    // Leak route 3: a policy picker that enumerates the patient.
-    const options = byName(learn.dump(), "policySelect").options.values;
-    const joined = options.join(" ");
-    expect(joined).not.toContain("Tan Wei Ming");
-    expect(joined).not.toContain("80123456");
-    expect(joined).toContain("[NUMBER]");
+  test("sections come from legends, not from the page heading", () => {
+    expect(byName(learn.dump(), "patientName").section).toBe(
+      "Section A — Patient details"
+    );
+  });
+
+  test("an option list carrying claim data is withheld whole", () => {
+    // Leak route 3: a policy picker that enumerates the patient. The number is
+    // shaped and the name is not, so partial scrubbing would emit the name.
+    const options = byName(learn.dump(), "policySelect").options;
+    expect(options.withheld).toBe(true);
+    expect(options.values).toEqual([]);
+    expect(options.count).toBe(3);
+  });
+
+  test("a genuine enumeration is still reported", () => {
+    // The withholding rule has to stay narrow or it takes the schema author's
+    // most useful signal with it.
+    const ward = byName(learn.dump(), "wardClass").options;
+    expect(ward.withheld).toBe(false);
+    expect(ward.values).toEqual(["-- Select --", "A", "B1", "B2", "C"]);
   });
 
   test("the page is flagged as PHI-bearing", () => {
@@ -174,11 +197,24 @@ describe("label resolution", () => {
     expect(ward.label).not.toContain("B1");
   });
 
-  test("labelSource marks guesses as guesses", () => {
-    // Anything resolved by proximity rather than association is a weaker key,
-    // and the schema author needs to see which is which.
-    const sources = new Set(learn.dump().controls.map((c) => c.labelSource));
-    expect(sources.has("preceding-sibling") || sources.has("none")).toBeDefined();
+  test("every control reports how its label was found", () => {
+    // Anything resolved by proximity rather than by association is a weaker
+    // match key, and the schema author needs to see which is which rather
+    // than trusting every label equally.
+    const known = [
+      "aria-label",
+      "aria-labelledby",
+      "label[for]",
+      "wrapping-label",
+      "table-cell",
+      "preceding-sibling",
+      "placeholder",
+      "section-heading",
+      "none",
+    ];
+    for (const control of learn.dump().controls) {
+      expect(known).toContain(control.labelSource);
+    }
   });
 });
 
