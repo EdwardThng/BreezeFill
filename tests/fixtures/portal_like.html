@@ -1,0 +1,137 @@
+<!--
+  Synthetic insurer-portal page for the learn-mode dumper tests.
+
+  Modelled on the shape of an AIA ClaimEZ claim page — a wizard whose current
+  step is in the DOM and whose later steps are not, with the patient's details
+  already populated by the insurer before the doctor ever sees it.
+
+  Everything here is fabricated (repo guardrail: fixtures are synthetic only),
+  but it is deliberately PHI-SHAPED. The identifiers below exist so the tests
+  can assert that not one of them survives into a dump:
+
+    Tan Wei Ming / S1234567D / 9123 4567 / weiming.tan@example.com / 80123456
+
+  They appear in three places on purpose, because these are the three ways a
+  real portal leaks:
+    1. as control values (the obvious one)
+    2. inside a heading, which is a label as far as the DOM is concerned
+    3. inside a <select> option, where a policy list enumerates the patient
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Claim submission — attending physician's statement</title>
+  </head>
+  <body>
+    <!-- Leak route 2: PHI in page chrome, not in a field. -->
+    <h1>Claim for Tan Wei Ming (S1234567D)</h1>
+    <p>Policy 80123456 · contact 9123 4567 · weiming.tan@example.com</p>
+
+    <form id="claim-form">
+      <fieldset>
+        <legend>Section A — Patient details</legend>
+
+        <!-- label[for] association -->
+        <label for="patient-name">Patient's Full Name (as in NRIC)</label>
+        <input
+          type="text"
+          id="patient-name"
+          name="patientName"
+          value="Tan Wei Ming"
+          maxlength="60"
+          required
+        />
+
+        <!-- aria-label association, and a maxlength that silently truncates -->
+        <input
+          type="text"
+          id="patient-nric"
+          name="patientNric"
+          aria-label="NRIC / FIN Number"
+          value="S1234567D"
+          maxlength="9"
+        />
+
+        <!-- wrapping label -->
+        <label>
+          Contact Number
+          <input type="tel" name="contactNo" value="91234567" />
+        </label>
+
+        <!-- table layout: the question lives in the cell to the left -->
+        <table>
+          <tr>
+            <td>Date of Birth</td>
+            <td><input type="text" name="dob" value="14/03/1971" /></td>
+          </tr>
+          <tr>
+            <td>Policy Number</td>
+            <td><input type="text" name="policyNo" value="80123456" readonly /></td>
+          </tr>
+        </table>
+
+        <!-- Leak route 3: options that enumerate the patient. -->
+        <label for="policy-select">Policy under claim</label>
+        <select id="policy-select" name="policySelect">
+          <option value="">-- Select --</option>
+          <option value="a">80123456 — Tan Wei Ming — GHS</option>
+          <option value="b">80123457 — Tan Wei Ming — Rider</option>
+        </select>
+      </fieldset>
+
+      <fieldset>
+        <legend>Section B — Attending physician's statement</legend>
+
+        <label for="diagnosis">Diagnosis of all conditions treated</label>
+        <textarea id="diagnosis" name="diagnosis" required></textarea>
+
+        <label for="icd">ICD-10 Code</label>
+        <input type="text" id="icd" name="icdCode" placeholder="e.g. K35.80" />
+
+        <label for="onset">Date of onset and duration of complaints</label>
+        <input type="text" id="onset" name="onsetDuration" />
+
+        <label for="ward">Ward class</label>
+        <select id="ward" name="wardClass">
+          <option value="">-- Select --</option>
+          <option value="A">A</option>
+          <option value="B1">B1</option>
+          <option value="B2">B2</option>
+          <option value="C">C</option>
+        </select>
+
+        <!-- radio group: one question, four controls -->
+        <fieldset>
+          <legend>Was surgery performed?</legend>
+          <label><input type="radio" name="surgeryDone" value="Y" /> Yes</label>
+          <label><input type="radio" name="surgeryDone" value="N" /> No</label>
+        </fieldset>
+
+        <label>
+          <input type="checkbox" name="preExisting" />
+          Condition is pre-existing
+        </label>
+      </fieldset>
+
+      <!-- Must never be inventoried, not even counted as a field. -->
+      <label for="portal-pw">Portal password</label>
+      <input type="password" id="portal-pw" name="portalPassword" />
+
+      <!-- Skipped: no question is being asked. -->
+      <input type="hidden" name="pid" value="276b138a-204b-4fb4-b8c3-2e90431ead0e" />
+
+      <!-- A later wizard step that is present but not displayed. Real portals
+           usually omit these from the DOM entirely, which is what mergeDumps()
+           exists for; this covers the other case. -->
+      <fieldset id="step-3" style="display: none">
+        <legend>Section C — Declaration</legend>
+        <label for="doctor-mcr">MCR Number</label>
+        <input type="text" id="doctor-mcr" name="doctorMcr" />
+      </fieldset>
+
+      <button type="submit">Submit claim</button>
+      <input type="reset" value="Clear" />
+    </form>
+  </body>
+</html>
