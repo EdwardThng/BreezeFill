@@ -156,23 +156,29 @@
     return { label: "", labelSource: "none" };
   }
 
-  /** Nearest preceding heading or fieldset legend — the form's own sectioning. */
+  /**
+   * The form's own sectioning, taken from <legend> and nothing else.
+   *
+   * Page prose is deliberately not read — no <h1>, no <h2>, no stray <p>. A
+   * <legend> is authored by the insurer and is identical on every claim; the
+   * heading of a claim page routinely reads "Claim for <patient> (<NRIC>)",
+   * which is per-claim content.
+   *
+   * The scrubber cannot cover for reading prose. It catches NRICs, phones and
+   * emails by shape, but A NAME HAS NO SHAPE — "Tan Wei Ming" is
+   * indistinguishable from "Tan Tock Seng" by regex. redaction.py only manages
+   * it because pass 1 has the demographics dictionary to match against, and
+   * learn mode has no such dictionary: nobody has typed the patient's name in.
+   * So the answer is not to read the prose.
+   *
+   * Cost: a portal that sections with <h3> instead of <fieldset> yields empty
+   * sections. That is the right trade — a missing section label is an
+   * inconvenience while writing a schema, a leaked name is a breach.
+   */
   function sectionFor(el) {
-    const legend = el.closest && el.closest("fieldset");
-    if (legend) {
-      const text = textOf(legend.querySelector("legend"));
-      if (text) return text;
-    }
-    let node = el;
-    while (node && node !== document.body) {
-      let sibling = node.previousElementSibling;
-      while (sibling) {
-        if (/^H[1-6]$/.test(sibling.tagName)) return textOf(sibling);
-        sibling = sibling.previousElementSibling;
-      }
-      node = node.parentElement;
-    }
-    return "";
+    const fieldset = el.closest && el.closest("fieldset");
+    if (!fieldset) return "";
+    return textOf(fieldset.querySelector("legend"));
   }
 
   // --------------------------------------------------------------------
@@ -251,12 +257,22 @@
   ]);
 
   function isVisible(el) {
-    // offsetParent is null for display:none and for position:fixed; the rect
-    // check covers the second case. Wizard steps that are not in the DOM at
-    // all simply will not appear — hence mergeDumps().
-    if (el.offsetParent !== null) return true;
-    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
-    return !!(rect && (rect.width || rect.height));
+    // Ancestor walk over computed display/visibility. Deliberately NOT
+    // offsetParent or getBoundingClientRect: both need layout, which jsdom
+    // does not implement, so under test every control would read as hidden and
+    // the visibility assertions would pass for the wrong reason.
+    const view = el.ownerDocument && el.ownerDocument.defaultView;
+    if (!view || typeof view.getComputedStyle !== "function") return true;
+
+    let node = el;
+    while (node && node.nodeType === 1) {
+      const style = view.getComputedStyle(node);
+      if (style && (style.display === "none" || style.visibility === "hidden")) {
+        return false;
+      }
+      node = node.parentElement;
+    }
+    return true;
   }
 
   function describe(el, doc, ref) {
@@ -379,9 +395,11 @@
     const doc = opts.document || root.document;
     const { controls, skippedPassword } = collectControls(doc);
 
-    // Whether the page had identifiers sitting in its labels. Not a failure —
-    // the scrubber handled it — but it tells the author the page is
-    // PHI-bearing and the raw DOM must not be shared alongside this dump.
+    // How many pieces of page chrome held a shaped identifier. Nothing from
+    // those elements is emitted, so this is not a leak count — it is a signal
+    // to the author that the page is PHI-bearing, and therefore that the raw
+    // DOM, a screenshot, or the URL must not be shared alongside this dump.
+    // Undercounts by design: names are not shaped and are not detected here.
     const scrubbedStrings = countScrubbed(doc);
 
     return {
@@ -408,10 +426,13 @@
     return n;
   }
 
-  /** Best-effort name for the wizard step currently rendered. */
+  /**
+   * Name for the wizard step currently rendered, from the first <legend> only
+   * — same prose ban as sectionFor(). Pass `stepHint` to dump() to override
+   * when the form has no legends.
+   */
   function currentStepHint(doc) {
-    const heading = doc.querySelector("h1, h2, legend");
-    return heading ? textOf(heading) : "";
+    return textOf(doc.querySelector("legend"));
   }
 
   /**
