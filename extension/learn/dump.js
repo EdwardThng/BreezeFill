@@ -95,65 +95,79 @@
   // is the primary key for matching later, and worth working for. Tried in
   // descending order of how deliberate the association is.
 
-  function textOf(node) {
+  /** Whitespace-normalised but UNSCRUBBED. Never emit the result directly. */
+  function rawTextOf(node) {
     if (!node) return "";
-    return scrub(node.textContent || "");
+    return String(node.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  function labelFor(el, doc) {
+  /**
+   * Raw label text plus how it was found.
+   *
+   * Unscrubbed on purpose: callers either scrub it (labelFor) or hand it to
+   * buildOptions, which needs to see the original in order to decide whether
+   * the list is data and must be withheld. Pre-scrubbing here would make
+   * wasScrubbed() always false at the call site and silently disable that
+   * check. Nothing may emit this return value without going through one of
+   * those two paths.
+   */
+  function rawLabelFor(el, doc) {
     // 1. Explicit ARIA.
     const ariaLabel = el.getAttribute && el.getAttribute("aria-label");
-    if (ariaLabel) return { label: scrub(ariaLabel), labelSource: "aria-label" };
+    if (ariaLabel) return { text: ariaLabel.trim(), source: "aria-label" };
 
     const labelledBy = el.getAttribute && el.getAttribute("aria-labelledby");
     if (labelledBy) {
       const parts = labelledBy
         .split(/\s+/)
-        .map((id) => textOf(doc.getElementById(id)))
+        .map((id) => rawTextOf(doc.getElementById(id)))
         .filter(Boolean);
-      if (parts.length) {
-        return { label: parts.join(" "), labelSource: "aria-labelledby" };
-      }
+      if (parts.length) return { text: parts.join(" "), source: "aria-labelledby" };
     }
 
     // 2. <label for="...">
     if (el.id) {
-      const escaped = cssEscape(el.id);
-      const explicit = doc.querySelector(`label[for="${escaped}"]`);
-      const text = textOf(explicit);
-      if (text) return { label: text, labelSource: "label[for]" };
+      const explicit = doc.querySelector(`label[for="${cssEscape(el.id)}"]`);
+      const text = rawTextOf(explicit);
+      if (text) return { text, source: "label[for]" };
     }
 
     // 3. Wrapping <label>.
     const wrapping = el.closest && el.closest("label");
     if (wrapping) {
-      // Strip the control's own text (a wrapped <select>'s options land in
-      // textContent otherwise and swamp the actual question).
+      // Strip the control's own text first — a wrapped <select> otherwise
+      // contributes every one of its options to textContent and swamps the
+      // actual question.
       const clone = wrapping.cloneNode(true);
       clone.querySelectorAll("input, select, textarea").forEach((n) => n.remove());
-      const text = textOf(clone);
-      if (text) return { label: text, labelSource: "wrapping-label" };
+      const text = rawTextOf(clone);
+      if (text) return { text, source: "wrapping-label" };
     }
 
     // 4. Table layouts — the cell to the left. Still extremely common on
     //    insurer forms ported from print.
     const cell = el.closest && el.closest("td, th");
     if (cell && cell.previousElementSibling) {
-      const text = textOf(cell.previousElementSibling);
-      if (text) return { label: text, labelSource: "table-cell" };
+      const text = rawTextOf(cell.previousElementSibling);
+      if (text) return { text, source: "table-cell" };
     }
 
-    // 5. Nearest preceding text node in the same block. Last resort and the
-    //    least trustworthy — flagged so schema authoring treats it as a
-    //    guess rather than a match key.
-    const prev = el.previousElementSibling;
-    const text = textOf(prev);
-    if (text) return { label: text, labelSource: "preceding-sibling" };
+    // 5. Nearest preceding element. Last resort and the least trustworthy —
+    //    reported as such so schema authoring treats it as a guess rather
+    //    than a match key.
+    const text = rawTextOf(el.previousElementSibling);
+    if (text) return { text, source: "preceding-sibling" };
 
     const placeholder = el.getAttribute && el.getAttribute("placeholder");
-    if (placeholder) return { label: scrub(placeholder), labelSource: "placeholder" };
+    if (placeholder) return { text: placeholder.trim(), source: "placeholder" };
 
-    return { label: "", labelSource: "none" };
+    return { text: "", source: "none" };
+  }
+
+  /** Emittable label: rawLabelFor() put through the scrubber. */
+  function labelFor(el, doc) {
+    const raw = rawLabelFor(el, doc);
+    return { label: scrub(raw.text), labelSource: raw.source };
   }
 
   /**
@@ -178,7 +192,7 @@
   function sectionFor(el) {
     const fieldset = el.closest && el.closest("fieldset");
     if (!fieldset) return "";
-    return textOf(fieldset.querySelector("legend"));
+    return scrub(rawTextOf(fieldset.querySelector("legend")));
   }
 
   // --------------------------------------------------------------------
@@ -225,22 +239,42 @@
   // Options
   // --------------------------------------------------------------------
   //
-  // Option text is structural (Yes/No, ward class, relationship) and needed to
-  // write a schema, but it is not guaranteed to be — a select could enumerate
-  // the patient's own policies. Scrubbed like everything else, and capped so a
-  // 3000-entry ICD picker does not drown the dump.
+  // Option text is usually structure — Yes/No, ward class, relationship — and
+  // a schema needs it. But a <select> can just as easily enumerate the
+  // patient: a policy picker reading "80123456 — Tan Wei Ming — GHS" is a list
+  // of per-claim data wearing the costume of a control's options.
+  //
+  // Rule: if scrubbing changes ANY option in a list, the whole list is treated
+  // as data and its values are withheld — only the count survives. Withholding
+  // the entire list rather than just the offending entries is what catches the
+  // name. A name has no shape for the scrubber to find, but it travels next to
+  // the policy number, which does.
+  //
+  // Residual risk, stated plainly: a list of bare names with no number or NRIC
+  // beside them would pass. Nothing here detects that, which is one more
+  // reason to run learn mode against a test link (see README).
 
   const MAX_OPTIONS = 30;
 
+  function buildOptions(texts) {
+    const nonEmpty = texts
+      .map((t) => String(t == null ? "" : t))
+      .filter((t) => t.trim() !== "");
+
+    if (nonEmpty.some(wasScrubbed)) {
+      return { count: nonEmpty.length, truncated: false, withheld: true, values: [] };
+    }
+    return {
+      count: nonEmpty.length,
+      truncated: nonEmpty.length > MAX_OPTIONS,
+      withheld: false,
+      values: nonEmpty.slice(0, MAX_OPTIONS).map(scrub),
+    };
+  }
+
   function optionsFor(el) {
     if (el.tagName !== "SELECT") return null;
-    const all = Array.from(el.options || []);
-    const shown = all.slice(0, MAX_OPTIONS).map((o) => scrub(o.textContent));
-    return {
-      count: all.length,
-      truncated: all.length > MAX_OPTIONS,
-      values: shown.filter((v) => v !== ""),
-    };
+    return buildOptions(Array.from(el.options || []).map((o) => o.textContent));
   }
 
   // --------------------------------------------------------------------
@@ -337,11 +371,9 @@
       readOnly: false,
       maxLength: null,
       visible: els.some(isVisible),
-      options: {
-        count: els.length,
-        truncated: false,
-        values: els.map((e) => labelFor(e, doc).label).filter(Boolean),
-      },
+      // Same withholding rule as <select>: radio labels are normally an
+      // enumeration, but nothing stops a portal listing claimants as radios.
+      options: buildOptions(els.map((e) => rawLabelFor(e, doc).text)),
       hasValue: els.some((e) => e.checked === true),
     };
   }
@@ -432,7 +464,7 @@
    * when the form has no legends.
    */
   function currentStepHint(doc) {
-    return textOf(doc.querySelector("legend"));
+    return scrub(rawTextOf(doc.querySelector("legend")));
   }
 
   /**
