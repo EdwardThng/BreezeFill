@@ -244,6 +244,15 @@ cd frontend && npm run build          # backend then serves it at /
 `flyctl` is installed at `~/.fly/bin/flyctl.exe` (not on PATH). The `!` prefix
 in Claude Code runs **Bash**, not PowerShell.
 
+**Toolchain quirks that cost a session to work out.** On the OneDrive-synced
+copy, `node`/`npm` are installed but invisible to both the Bash tool and
+PowerShell's `Get-Command` — reach them through `cmd /c "npm test"`. And
+`.venv` was created under a different Windows user profile, so
+`.venv/Scripts/python.exe` resolves to a path that does not exist
+(`C:\Users\thnge\...`); recreate the venv on any machine where that happens
+rather than assuming Python is missing. Check both before concluding a suite
+cannot be run.
+
 The backend serves the frontend only if `frontend/dist` exists — that is why
 local dev without a build still works, and why the Dockerfile builds it in a
 node stage.
