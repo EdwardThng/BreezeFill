@@ -81,6 +81,52 @@ local agent or browser extension — never the Fly server holding standing
 credentials to a patient database. See conversation history for the full
 comparison (ClinicAssist / Assurance Technology, NEHR via Synapxe GPConnect).
 
+**Insurers increasingly send a link, not a PDF — so a third fill target is a
+browser extension.** AIA's ClaimEZ mails the doctor a tokenised link
+(`https://claimez.aia.com.sg/doc/?pid=<uuid>`) to a JS-rendered form filled and
+submitted in the browser. A filled PDF is the wrong artefact for that channel.
+
+Routes considered and closed (2026-08-01), so they are not re-opened:
+
+- *Print, hand-fill, scan back in* — more friction than the product removes.
+- *Download the PDF from ClaimEZ and use the existing pipeline* — the download
+  only appears **after** submission. It is a receipt, not an input.
+- *Any other submission route (email the PDF, upload elsewhere)* — the owner's
+  call, and the stronger argument: the link is what the insurer handed the
+  doctor, and moving them off it adds friction rather than removing it. **The
+  submission channel is fixed. Fill the channel the doctor was given.**
+- *Iframe the portal inside ClaimFill, or have the server open the link* — CSP
+  blocks the first; the second makes the server hold a bearer credential to a
+  patient's claim.
+
+So: `extension/`, a third `fill_mode` alongside `acroform` and `overlay`. Fill
+in place, never submit — the doctor still clicks submit and signs.
+
+**The `?pid=` in a ClaimEZ link is a bearer credential.** Anyone holding the
+URL gets a page pre-populated with the patient's name, NRIC and policy number.
+It is not an id, it is a password. Never log it, never paste it into a
+transcript, never let it into an authoring artefact. `extension/learn/dump.js`
+records the **host** only, for this reason.
+
+**Learn mode has no demographics dictionary, so it cannot scrub names.** This
+is the trap that shaped `extension/learn/dump.js` and it will catch anyone
+extending it. The scrubber finds identifiers *by shape* — NRIC, phone, email,
+digit runs. A name has no shape: `Tan Wei Ming` is indistinguishable from
+`Tan Tock Seng` by regex. `redaction.py` only handles names because pass 1 has
+the demographics the doctor typed in; on an insurer's page nobody has typed
+anything. Consequences, both of which look like over-caution until you see the
+page:
+
+- Section and step text come from `<legend>` only, never `<h1>`/`<h2>`/prose.
+  A claim page heading reads "Claim for &lt;patient&gt; (&lt;NRIC&gt;)".
+- If scrubbing changes *any* option in a list, the whole list is withheld. A
+  policy picker reading `80123456 — Tan Wei Ming — GHS` has a shaped number
+  next to an unshaped name, so partial scrubbing emits the name.
+
+A dump gets pasted into a model to draft a schema, which makes it an LLM input
+and subject to the same rules as clinical text. See `extension/README.md` for
+the residual risks that remain.
+
 ---
 
 ## Traps
@@ -165,6 +211,10 @@ omission to "fix".
 - The API key belongs in a Fly secret, never in a repo file, and never pasted
   into a chat transcript (including via the `!` prefix, which is logged).
 - Repo fixtures are synthetic only.
+- A learn-mode dump is an LLM input. It may be shared only after it has been
+  read — the guarantee is structure-only by construction, but the residual
+  risks in `extension/README.md` are real. Never send the URL, a screenshot, or
+  the raw DOM alongside it.
 
 ---
 
@@ -173,6 +223,9 @@ omission to "fix".
 ```bash
 # tests (offline, no API key needed)
 ./.venv/Scripts/python.exe -m pytest -q
+
+# extension tests (separate toolchain — vitest + jsdom, from the repo root)
+npm install && npm test
 
 # backend dev
 ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
@@ -203,10 +256,19 @@ node stage.
    a working claim: `fly secrets set ANTHROPIC_API_KEY=...`. Must be run by
    the owner in their own terminal, never through Claude Code's `!` prefix
    (which writes the command into the transcript).
-2. **Paste-and-parse demographics** — the agreed next feature. One pasted
-   block from ClinicAssist fills name/NRIC/DOB/phone instead of six fields.
-3. **SG-region inference** before any real patient note.
-4. Deferred: coordinate-overlay fill for the three scanned forms.
+2. **Browser extension for link-delivered forms** — now the main line of work,
+   because it is the channel AIA actually uses. Learn mode
+   (`extension/learn/dump.js`) is built and tested; the filler is not started.
+   **Blocked on one thing: a learn-mode dump from a live ClaimEZ page.** An
+   expired link renders an error page with no fields, `submit-offline` is
+   post-submission only, and the portal is a JS-rendered SPA so no fetch-based
+   tool can see its DOM. It has to be a real page in a real browser. Run the
+   dump before filling the claim; it is read-only and does not consume the
+   token.
+3. **Paste-and-parse demographics** — one pasted block from ClinicAssist fills
+   name/NRIC/DOB/phone instead of six fields.
+4. **SG-region inference** before any real patient note.
+5. Deferred: coordinate-overlay fill for the three scanned forms.
 
 ---
 
