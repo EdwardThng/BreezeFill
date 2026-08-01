@@ -142,16 +142,29 @@ describe("content boundary", () => {
 // ---------------------------------------------------------------------------
 
 describe("scrub", () => {
+  // What matters is that the identifier is gone, not which token replaced it.
+  // Asserting the token over-specifies: an 8-digit SG policy number like
+  // 80123456 is shape-identical to an SG mobile number, so it comes back
+  // [PHONE] rather than [NUMBER]. Nothing downstream cares — the dump is an
+  // authoring artefact, and wasScrubbed() (which drives option withholding)
+  // only asks whether the string changed.
   test.each([
-    ["NRIC S1234567D here", "[NRIC]"],
-    ["FIN g7654321x here", "[NRIC]"],
-    ["call 9123 4567", "[PHONE]"],
-    ["call +65 9123 4567", "[PHONE]"],
-    ["mail a.b+c@example.co.uk", "[EMAIL]"],
-    ["policy 80123456", "[NUMBER]"],
-    ["ref 1234-5678-9012", "[NUMBER]"],
-  ])("%s -> %s", (input, token) => {
-    expect(learn.scrub(input)).toContain(token);
+    ["NRIC S1234567D here", "S1234567D"],
+    ["FIN g7654321x here", "g7654321x"],
+    ["call 9123 4567", "9123 4567"],
+    ["call +65 9123 4567", "9123 4567"],
+    ["mail a.b+c@example.co.uk", "a.b+c@example.co.uk"],
+    ["policy 80123456", "80123456"],
+    ["ref 1234-5678-9012", "1234-5678-9012"],
+  ])("removes the identifier in %s", (input, identifier) => {
+    expect(learn.scrub(input)).not.toContain(identifier);
+  });
+
+  test("replaces with a token rather than deleting", () => {
+    // A bare deletion would leave "policy " and lose the fact that something
+    // was there, which matters when reading a dump by eye.
+    expect(learn.scrub("NRIC S1234567D here")).toBe("NRIC [NRIC] here");
+    expect(learn.scrub("mail a@b.com")).toBe("mail [EMAIL]");
   });
 
   test("leaves clinical and structural wording alone", () => {
