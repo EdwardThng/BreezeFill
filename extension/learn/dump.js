@@ -384,6 +384,11 @@
     );
 
     const controls = [];
+    // ref -> the live element(s) behind that descriptor. Returned alongside
+    // the descriptors rather than attached to them, so a dump stays a plain
+    // serialisable object with no DOM references hiding inside it. dump()
+    // ignores this; the filler is the only caller that wants it.
+    const elements = new Map();
     const radioGroups = new Map();
     let skippedPassword = 0;
     let counter = 0;
@@ -408,14 +413,18 @@
 
       counter += 1;
       controls.push(describe(el, doc, `c${counter}`));
+      elements.set(`c${counter}`, el);
     }
 
     for (const els of radioGroups.values()) {
       counter += 1;
       controls.push(describeRadioGroup(els, doc, `c${counter}`));
+      // A radio group is one question over several elements, so the whole
+      // set is kept — the filler picks the member matching the value.
+      elements.set(`c${counter}`, els);
     }
 
-    return { controls, skippedPassword };
+    return { controls, elements, skippedPassword };
   }
 
   // --------------------------------------------------------------------
