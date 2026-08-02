@@ -180,4 +180,26 @@ describe("refusals", () => {
   test("an empty plan is never safe to fill", () => {
     expect(locate.locate([], liveControls()).safeToFill).toBe(false);
   });
+
+  test("a perfect match rate on a tiny plan is not enough", () => {
+    // The hole a ratio alone leaves. One field matching one control is a
+    // match rate of 1.0, which would call any page with a similar label
+    // recognised. A sparse clinical note produces exactly this plan.
+    const report = locate.locate(
+      [{ fieldId: "diagnosis_and_symptoms", label: "Diagnosis of all conditions treated" }],
+      liveControls()
+    );
+
+    expect(report.matched).toBe(1);
+    expect(report.matchRate).toBe(1);
+    expect(report.safeToFill).toBe(false);
+  });
+
+  test("the floor is on matches found, not fields asked for", () => {
+    // Three fields where only two match is short on both counts; the point is
+    // that padding a plan with unmatchable fields cannot buy safety.
+    const report = locate.locate(PLAN.slice(0, 3), liveControls());
+    expect(report.safeToFill).toBe(true);
+    expect(report.matched).toBeGreaterThanOrEqual(locate.MIN_MATCHED);
+  });
 });
