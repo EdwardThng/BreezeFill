@@ -1,0 +1,125 @@
+<!doctype html>
+<!--
+  ClaimFill side panel.
+
+  Three steps, same as the website it replaces: describe the patient, review
+  what the model produced, write it into the portal. The middle step is not
+  optional and not a formality — anything the model inferred has to be
+  confirmed by hand before it can be written, because what gets filled here is
+  signed and submitted as the doctor's own clinical statement.
+
+  No inline script or style: MV3's content security policy forbids both, and
+  keeping to it means the panel cannot be made to execute anything a page
+  hands it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClaimFill</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="head">
+      <h1>ClaimFill</h1>
+      <p class="tagline">Fills the form in place. Never submits it.</p>
+    </header>
+
+    <!-- Step 1 ------------------------------------------------------------ -->
+    <section class="step" id="step-patient" aria-labelledby="h-patient">
+      <h2 id="h-patient"><span class="num">1</span> Patient and note</h2>
+
+      <label class="field">
+        <span>Insurer form</span>
+        <select id="form-id"></select>
+      </label>
+
+      <div class="grid">
+        <label class="field">
+          <span>Full name</span>
+          <input id="full-name" type="text" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>NRIC</span>
+          <input id="nric" type="text" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Date of birth</span>
+          <input id="dob" type="date" />
+        </label>
+        <label class="field">
+          <span>Phone</span>
+          <input id="phone" type="text" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Policy number</span>
+          <input id="policy-number" type="text" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Insurer</span>
+          <input id="insurer" type="text" autocomplete="off" />
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Address</span>
+        <input id="address" type="text" autocomplete="off" />
+      </label>
+
+      <label class="field">
+        <span>Clinical note</span>
+        <textarea id="clinical-text" rows="8" spellcheck="false"></textarea>
+      </label>
+
+      <!--
+        Not decoration. Demographics above are copied onto the form
+        deterministically and double as the redaction dictionary; only the
+        note below is redacted and sent to the model.
+      -->
+      <p class="note">
+        Names and identifiers above never reach the model. They are used to
+        redact the note, and are written onto the form directly.
+      </p>
+
+      <button id="map-btn" class="primary" type="button">Map fields</button>
+      <p class="status" id="map-status" role="status"></p>
+    </section>
+
+    <!-- Step 2 ------------------------------------------------------------ -->
+    <section class="step" id="step-review" aria-labelledby="h-review" hidden>
+      <h2 id="h-review"><span class="num">2</span> Review</h2>
+      <p class="note" id="review-summary"></p>
+      <div id="rows"></div>
+    </section>
+
+    <!-- Step 3 ------------------------------------------------------------ -->
+    <section class="step" id="step-fill" aria-labelledby="h-fill" hidden>
+      <h2 id="h-fill"><span class="num">3</span> Fill this page</h2>
+      <p class="note">
+        ClaimFill has no access to any page until you grant it here, one site
+        at a time.
+      </p>
+      <div class="row-actions">
+        <button id="check-btn" type="button">Check this page</button>
+        <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
+      </div>
+      <p class="status" id="fill-status" role="status"></p>
+      <div id="fill-report"></div>
+    </section>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <label class="field">
+        <span>Backend URL</span>
+        <input id="api-base" type="url" autocomplete="off" />
+      </label>
+      <p class="note">
+        Held in memory for this session only. ClaimFill requests no storage
+        permission, so nothing here — and no part of the note — is written to
+        disk.
+      </p>
+    </details>
+
+    <script src="panel.js"></script>
+  </body>
+</html>
