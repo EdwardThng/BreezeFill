@@ -12,6 +12,7 @@ Data-retention rules enforced here (guardrails, section 10):
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -41,6 +42,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 FRONTEND_DIR = REPO_ROOT / "frontend" / "dist"
 CLAIM_TTL_SECONDS = 60 * 60  # zero long-term retention; 1h working window
+
+# Exception *types* only ever reach this. See _review_rows: a message or
+# traceback can quote the clinical text that caused it.
+logger = logging.getLogger("formfill")
 
 app = FastAPI(title="FormFill", version="0.1.0")
 # Comma-separated list of extra allowed origins, e.g. the deployed frontend URL.
@@ -186,6 +191,25 @@ def _review_rows(schema: FormSchema, patient: PatientRecord) -> list[MappedField
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except (anthropic.APIError, anthropic.APIConnectionError) as exc:
         # Generic detail on purpose: no clinical text in errors or logs.
+        raise HTTPException(status_code=502, detail="LLM call failed") from exc
+    except Exception as exc:
+        # Anything else at the LLM boundary must still leave as an
+        # HTTPException. A missing or malformed API key raises a plain
+        # TypeError from the SDK ("Could not resolve authentication method"),
+        # which is not an anthropic.APIError — and an uncaught exception is
+        # rendered by Starlette's error handler, which sits OUTSIDE the CORS
+        # middleware. The response then carries no CORS headers at all, so the
+        # browser reports an opaque "Failed to fetch" with no status code and
+        # the extension cannot tell a server crash from a dead host.
+        #
+        # Log the exception's type and nothing else: a message or traceback can
+        # quote the input that caused it, and the input here is clinical text.
+        logger.error("mapping failed: %s", type(exc).__name__)
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="This server has no ANTHROPIC_API_KEY configured.",
+            ) from exc
         raise HTTPException(status_code=502, detail="LLM call failed") from exc
 
     return assemble_claim(schema, patient, answers, result.redaction_map)
