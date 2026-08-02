@@ -24,55 +24,41 @@
  * the panel open, and nowhere else. Keeping this worker stateless is what
  * makes that true. If something here ever needs to remember a value between
  * two events, that is the signal it belongs in the panel instead.
- */
-
-/**
- * Opening the panel, and why it is done the long way.
+ *
+ * ---------------------------------------------------------------------------
+ * Opening the panel, and the call that is deliberately absent
+ * ---------------------------------------------------------------------------
  *
  * The one-liner for this is `setPanelBehavior({ openPanelOnActionClick: true })`
- * and it does open the panel. But Chrome then handles the toolbar click itself,
- * `action.onClicked` never fires, and — the part that matters — the click does
- * not count as invoking the extension, so **no `activeTab` is granted**. The
- * panel opens and then cannot touch the tab it is sitting next to.
- * Verified on Chrome 150: the panel reported "no access to this tab" on a page
- * the doctor was looking at.
+ * and it does open the panel. But Chrome then handles the toolbar click
+ * itself, `action.onClicked` never fires, and — the part that matters — the
+ * click does not count as invoking the extension, so **no `activeTab` is
+ * granted**. The panel opens and cannot touch the tab beside it. Verified on
+ * Chrome 150: the panel reported "no access to this tab" on a page the doctor
+ * was plainly looking at.
  *
- * Taking the click here instead is what earns the grant: an `action.onClicked`
+ * Taking the click here instead is what earns the grant. An `action.onClicked`
  * handler is the canonical `activeTab` trigger, and opening the panel from
- * inside it keeps the same one-click gesture. The grant then lasts until that
- * tab navigates or closes, which is the whole claim.
+ * inside it keeps the same single click. The grant lasts until that tab
+ * navigates or closes, which is the whole claim.
  *
- * `openPanelOnActionClick` is set to false explicitly rather than left unset.
- * It is persisted per-extension, so an install that ever set it true keeps
- * swallowing the click until something sets it back.
+ * There is no `setPanelBehavior({ openPanelOnActionClick: false })` call to
+ * match. `false` is already the default, so it cannot help a clean install,
+ * and it threw `Error: No SW` on Chrome 150 from the worker's top level *and*
+ * from `onInstalled` — the side panel API refuses to attach a behaviour to a
+ * worker it does not consider active, and there is no reliable moment at which
+ * it does. Since the default is correct, the call was pure liability: an error
+ * on every start, fixing nothing.
+ *
+ * The consequence to know: a stored `true` from an earlier build is cleared by
+ * removing the extension and loading it again, not by calling this API. If the
+ * panel ever opens without the listener below running, that flag is the reason.
  */
-/**
- * Called from event listeners, never at top level.
- *
- * `setPanelBehavior` throws `Error: No SW` when it runs during the service
- * worker's initial evaluation — the worker is not yet registered as active,
- * and the side panel API refuses to attach a behaviour to it. Observed on
- * Chrome 150. Running it from a listener means the worker is live by then.
- *
- * This is not a cosmetic failure to shrug at. The behaviour is persisted
- * per-extension, so if this call does not land, an install that once set
- * `openPanelOnActionClick: true` keeps letting Chrome swallow the toolbar
- * click — `onClicked` below never fires and no `activeTab` is ever granted.
- */
-function resetPanelBehavior() {
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: false })
-    .catch((error) => {
-      console.error("ClaimFill: could not set panel behaviour", error);
-    });
-}
-
-chrome.runtime.onInstalled.addListener(resetPanelBehavior);
-chrome.runtime.onStartup.addListener(resetPanelBehavior);
 
 chrome.action.onClicked.addListener((tab) => {
   // Must stay synchronous with the click: `sidePanel.open` requires the user
-  // gesture, and awaiting anything first can spend it.
+  // gesture, and awaiting anything first can spend it. This listener firing at
+  // all is also the signal that `activeTab` was granted.
   chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
     // No patient data can reach here — this fires before any claim exists —
     // but keep it terse regardless, out of habit rather than necessity.
