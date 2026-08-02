@@ -46,11 +46,29 @@
  * It is persisted per-extension, so an install that ever set it true keeps
  * swallowing the click until something sets it back.
  */
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: false })
-  .catch((error) => {
-    console.error("ClaimFill: could not set panel behaviour", error);
-  });
+/**
+ * Called from event listeners, never at top level.
+ *
+ * `setPanelBehavior` throws `Error: No SW` when it runs during the service
+ * worker's initial evaluation — the worker is not yet registered as active,
+ * and the side panel API refuses to attach a behaviour to it. Observed on
+ * Chrome 150. Running it from a listener means the worker is live by then.
+ *
+ * This is not a cosmetic failure to shrug at. The behaviour is persisted
+ * per-extension, so if this call does not land, an install that once set
+ * `openPanelOnActionClick: true` keeps letting Chrome swallow the toolbar
+ * click — `onClicked` below never fires and no `activeTab` is ever granted.
+ */
+function resetPanelBehavior() {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: false })
+    .catch((error) => {
+      console.error("ClaimFill: could not set panel behaviour", error);
+    });
+}
+
+chrome.runtime.onInstalled.addListener(resetPanelBehavior);
+chrome.runtime.onStartup.addListener(resetPanelBehavior);
 
 chrome.action.onClicked.addListener((tab) => {
   // Must stay synchronous with the click: `sidePanel.open` requires the user
