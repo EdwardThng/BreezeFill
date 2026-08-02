@@ -111,6 +111,70 @@ function fillValues() {
 // Step 1 — patient and note
 // ---------------------------------------------------------------------------
 
+/**
+ * Does this tab's host belong to a schema?
+ *
+ * Host only — never the path or query. A ClaimEZ URL's `?pid=` is a bearer
+ * credential for one patient's claim, and a match key is exactly the sort of
+ * value that gets copied into a schema file and committed.
+ *
+ * A pattern also matches its subdomains, so `aia.com.sg` covers
+ * `claimez.aia.com.sg`. Schemas are authored in this repo rather than supplied
+ * by anyone else, and the cost of a too-broad pattern is bounded: the wrong
+ * schema means the matcher fails to find its fields and refuses to fill.
+ */
+function hostMatches(host, patterns) {
+  const h = String(host || "").toLowerCase();
+  return (patterns || []).some((raw) => {
+    const pattern = String(raw || "").toLowerCase().replace(/^\*\./, "");
+    return Boolean(pattern) && (h === pattern || h.endsWith(`.${pattern}`));
+  });
+}
+
+function showPicker(message) {
+  const detected = $("form-detected");
+  detected.textContent = message;
+  detected.classList.add("unknown");
+  $("form-id").hidden = false;
+  $("form-override").hidden = true;
+}
+
+/**
+ * Work out which schema this page needs, instead of asking.
+ *
+ * Runs when the panel opens, which is immediately after the doctor clicked the
+ * ClaimFill icon on this tab — so the survey is inside the access they just
+ * granted, and it only reads: `survey` writes nothing.
+ *
+ * Failing here is not an error state. Every schema in the repo currently
+ * declares no hosts, so the expected outcome today is the picker.
+ */
+async function detectForm() {
+  if (!state.forms.length) return;
+
+  let host;
+  try {
+    host = (await ask({ action: "survey", plan: [] })).host;
+  } catch {
+    showPicker("Could not read this page — pick the form yourself, or click the ClaimFill icon on the tab you want to fill.");
+    return;
+  }
+
+  const match = state.forms.find((form) => hostMatches(host, form.hosts));
+  if (!match) {
+    showPicker(`No form is registered for ${host}. Pick one:`);
+    return;
+  }
+
+  $("form-id").value = match.form_id;
+  $("form-detected").textContent = match.insurer
+    ? `${match.insurer} — ${match.display_name}`
+    : match.display_name;
+  $("form-detected").classList.remove("unknown");
+  $("form-id").hidden = true;
+  $("form-override").hidden = false;
+}
+
 async function loadForms() {
   const select = $("form-id");
   try {
@@ -119,6 +183,7 @@ async function loadForms() {
     state.forms = await response.json();
   } catch {
     setStatus($("map-status"), "Could not reach the backend. Check the URL under Advanced.", "error");
+    showPicker("No forms loaded.");
     return;
   }
 
@@ -408,8 +473,13 @@ async function onFill() {
 // ---------------------------------------------------------------------------
 
 $("api-base").value = DEFAULT_API_BASE;
-$("api-base").addEventListener("change", loadForms);
+$("api-base").addEventListener("change", () => loadForms().then(detectForm));
 $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);
-loadForms();
+$("form-override").addEventListener("click", () => {
+  $("form-id").hidden = false;
+  $("form-override").hidden = true;
+});
+
+loadForms().then(detectForm);
