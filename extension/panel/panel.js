@@ -357,7 +357,21 @@ async function onCheck() {
   const status = $("fill-status");
   setStatus(status, "Reading the page…", "busy");
   try {
-    const response = await ask({ action: "survey", plan: fillPlan() });
+    const plan = fillPlan();
+    const response = await ask({ action: "survey", plan });
+
+    // Nothing mapped yet: this is a connectivity check, not a match check.
+    // Reporting "matched 0 of 0, will not fill" would read as a failure when
+    // it is actually the answer "yes, I can see this page".
+    if (!plan.length) {
+      setStatus(
+        status,
+        `Connected to ${response.host}. Found ${response.controlCount} fillable field${response.controlCount === 1 ? "" : "s"}. Map a note to see which ones match.`
+      );
+      $("fill-report").replaceChildren();
+      return;
+    }
+
     const { matched, intended, safeToFill } = response.report;
     setStatus(
       status,
