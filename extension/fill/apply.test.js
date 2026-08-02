@@ -177,6 +177,38 @@ describe("radio groups", () => {
 });
 
 describe("guards", () => {
+  test("a missing value never clears what is already there", () => {
+    // The destructive case: on a wizard the doctor may have typed this by
+    // hand. Coercing undefined to "" would erase it and report success.
+    const el = document.querySelector("#icd");
+    apply.applyOne(el, "K35.80");
+
+    expect(apply.applyOne(el, undefined).status).toBe("skipped");
+    expect(el.value).toBe("K35.80");
+    expect(apply.applyOne(el, null).status).toBe("skipped");
+    expect(el.value).toBe("K35.80");
+  });
+
+  test("an empty string is still a value the doctor can mean", () => {
+    // Absent and empty are different. Only the former is refused.
+    const el = document.querySelector("#icd");
+    apply.applyOne(el, "K35.80");
+    expect(apply.applyOne(el, "").status).toBe("filled");
+    expect(el.value).toBe("");
+  });
+
+  test("a plan whose values drifted fills nothing rather than blanking", () => {
+    const plan = [{ fieldId: "icd", label: "ICD-10 code" }];
+    const { controls, elements } = learn.collectControls(document);
+    const report = locate.locate(plan, controls);
+
+    document.querySelector("#icd").value = "typed by hand";
+    const result = apply.applyPlan(report, elements, {}, { labelOf });
+
+    expect(result.filled).toBe(0);
+    expect(document.querySelector("#icd").value).toBe("typed by hand");
+  });
+
   test("skips a readonly control", () => {
     const el = document.querySelector("input[name='policyNo']");
     const before = el.value;
