@@ -115,6 +115,12 @@ class FormSchema(BaseModel):
     # Shown in the form picker instead of the raw form_id.
     display_name: str | None = None
     insurer: str | None = None
+    # Hosts this form is served from, for the browser extension: the doctor is
+    # already standing on the insurer's page, so asking them which insurer form
+    # they are looking at is a question the page can answer itself. Matched on
+    # the host alone — never the path or query, because a ClaimEZ URL's `?pid=`
+    # is a bearer credential for one patient's claim.
+    hosts: list[str] = []
     # Test/dev fixtures stay usable by form_id but are kept out of the picker,
     # so a doctor is never offered a form that isn't a real insurer's.
     internal: bool = False
