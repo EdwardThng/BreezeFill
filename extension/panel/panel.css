@@ -199,6 +199,33 @@ button:disabled {
   margin: 8px 0;
 }
 
+/* The auto-detected form. Reads as a statement of fact, not a control —
+   there is nothing to do here when it is right. */
+.detected {
+  margin: 0;
+  font-weight: 600;
+}
+
+.detected.unknown {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* A secondary action that should not compete with "Map fields". */
+button.link {
+  padding: 0;
+  margin-top: 4px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11.5px;
+  text-decoration: underline;
+}
+
+button.link[hidden] {
+  display: none;
+}
+
 .status {
   margin: 8px 0 0;
   font-size: 12px;
