@@ -242,9 +242,16 @@ async function onMap() {
       body: JSON.stringify({ form_id: $("form-id").value, patient }),
     });
     if (!response.ok) {
-      // The backend keeps clinical text out of its own errors; do not
-      // reintroduce it by echoing a body we have not inspected.
-      throw new Error(response.status === 502 ? "The model call failed." : `Request failed (${response.status}).`);
+      // Fixed strings keyed on status, never the response body: the backend
+      // keeps clinical text out of its own errors and echoing an uninspected
+      // body would reintroduce it.
+      throw new Error(
+        {
+          502: "The model call failed.",
+          503: "The backend has no API key. Set ANTHROPIC_API_KEY in the terminal running it, then restart it.",
+          404: "The backend does not know this form. Restart it if you have just added one.",
+        }[response.status] || `Request failed (${response.status}).`
+      );
     }
     const body = await response.json();
     state.rows = body.fields;
