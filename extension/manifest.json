@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "ClaimFill",
+  "version": "0.1.0",
+  "description": "Fills insurer claim forms from a clinical note. Fills in place; never submits.",
+  "minimum_chrome_version": "114",
+
+  "permissions": ["activeTab", "scripting", "sidePanel"],
+
+  "optional_host_permissions": ["https://*/*"],
+
+  "side_panel": {
+    "default_path": "panel/panel.html"
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_title": "Open ClaimFill"
+  }
+}
