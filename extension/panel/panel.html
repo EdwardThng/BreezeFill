@@ -29,10 +29,21 @@
     <section class="step" id="step-patient" aria-labelledby="h-patient">
       <h2 id="h-patient"><span class="num">1</span> Patient and note</h2>
 
-      <label class="field">
+      <!--
+        The schema is not optional — it is what supplies each field's meaning,
+        which the live page cannot. But which schema is a question the page
+        answers itself, by its host, so the doctor is told rather than asked.
+        The picker stays as an override: it is the only way forward when a
+        host matches nothing, which is every schema until they declare hosts.
+      -->
+      <div class="field">
         <span>Insurer form</span>
-        <select id="form-id"></select>
-      </label>
+        <p class="detected" id="form-detected">Checking this page…</p>
+        <button class="link" id="form-override" type="button" hidden>
+          Choose a different form
+        </button>
+        <select id="form-id" hidden aria-label="Insurer form"></select>
+      </div>
 
       <div class="grid">
         <label class="field">
