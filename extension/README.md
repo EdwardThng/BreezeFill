@@ -195,9 +195,14 @@ only as good as that list.
 
 Every one of these fails silently or misleadingly on a real portal:
 
-- **Does opening the side panel via the action click grant `activeTab`?** If
-  not, `executeScript` throws and the panel shows its "click the ClaimFill
-  icon" message forever.
+- ~~Does opening the side panel via the action click grant `activeTab`?~~
+  **Answered on Chrome 150: no.** With
+  `setPanelBehavior({openPanelOnActionClick: true})` Chrome handles the click
+  itself, `action.onClicked` never fires, and the click does not count as
+  invoking the extension — the panel opens and then cannot reach the tab it is
+  sitting beside. `background.js` now takes `action.onClicked` and calls
+  `sidePanel.open({tabId})` from inside it. Do not collapse that back into the
+  one-liner; it looks like a needless detour until you hit this.
 - **Does an isolated-world write actually defeat React's `_valueTracker`?**
   Content scripts get their own DOM wrappers, so the instance-level accessor
   React installed in the main world may not even be visible from here — which
