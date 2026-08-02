@@ -227,17 +227,24 @@ mangled real values on the Great Eastern form: `S1234567D` → `345670`).
 150, 2026-08-03, and each looks like a console warning while silently breaking
 page access.
 
-1. `chrome.sidePanel.setPanelBehavior()` throws `Error: No SW` when called at
-   the service worker's **top level** — the worker is not registered as active
-   yet. Call it from `onInstalled`/`onStartup`.
+1. `chrome.sidePanel.setPanelBehavior()` throws `Error: No SW` — from the
+   service worker's **top level and from `onInstalled` alike**. The API will
+   not attach a behaviour to a worker it does not consider active, and no
+   moment was found at which it does. **Do not call it.** `background.js`
+   does not, and the comment there explains why; the tempting "fix" of moving
+   the call to a different lifecycle event has already been tried and failed.
 2. `openPanelOnActionClick: true` opens the panel but does **not** grant
    `activeTab`: Chrome handles the click itself so `action.onClicked` never
    fires, and a click that does not reach the extension is not an invocation.
+   Use `action.onClicked` → `sidePanel.open({tabId})` instead.
 
 They compound because the behaviour is **persisted per-extension**. Trap 1
-means the fix for trap 2 does not land, so an install that once set the flag
-`true` keeps swallowing clicks — and the only symptom is the panel saying it
-has no access to a tab the doctor is plainly looking at.
+means the fix for trap 2 cannot be applied in code at all, so an install that
+once set the flag `true` keeps swallowing clicks — and the only symptom is the
+panel saying it has no access to a tab the doctor is plainly looking at. The
+only way to clear a stored `true` is to **remove the extension and load it
+again**; a plain reload keeps the flag. `false` is the default, so a clean
+install needs no call.
 
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
