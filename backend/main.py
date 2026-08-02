@@ -152,6 +152,9 @@ def list_forms() -> list[dict]:
             "form_id": s.form_id,
             "display_name": s.display_name or s.form_id,
             "insurer": s.insurer or "",
+            # The extension matches the tab's host against these so the doctor
+            # is not asked which form they are looking at.
+            "hosts": s.hosts,
             "fields": [
                 {
                     "id": f.id,
