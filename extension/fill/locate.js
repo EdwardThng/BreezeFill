@@ -39,6 +39,19 @@
   const MIN_SCORE = 0.6;
   // Below this share of the plan matched, assume the page changed shape.
   const MIN_MATCH_RATE = 0.7;
+  // ...and below this many matches, the rate itself means nothing.
+  //
+  // A ratio clears trivially on a small plan: one ready field that happens to
+  // score against some label on an unrelated page is a match rate of 1.0, and
+  // the filler would call a stranger's form recognised. A sparse clinical note
+  // produces exactly such a plan, so this is the common case, not a corner.
+  //
+  // The trade is deliberate and one-directional: a doctor whose note yielded
+  // one or two values gets no autofill and writes them by hand, which costs
+  // seconds. The alternative is a value landing under an unrelated question on
+  // a page nobody recognised. Real insurer claim forms carry 15-24 fields, so
+  // this floor is far below anything a genuine match produces.
+  const MIN_MATCHED = 3;
   // Two candidates within this of each other are a tie, not a winner.
   const TIE_MARGIN = 0.05;
 
@@ -219,7 +232,10 @@
       matched,
       intended,
       matchRate,
-      safeToFill: intended > 0 && matchRate >= MIN_MATCH_RATE,
+      // Both guards, not either: the rate says the page has the shape the
+      // schema describes, the count says there is enough evidence for the rate
+      // to mean anything.
+      safeToFill: matched >= MIN_MATCHED && matchRate >= MIN_MATCH_RATE,
       // Live controls the schema knows nothing about. Not an error — it is the
       // signal that the portal grew a question, and the input to extending the
       // schema.
@@ -229,7 +245,16 @@
     };
   }
 
-  const api = { locate, locateOne, score, normalise, tokens, MIN_SCORE, MIN_MATCH_RATE };
+  const api = {
+    locate,
+    locateOne,
+    score,
+    normalise,
+    tokens,
+    MIN_SCORE,
+    MIN_MATCH_RATE,
+    MIN_MATCHED,
+  };
 
   root.claimfillLocate = api;
   if (typeof module !== "undefined" && module.exports) {
