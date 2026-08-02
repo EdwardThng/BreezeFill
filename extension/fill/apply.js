@@ -171,6 +171,15 @@
   function applyOne(target, value, options) {
     const opts = options || {};
 
+    // No value supplied is not the same as an empty value. Writing "" here
+    // would clear whatever is already in the control — including something
+    // the doctor typed by hand a moment ago — and report it as filled. The
+    // panel already excludes valueless rows from its plan, so reaching this
+    // means the plan and the values disagreed; leave the page alone.
+    if (value === undefined || value === null) {
+      return { status: "skipped", reason: "no value" };
+    }
+
     if (Array.isArray(target)) {
       return applyRadio(target, value, opts.labelOf);
     }
