@@ -15,7 +15,7 @@ a Singapore GP.
 | Piece | State |
 |---|---|
 | Pipeline: redact → LLM map → doctor review → PDF fill | Working, 112 backend tests pass (1 skipped) |
-| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 83 tests. **Never run in a real browser or on a real portal** |
+| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 85 tests. **Runs in Chrome 150.** Verified on a live page (RoboForm's 39-field test form): panel opens, `activeTab` granted, injection works, 39 controls collected, `POST /map` round-trips, review renders, and Fill **refused** an unrecognised page. Not yet run on an insurer portal, and nothing has been successfully filled anywhere |
 | `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
@@ -200,7 +200,18 @@ Two consequences worth keeping:
 
 `MIN_MATCH_RATE` is the important knob: below it the filler writes *nothing*
 rather than filling the part that still matches, because a partial fill is
-indistinguishable from a complete one to someone reviewing quickly.
+indistinguishable from a complete one to someone reviewing quickly. Confirmed
+in a real browser on 2026-08-03 — an AIA GHS plan against RoboForm's 39-field
+test page filled nothing.
+
+**`MIN_MATCHED` guards the other end, and is not optional.** A ratio clears
+trivially on a small plan: one ready field scoring against one label anywhere
+is a match rate of 1.0. A sparse clinical note produces exactly that plan —
+mostly `missing` rows and two or three values — so it is the common case, not
+a corner. Both guards apply, never either: the rate says the page has the
+schema's shape, the count says there is enough evidence for the rate to mean
+anything. Consequence to accept: a note that yielded one or two values gets no
+autofill at all.
 
 ---
 
@@ -379,12 +390,12 @@ node stage.
    the owner's own terminal, never through Claude Code's `!` prefix (which
    writes the command into the transcript). Update `DEFAULT_API_BASE` in
    `extension/panel/panel.js` once the URL is known.
-2. **Load the extension in Chrome and watch it fail.** It is complete enough to
-   run — manifest, side panel, service worker, and the orchestrator wiring
-   dump/locate/apply — and 83 tests pass against jsdom and a synthetic fixture.
-   That proves the logic, not the fit. `chrome://extensions` → Developer mode →
-   Load unpacked → `extension/`. Every assumption below is untested in a real
-   browser, and each fails in a way the tests cannot see:
+2. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
+   on RoboForm's test page — panel opens, `activeTab` granted, injection works,
+   39 controls collected, `POST /map` round-trips against a local backend, the
+   review screen renders, and Fill refused an unrecognised page. What has
+   *not* happened: a successful fill of anything, anywhere. Remaining
+   assumptions, each of which fails in a way the tests cannot see:
    - ~~Whether an action click that opens the side panel grants `activeTab`.~~
      **Answered 2026-08-03, on Chrome 150: it does not.**
      `setPanelBehavior({openPanelOnActionClick: true})` makes Chrome handle the
