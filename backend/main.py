@@ -52,6 +52,12 @@ _extra_origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *_extra_origins],
+    # The extension calls from chrome-extension://<id>, and the id is only
+    # stable once the extension is packed or pinned with a manifest key — a
+    # dev-mode load gets a different one on every machine. Note this is not an
+    # access control and must not be mistaken for one: CORS is enforced by
+    # browsers, and anything that is not a browser ignores it entirely.
+    allow_origin_regex=r"chrome-extension://[a-p]{32}",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -119,6 +125,14 @@ class ClaimResponse(BaseModel):
     fields: list[MappedField]
 
 
+class MapResponse(BaseModel):
+    """Same review rows as ClaimResponse, minus the claim id — because there
+    is no claim to refer back to."""
+
+    form_id: str
+    fields: list[MappedField]
+
+
 class ApproveClaimRequest(BaseModel):
     # Doctor-edited final values keyed by field_id. Fields omitted here keep
     # the value from the review rows; explicit null blanks the field.
@@ -154,14 +168,16 @@ def list_forms() -> list[dict]:
     ]
 
 
-@app.post("/claims", response_model=ClaimResponse)
-def create_claim(request: CreateClaimRequest) -> ClaimResponse:
-    _purge_stale_claims()
-    schema = _get_schema(request.form_id)
+def _review_rows(schema: FormSchema, patient: PatientRecord) -> list[MappedField]:
+    """redact -> map -> re-merge. The shared middle of both fill targets.
 
+    Kept as one function on purpose: the redaction step is the guardrail, and
+    a second caller that reimplemented this is exactly how a path that skips
+    redaction gets introduced.
+    """
     sweep = None if os.environ.get("FORMFILL_DISABLE_SWEEP") else llm_sweep
     try:
-        result = redact(request.patient, llm_sweep=sweep)
+        result = redact(patient, llm_sweep=sweep)
         answers = map_fields(schema, result.redacted_text)
     except MappingError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -169,7 +185,32 @@ def create_claim(request: CreateClaimRequest) -> ClaimResponse:
         # Generic detail on purpose: no clinical text in errors or logs.
         raise HTTPException(status_code=502, detail="LLM call failed") from exc
 
-    rows = assemble_claim(schema, request.patient, answers, result.redaction_map)
+    return assemble_claim(schema, patient, answers, result.redaction_map)
+
+
+@app.post("/map", response_model=MapResponse)
+def map_claim(request: CreateClaimRequest) -> MapResponse:
+    """Stateless mapping, for the browser extension.
+
+    The PDF path needs a server-side claim because the doctor reviews on one
+    page and downloads from another, so something must hold the rows in
+    between. The extension has no such gap: the panel that receives these rows
+    is the same surface that reviews them and the same surface that writes them
+    into the portal, all in the doctor's browser.
+
+    So this endpoint stores nothing. There is no claim id, nothing to purge,
+    and no window during which the server holds a half-finished claim. The
+    request is handled and forgotten; retention is zero rather than one hour.
+    """
+    schema = _get_schema(request.form_id)
+    return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
+
+
+@app.post("/claims", response_model=ClaimResponse)
+def create_claim(request: CreateClaimRequest) -> ClaimResponse:
+    _purge_stale_claims()
+    schema = _get_schema(request.form_id)
+    rows = _review_rows(schema, request.patient)
     # From here on, only the review rows are retained — the raw record,
     # redacted text, and redaction map go out of scope now.
     claim = ClaimSession(
