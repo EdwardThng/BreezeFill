@@ -93,7 +93,14 @@
     </section>
 
     <!-- Step 3 ------------------------------------------------------------ -->
-    <section class="step" id="step-fill" aria-labelledby="h-fill" hidden>
+    <!--
+      Not hidden behind step 2. "Check this page" is useful before any note has
+      been mapped — it answers "can ClaimFill see this form at all", which is a
+      different question from "did the model produce good values" and worth
+      being able to ask on its own. Fill stays disabled until there is
+      something confirmed to write.
+    -->
+    <section class="step" id="step-fill" aria-labelledby="h-fill">
       <h2 id="h-fill"><span class="num">3</span> Fill this page</h2>
       <p class="note">
         ClaimFill has no access to any page until you grant it here, one site
