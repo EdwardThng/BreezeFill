@@ -20,7 +20,7 @@ a Singapore GP.
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
-| Fly deploy | **Live** at https://formfill-backend.fly.dev — 1 machine in `sin`, health check passing |
+| Fly deploy | **Gone.** `formfill-backend.fly.dev` returned NXDOMAIN on 2026-08-03 — the name does not resolve at all, so this is a destroyed/renamed app, not a stopped machine. Was live on 2026-07-30. Verify with `flyctl apps list` before assuming a URL |
 | `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` fails until set |
 
 Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
@@ -348,19 +348,30 @@ node stage.
 
 ## Next steps
 
-1. **Set the Fly secret** — the only thing standing between the live site and
-   a working claim: `fly secrets set ANTHROPIC_API_KEY=...`. Must be run by
-   the owner in their own terminal, never through Claude Code's `!` prefix
-   (which writes the command into the transcript).
+1. **Work out what happened to the Fly app, then redeploy and set the secret.**
+   `formfill-backend.fly.dev` no longer resolves, so there is nothing to point
+   the extension at but a local backend. `flyctl apps list` first — the name
+   may have changed rather than the app having been destroyed. Then
+   `fly deploy --ha=false` and `fly secrets set ANTHROPIC_API_KEY=...`, both in
+   the owner's own terminal, never through Claude Code's `!` prefix (which
+   writes the command into the transcript). Update `DEFAULT_API_BASE` in
+   `extension/panel/panel.js` once the URL is known.
 2. **Load the extension in Chrome and watch it fail.** It is complete enough to
    run — manifest, side panel, service worker, and the orchestrator wiring
    dump/locate/apply — and 83 tests pass against jsdom and a synthetic fixture.
    That proves the logic, not the fit. `chrome://extensions` → Developer mode →
    Load unpacked → `extension/`. Every assumption below is untested in a real
    browser, and each fails in a way the tests cannot see:
-   - Whether an action click that opens the side panel actually grants
-     `activeTab`. If it does not, `chrome.scripting.executeScript` throws and
-     the panel shows its "click the ClaimFill icon" message forever.
+   - ~~Whether an action click that opens the side panel grants `activeTab`.~~
+     **Answered 2026-08-03, on Chrome 150: it does not.**
+     `setPanelBehavior({openPanelOnActionClick: true})` makes Chrome handle the
+     click itself, so `action.onClicked` never fires and the click does not
+     count as invoking the extension — the panel opens and then cannot touch
+     the tab beside it. Fixed by taking `action.onClicked` and calling
+     `sidePanel.open({tabId})` from inside it, which is the canonical
+     `activeTab` trigger. Do not "simplify" this back to the one-liner.
+     `openPanelOnActionClick` persists per-extension, which is why it is now
+     set to `false` explicitly rather than left unset.
    - Whether a content script's write defeats React's `_valueTracker` at all.
      In an isolated world the content script gets its own DOM wrappers, so the
      instance-level tracker React installed in the main world may not even be
