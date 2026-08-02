@@ -10,14 +10,15 @@ a Singapore GP.
 
 ---
 
-## Status as of 2026-07-28 (HEAD `8c0f582`)
+## Status as of 2026-08-03 (HEAD `97f3a54`)
 
 | Piece | State |
 |---|---|
 | Pipeline: redact → LLM map → doctor review → PDF fill | Working, 112 backend tests pass (1 skipped) |
-| Extension: learn-mode dumper + hybrid matcher + value application | Built and green, 67 tests. No manifest, no orchestrator, never run on a real portal |
+| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 83 tests. **Never run in a real browser or on a real portal** |
+| `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
-| React UI: 3-step flow, form picker, review screen | Rebuilt for first-time clarity |
+| React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | Fly deploy | **Live** at https://formfill-backend.fly.dev — 1 machine in `sin`, health check passing |
 | `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` fails until set |
@@ -128,6 +129,55 @@ A dump gets pasted into a model to draft a schema, which makes it an LLM input
 and subject to the same rules as clinical text. See `extension/README.md` for
 the residual risks that remain.
 
+**The product is the extension; the website is not the surface.** The owner's
+call (2026-08-03). The doctor pastes into a side panel next to the insurer's
+form rather than into a separate site.
+
+The justification worth keeping is not "the forms arrive on insurer websites" —
+that argues only for an extension existing, which was already settled. It is
+what the pivot *deletes*. With a separate website the note lives on origin A
+and the form on origin B, so the design needed `externally_connectable`, a
+handoff protocol, a claim id to correlate the two, and a **server-side session
+to hold the claim between "typed the note" and "filled the form"**. Put the
+paste area beside the form and none of that has a reason to exist.
+
+Hence `POST /map`: same review rows, no claim id, nothing stored, nothing to
+purge. Retention on the extension path is zero rather than one hour. `redact →
+map → assemble` lives in `_review_rows` so both endpoints share one path — a
+second caller that reimplemented it is how a route that skips redaction gets
+introduced.
+
+What did **not** change, and must not:
+
+- **"Fully an extension" does not mean serverless.** The API key cannot ship
+  in an extension; a packed `.crx` is a zip. The backend stays.
+- **The review step moves, it does not disappear.** Anything not directly
+  `extracted` still needs an explicit confirm before it is written into the
+  portal. The pivot must not quietly become fill-then-eyeball.
+- **The five PDF forms stay.** Not every insurer sends a link, and they work.
+  What stops is *investment in the website*, not the acroform/overlay paths.
+
+Redaction stays server-side for now. Running it in the extension would mean
+demographics never leave the browser at all, which is strictly better — but it
+means `redaction.py` in two languages with two test suites, and any drift
+between them is a leak. That is a hardening task, not part of the pivot.
+
+**The extension holds no standing access to anything.** `manifest.json`
+declares no `content_scripts`, no default `host_permissions`, and — this is
+the easy one to undo by accident — **no `tabs` permission**, which would expose
+every tab's address. `panel.js` therefore never learns what site it is on; it
+finds out from the injected script's own `location.host`, after the doctor
+granted `activeTab` by clicking the toolbar icon on that tab. Consequence to
+accept rather than route around: opening the panel on one tab and switching to
+another means clicking the icon again. `optional_host_permissions` is declared
+but not yet requested — it is there for the `MutationObserver` work, which
+needs access that survives a wizard step.
+
+No `chrome.storage` anywhere, and the permission is not requested: patient
+notes must not reach disk. This is also why `background.js` is nearly empty —
+a service worker acting as a message broker is evicted after ~30s idle, so it
+would have to persist the note to survive. State lives in the panel.
+
 **The filler is hybrid: live structure locates, the schema means.** The owner's
 design (2026-08-01). The extension reads the form structure *at fill time*
 rather than trusting a selector map authored months earlier, which is what
@@ -221,7 +271,14 @@ omission to "fix".
 - Demographics never reach the LLM. They are copied onto the form
   deterministically and double as the redaction dictionary.
 - The token→value map stays in server memory; claims are in-memory only,
-  deleted on download, purged after 1h.
+  deleted on download, purged after 1h. `POST /map` stores nothing at all.
+- **No `chrome.storage`, and the permission is not requested.** Patient notes
+  must not reach disk. The claim lives in the side panel's memory while the
+  doctor has it open; closing the panel discards it. Any future need to
+  remember something between events belongs in the panel, not the service
+  worker — a worker that has to survive eviction has to persist.
+- **The extension never submits.** It fills in place; the doctor clicks submit
+  and signs. `apply.test.js` and `content/fill.test.js` both assert it.
 - No patient data in logs or error messages. LLM failures return a generic
   `"LLM call failed"`.
 - **No real patient data until inference is confirmed in-region.** Both calls
@@ -251,6 +308,11 @@ omission to "fix".
 
 # extension tests (separate toolchain — vitest + jsdom, from the repo root)
 npm install && npm test
+
+# load the extension: chrome://extensions -> Developer mode -> Load unpacked
+# -> select extension/. Reload it after every change; the side panel needs
+# reopening, and content scripts need the insurer tab reloaded too.
+# Point it at a local backend via the panel's Advanced -> Backend URL.
 
 # backend dev
 ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
@@ -290,21 +352,36 @@ node stage.
    a working claim: `fly secrets set ANTHROPIC_API_KEY=...`. Must be run by
    the owner in their own terminal, never through Claude Code's `!` prefix
    (which writes the command into the transcript).
-2. **Browser extension for link-delivered forms** — now the main line of work,
-   because it is the channel AIA actually uses. Learn mode
-   (`extension/learn/dump.js`), the hybrid matcher (`extension/fill/locate.js`)
-   and value application (`extension/fill/apply.js`) are built and green. Still
-   missing: `manifest.json`, the content script that wires the three together,
-   the `externally_connectable` handoff from the website, proof mode (outline
-   each filled control and stamp its field id — the port of
-   `calibrate_overlay.py --proof`), and a `MutationObserver` re-run as wizard
-   steps render. None of it has run against a real portal.
-   **Blocked on one thing: a learn-mode dump from a live ClaimEZ page.** An
-   expired link renders an error page with no fields, `submit-offline` is
-   post-submission only, and the portal is a JS-rendered SPA so no fetch-based
-   tool can see its DOM. It has to be a real page in a real browser. Run the
-   dump before filling the claim; it is read-only and does not consume the
-   token.
+2. **Load the extension in Chrome and watch it fail.** It is complete enough to
+   run — manifest, side panel, service worker, and the orchestrator wiring
+   dump/locate/apply — and 83 tests pass against jsdom and a synthetic fixture.
+   That proves the logic, not the fit. `chrome://extensions` → Developer mode →
+   Load unpacked → `extension/`. Every assumption below is untested in a real
+   browser, and each fails in a way the tests cannot see:
+   - Whether an action click that opens the side panel actually grants
+     `activeTab`. If it does not, `chrome.scripting.executeScript` throws and
+     the panel shows its "click the ClaimFill icon" message forever.
+   - Whether a content script's write defeats React's `_valueTracker` at all.
+     In an isolated world the content script gets its own DOM wrappers, so the
+     instance-level tracker React installed in the main world may not even be
+     visible — meaning the prototype-setter trick is either belt-and-braces or
+     load-bearing, and only a real portal says which.
+   - Whether the form is inside an **iframe**. Injection is not `allFrames`, so
+     it would read as a page with no controls and refuse. Safe direction to
+     fail, but it needs `allFrames` plus a decision on how per-frame reports
+     merge and which frame the match rate is computed over.
+3. **Proof mode** — outline each filled control and stamp its field id, the
+   port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
+   adjacent controls are usually different questions, and a misplaced value is
+   obvious in a render and invisible in a report. Then the `MutationObserver`
+   re-run as wizard steps render (this is what `optional_host_permissions` is
+   declared for).
+4. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
+   page.** The pivot did not move this. An expired link renders an error page
+   with no fields, `submit-offline` is post-submission only, and the portal is
+   a JS-rendered SPA so no fetch-based tool can see its DOM. It has to be a
+   real page in a real browser. Run the dump before filling the claim; it is
+   read-only and does not consume the token.
 3. **Paste-and-parse demographics** — one pasted block from ClinicAssist fills
    name/NRIC/DOB/phone instead of six fields.
 4. **SG-region inference** before any real patient note.
