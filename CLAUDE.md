@@ -223,6 +223,22 @@ mangled real values on the Great Eastern form: `S1234567D` → `345670`).
 `/MaxLen` on any text field being filled. Tests must read raw annotations via
 `page["/Annots"]`, not `get_fields()`.
 
+**The side panel API has two traps, and they compound.** Both found on Chrome
+150, 2026-08-03, and each looks like a console warning while silently breaking
+page access.
+
+1. `chrome.sidePanel.setPanelBehavior()` throws `Error: No SW` when called at
+   the service worker's **top level** — the worker is not registered as active
+   yet. Call it from `onInstalled`/`onStartup`.
+2. `openPanelOnActionClick: true` opens the panel but does **not** grant
+   `activeTab`: Chrome handles the click itself so `action.onClicked` never
+   fires, and a click that does not reach the extension is not an invocation.
+
+They compound because the behaviour is **persisted per-extension**. Trap 1
+means the fix for trap 2 does not land, so an install that once set the flag
+`true` keeps swallowing clicks — and the only symptom is the panel saying it
+has no access to a tab the doctor is plainly looking at.
+
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
