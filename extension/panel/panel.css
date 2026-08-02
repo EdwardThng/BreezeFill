@@ -1,0 +1,305 @@
+/*
+  ClaimFill side panel.
+
+  Constraints that shaped this: the panel is roughly 400px wide and sits
+  alongside a dense insurer form, so it competes for attention with the thing
+  the doctor is actually trying to read. It stays quiet — one accent colour,
+  used only for the two buttons that do something.
+
+  The one place colour carries meaning is the status of a mapped value, and
+  that is deliberately not colour alone. Every row also states its status in
+  words, because roughly one in twelve men has a colour vision deficiency and
+  the difference between "extracted from the note" and "inferred" is the whole
+  reason the review step exists.
+*/
+
+:root {
+  --bg: #ffffff;
+  --fg: #16191d;
+  --muted: #5d6470;
+  --line: #dfe3e8;
+  --field-bg: #ffffff;
+  --accent: #1a5fb4;
+  --accent-fg: #ffffff;
+  --extracted: #1f7a3d;
+  --inferred: #9a6100;
+  --missing: #737b87;
+  --danger: #b3261e;
+  --warn-bg: #fdf3e2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1e23;
+    --fg: #e9ecf1;
+    --muted: #a3abb8;
+    --line: #333941;
+    --field-bg: #23272d;
+    --accent: #7aa9e9;
+    --accent-fg: #10131a;
+    --extracted: #6cc48a;
+    --inferred: #e0b25c;
+    --missing: #9aa2ae;
+    --danger: #f29b95;
+    --warn-bg: #33291a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 12px 14px 32px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.tagline {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Steps ------------------------------------------------------------------- */
+
+.step {
+  margin-bottom: 22px;
+}
+
+.step[hidden] {
+  display: none;
+}
+
+h2 {
+  font-size: 13px;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.num {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Fields ------------------------------------------------------------------ */
+
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field > span {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--field-bg);
+  color: inherit;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Two columns for the short demographic fields; one for anything narrower. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0 10px;
+}
+
+/* Buttons ----------------------------------------------------------------- */
+
+button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--field-bg);
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Text -------------------------------------------------------------------- */
+
+.note {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 8px 0;
+}
+
+.status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  min-height: 1.2em;
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+.status.busy {
+  color: var(--muted);
+}
+
+/* Review rows ------------------------------------------------------------- */
+
+.review-row {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+}
+
+/* Anything awaiting a confirm click is visibly unfinished, so a panel
+   scrolled past at speed does not read as ready. */
+.review-row.pending {
+  background: var(--warn-bg);
+  border-color: var(--inferred);
+}
+
+.review-row > .label {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.review-row .help {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 0 0 6px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.badge.extracted {
+  color: var(--extracted);
+}
+.badge.demographic {
+  color: var(--extracted);
+}
+.badge.inferred {
+  color: var(--inferred);
+}
+.badge.missing {
+  color: var(--missing);
+}
+
+.review-row .confirm {
+  margin-top: 7px;
+}
+
+.review-row.confirmed .confirm {
+  display: none;
+}
+
+/* Fill report ------------------------------------------------------------- */
+
+#fill-report ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+#fill-report li {
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+
+#fill-report .unknown {
+  color: var(--muted);
+}
+
+/* Advanced ---------------------------------------------------------------- */
+
+.advanced {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
