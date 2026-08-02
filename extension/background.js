@@ -26,14 +26,38 @@
  * two events, that is the signal it belongs in the panel instead.
  */
 
-// Clicking the toolbar icon opens the side panel. Without this, the action
-// click does nothing at all, since the manifest deliberately declares no
-// default_popup — a popup closes the moment the doctor clicks the form, which
-// is every time they check a filled value against the page.
+/**
+ * Opening the panel, and why it is done the long way.
+ *
+ * The one-liner for this is `setPanelBehavior({ openPanelOnActionClick: true })`
+ * and it does open the panel. But Chrome then handles the toolbar click itself,
+ * `action.onClicked` never fires, and — the part that matters — the click does
+ * not count as invoking the extension, so **no `activeTab` is granted**. The
+ * panel opens and then cannot touch the tab it is sitting next to.
+ * Verified on Chrome 150: the panel reported "no access to this tab" on a page
+ * the doctor was looking at.
+ *
+ * Taking the click here instead is what earns the grant: an `action.onClicked`
+ * handler is the canonical `activeTab` trigger, and opening the panel from
+ * inside it keeps the same one-click gesture. The grant then lasts until that
+ * tab navigates or closes, which is the whole claim.
+ *
+ * `openPanelOnActionClick` is set to false explicitly rather than left unset.
+ * It is persisted per-extension, so an install that ever set it true keeps
+ * swallowing the click until something sets it back.
+ */
 chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
+  .setPanelBehavior({ openPanelOnActionClick: false })
   .catch((error) => {
-    // No patient data can reach here — this fires before any claim exists —
-    // but keep it terse regardless, out of habit rather than necessity.
     console.error("ClaimFill: could not set panel behaviour", error);
   });
+
+chrome.action.onClicked.addListener((tab) => {
+  // Must stay synchronous with the click: `sidePanel.open` requires the user
+  // gesture, and awaiting anything first can spend it.
+  chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
+    // No patient data can reach here — this fires before any claim exists —
+    // but keep it terse regardless, out of habit rather than necessity.
+    console.error("ClaimFill: could not open the side panel", error);
+  });
+});
