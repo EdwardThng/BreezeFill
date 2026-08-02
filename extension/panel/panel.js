@@ -28,7 +28,13 @@
 
 // Overridable in the Advanced section, in memory only. A wrong value here
 // costs a failed request, not a leak: the panel only ever posts to it.
-const DEFAULT_API_BASE = "https://formfill-backend.fly.dev";
+//
+// Local by default because there is currently no deployed backend —
+// formfill-backend.fly.dev stopped resolving on 2026-08-03. Pointing at it
+// guaranteed a "could not reach the backend" error every time the panel
+// opened, which is worse than pointing at nothing. **Change this the moment a
+// deploy exists**, because a doctor will not be running uvicorn.
+const DEFAULT_API_BASE = "http://localhost:8000";
 
 // Order matters: the orchestrator expects the other three to have registered
 // themselves on globalThis by the time it runs.
