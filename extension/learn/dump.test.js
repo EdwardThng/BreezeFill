@@ -196,6 +196,7 @@ describe("label resolution", () => {
     ["patientNric", "NRIC / FIN Number", "aria-label"],
     ["contactNo", "Contact Number", "wrapping-label"],
     ["dob", "Date of Birth", "table-cell"],
+    ["admissionDate", "Date of Admission", "ancestor-sibling"],
   ])("%s resolves via %s", (name, expectedLabel, expectedSource) => {
     const control = byName(learn.dump(), name);
     expect(control.label).toBe(expectedLabel);
@@ -221,6 +222,7 @@ describe("label resolution", () => {
       "wrapping-label",
       "table-cell",
       "preceding-sibling",
+      "ancestor-sibling",
       "placeholder",
       "section-heading",
       "none",
@@ -228,6 +230,53 @@ describe("label resolution", () => {
     for (const control of learn.dump().controls) {
       expect(known).toContain(control.labelSource);
     }
+  });
+
+  test("a control is never labelled with a neighbouring control's options", () => {
+    // Regression, found on RoboForm: three <select>s in a row for a date, so
+    // each one's previous sibling is another <select> and rawTextOf() returned
+    // its entire option list as the "label". Junk as a match key, and worse, a
+    // route around buildOptions()'s withholding rule — an option list that
+    // enumerates patients would have been emitted as a label instead.
+    const row = document.createElement("div");
+    row.innerHTML =
+      '<div class="col">Date Of Birth</div>' +
+      '<div class="col">' +
+      '<select name="dobMonth"><option>Jan</option><option>Feb</option></select>' +
+      '<select name="dobYear"><option>1971</option><option>1972</option></select>' +
+      "</div>";
+    document.querySelector("#claim-form").append(row);
+
+    const dump = learn.dump();
+    for (const name of ["dobMonth", "dobYear"]) {
+      const control = byName(dump, name);
+      expect(control.label).toBe("Date Of Birth");
+      expect(control.label).not.toContain("Jan");
+    }
+  });
+
+  test("prose next to a control is not a label, however close it sits", () => {
+    // The <p> beside proseTrap reads "Claim for Tan Wei Ming (S1234567D)".
+    // Scrubbing cannot save this one — it takes the NRIC and leaves the name,
+    // because a name has no shape. The guarantee is the same as sectionFor()'s:
+    // prose is not read at all. An unlabelled control costs a schema author a
+    // minute; a leaked name is a breach.
+    const control = byName(learn.dump(), "proseTrap");
+    expect(control.label).toBe("");
+    expect(control.labelSource).toBe("none");
+  });
+
+  test("the walk up stops before it leaves the control's own fieldset", () => {
+    // Rule 6 climbs through containers, and the thing above the outermost one
+    // is page chrome. Two hops is the budget; a label further away than that
+    // belongs to a different question anyway.
+    const deep = document.createElement("div");
+    deep.innerHTML =
+      "<div>Attending Physician</div>" +
+      '<div><div><div><input type="text" name="tooDeep" /></div></div></div>';
+    document.querySelector("#claim-form").append(deep);
+
+    expect(byName(learn.dump(), "tooDeep").label).toBe("");
   });
 });
 
