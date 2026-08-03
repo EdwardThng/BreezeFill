@@ -580,12 +580,16 @@ cd frontend && npm run build          # backend then serves it at /
 ./.venv/Scripts/python.exe backend/pdf_fill.py forms/your_form.pdf
 ```
 
-**`flyctl` is NOT installed on this machine** (checked 2026-08-03: no
-`~/.fly/`, nothing on PATH, no scoop/choco/winget shim). An earlier note here
-claimed `~/.fly/bin/flyctl.exe`; that path is gone, which fits the app having
-been destroyed. Install with `iwr https://fly.io/install.ps1 -useb | iex`, then
-add `~\.fly\bin` to PATH. Nothing about Fly can be checked — not the app list,
-not whether a secret exists — until it is back.
+**`flyctl` is installed at `~/.fly/bin/flyctl.exe`** (reinstalled 2026-08-03
+with `iwr https://fly.io/install.ps1 -useb | iex`, after being found missing —
+its absence fit the app having been destroyed rather than stopped). `~\.fly\bin`
+is on the persistent user PATH, so a **new** terminal finds it; one opened
+before the install will not.
+
+**The command is `flyctl`, not `fly`.** The Windows installer ships
+`flyctl.exe` and no `fly.exe`, so every `fly ...` line in Fly's own docs is a
+command-not-found here, and it reads exactly like a PATH problem that reopening
+the terminal should fix. It is not.
 
 The `!` prefix in Claude Code runs **Bash**, not PowerShell.
 
