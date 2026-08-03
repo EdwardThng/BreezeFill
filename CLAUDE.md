@@ -18,6 +18,7 @@ father, a Singapore GP.
 | Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150, and has now filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
+| Bank → fallback → draft schema | Working, 114 extension tests + 13 backend. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. **Not yet run in a browser** — RoboForm is in the bank, so exercising the fallback needs a page that is not |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
@@ -304,6 +305,72 @@ notes must not reach disk. This is also why `background.js` is nearly empty —
 a service worker acting as a message broker is evicted after ~30s idle, so it
 would have to persist the note to survive. State lives in the panel.
 
+**The bank, then the page. And filling an unknown form produces the schema
+that replaces it.** The owner's design (2026-08-03). Three steps:
+
+1. **Is this form in the bank?** Answered by *fingerprint*, not by reading an
+   id out of the markup. Every schema is scored against the live controls and
+   the best fit wins — which asks "does this page carry the fields this schema
+   describes", the thing that actually matters, instead of a version string
+   that rots at the insurer's next deploy. Host matching still runs first and
+   narrows the shortlist; it cannot settle it, because an insurer serves
+   several forms from one domain. A tie is not a winner.
+
+   Identification runs at *looser* thresholds than filling (`IDENTIFY_MIN_RATE
+   = 0.4` vs `MIN_MATCH_RATE = 0.7`) and that is safe rather than sloppy: a
+   wizard shows one step at a time, so the right schema may only find a third
+   of its fields on the page in front of us. Whatever is picked still has to
+   clear the fill guards before a value is written. Identifying is choosing
+   what to *try*.
+
+2. **If nothing fits, map against the page itself** — `POST /map-live`. The
+   field list comes off the live controls; same redaction, same review rows,
+   same confirm-before-write. Offered only when nothing in the bank fits, and
+   never the default, because it is **strictly weaker**: a schema's
+   `description` is the instruction you would give a colleague ("the date the
+   patient FIRST consulted this doctor for this condition, not the latest
+   visit") and a page can only supply the question as it is worded.
+
+   The cost was accepted deliberately and is the one thing the schema path was
+   built to avoid: **page structure becomes an LLM input on every claim mapped
+   this way.** Labels are scrubbed twice — once by `dump.js` in the browser,
+   once by `scrub_patterns` on the way in — and it still cannot catch a name,
+   because a name has no shape. `test_a_name_in_a_label_is_the_known_hole`
+   asserts the failure so nobody rediscovers it by accident.
+
+3. **A successful schema-free fill hands back a draft schema** for a human to
+   read and commit. Not installed, not auto-committed, not PR'd — the owner's
+   call, and the right one: a schema is used on every later claim against that
+   form, so an unreviewed one turns a single mis-mapped field into a permanent
+   wrong answer that nothing ever re-checks. The draft appears while the page
+   that produced it is still on screen, which is the only moment anyone can
+   check the labels against the form they are looking at.
+
+Two traps found while building it, both in the draft:
+
+- **`hosts` gets the full host, never a guessed registrable domain.** "The
+  last two labels" of `claimez.aia.com.sg` is `com.sg`, and `hostMatches`
+  matches subdomains — that schema would have claimed every commercial site in
+  Singapore. Widening it by hand is a one-word edit; a schema that silently
+  claims a TLD looks correct in review.
+- **The draft includes fields this note left blank.** A schema describes the
+  form, not one claim against it. Dropping the blanks would stop a later,
+  fuller note from ever filling them.
+
+**Screenshots and a VLM were considered for step 2 and rejected (2026-08-03).**
+The argument that settled it is not the privacy one, though that holds too — an
+insurer's claim page arrives pre-populated, so a screenshot of it is a picture
+of the patient's NRIC, and every pass in `redaction.py` operates on text. The
+stronger argument is that **a screenshot redacted enough to be safe contains
+less than the dump already does**: you would have to black out every control
+(they hold patient values) and every heading and paragraph (names have no
+shape), leaving labels and layout — and labels are already extracted, scrubbed,
+with the layout question answered by rule 6. The increment a screenshot buys
+over the dump is essentially the prose, which is exactly the part that carries
+the name. A VLM would also return *coordinates*, and mapping those back through
+`elementFromPoint` trades a reliable locator for an unreliable one when the DOM
+is already in hand. Use a model for meaning, the DOM for location.
+
 **The filler is hybrid: live structure locates, the schema means.** The owner's
 design (2026-08-01). The extension reads the form structure *at fill time*
 rather than trusting a selector map authored months earlier, which is what
@@ -439,7 +506,13 @@ omission to "fix".
   block to Claude when a field comes back blank — a blank field is a doctor
   typing one line.
 - The token→value map stays in server memory; claims are in-memory only,
-  deleted on download, purged after 1h. `POST /map` stores nothing at all.
+  deleted on download, purged after 1h. `POST /map`, `POST /map-live` and
+  `POST /parse` store nothing at all.
+- **A drafted schema is a proposal, never an installation.** `/map-live`
+  returns rows; the panel renders JSON; a human commits it. Do not add a route
+  that writes a schema to disk from a running claim — the schema then governs
+  every later claim on that form and nothing would ever re-read it. This was
+  decided with the alternatives on the table (auto-PR, auto-write).
 - **No `chrome.storage`, and the permission is not requested.** Patient notes
   must not reach disk. The claim lives in the side panel's memory while the
   doctor has it open; closing the panel discards it. Any future need to
@@ -608,7 +681,13 @@ node stage.
    obvious in a render and invisible in a report. Then the `MutationObserver`
    re-run as wizard steps render (this is what `optional_host_permissions` is
    declared for).
-7. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
+7. **Exercise the fallback in a browser.** The bank→fallback→draft loop is
+   tested but has never run against a real unknown page: RoboForm is *in* the
+   bank now, so it proves the wrong branch. Any public form with labelled
+   fields that no schema describes will do. Watch for two things the tests
+   cannot see — how many of a real page's controls come back unlabelled, and
+   whether `MAX_LIVE_FIELDS` is anywhere near right.
+8. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
    page.** The pivot did not move this. An expired link renders an error page
    with no fields, `submit-offline` is post-submission only, and the portal is
    a JS-rendered SPA so no fetch-based tool can see its DOM. It has to be a
@@ -616,15 +695,15 @@ node stage.
    read-only and does not consume the token. `roboform_test_v1` is now the only
    schema declaring `hosts`, so auto-detection succeeds there and nowhere else
    — on any insurer page the picker is still the expected outcome, not a bug.
-8. ~~**Paste-and-parse demographics.**~~ **Done 2026-08-03** — one box,
+9. ~~**Paste-and-parse demographics.**~~ **Done 2026-08-03** — one box,
    `POST /parse`, patterns only. What is left is narrower and worth doing after
    the pilot has pasted a few real CMS exports: the label synonyms in
    `demographics.py` are a guess at what ClinicAssist emits, and the parser
    cannot find an insurer that is only implied by a policy prefix (`GHS-`,
    `GE-`, `PRU-`). Deriving it from the selected schema's `insurer` would be
    deterministic and is probably right.
-9. **SG-region inference** before any real patient note.
-10. Deferred: coordinate-overlay fill for the three scanned forms.
+10. **SG-region inference** before any real patient note.
+11. Deferred: coordinate-overlay fill for the three scanned forms.
 
 ---
 
