@@ -45,51 +45,72 @@
         <select id="form-id" hidden aria-label="Insurer form"></select>
       </div>
 
-      <div class="grid">
-        <label class="field">
-          <span>Full name</span>
-          <input id="full-name" type="text" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span>NRIC</span>
-          <input id="nric" type="text" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span>Date of birth</span>
-          <input id="dob" type="date" />
-        </label>
-        <label class="field">
-          <span>Phone</span>
-          <input id="phone" type="text" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span>Policy number</span>
-          <input id="policy-number" type="text" autocomplete="off" />
-        </label>
-        <label class="field">
-          <span>Insurer</span>
-          <input id="insurer" type="text" autocomplete="off" />
-        </label>
-      </div>
-
+      <!--
+        One box. The doctor pastes the patient's details and the note
+        together, exactly as they sit in the CMS, and the identifiers are
+        pulled back out by pattern — see backend/demographics.py.
+      -->
       <label class="field">
-        <span>Address</span>
-        <input id="address" type="text" autocomplete="off" />
-      </label>
-
-      <label class="field">
-        <span>Clinical note</span>
-        <textarea id="clinical-text" rows="8" spellcheck="false"></textarea>
+        <span>Paste the consultation</span>
+        <textarea
+          id="paste"
+          rows="14"
+          spellcheck="false"
+          placeholder="Paste the patient's details and the clinical note together."
+        ></textarea>
       </label>
 
       <!--
-        Not decoration. Demographics above are copied onto the form
-        deterministically and double as the redaction dictionary; only the
-        note below is redacted and sent to the model.
+        Not a summary — a correction surface, and a required one. These values
+        are what redaction searches for in the note, so a name that arrived
+        wrong here is a name that stays in the text sent to the model. The
+        drawer opens itself when something needed is missing.
+      -->
+      <details class="found" id="found">
+        <summary id="found-summary">Patient details</summary>
+
+        <div class="grid">
+          <label class="field">
+            <span>Full name</span>
+            <input id="full-name" type="text" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>NRIC</span>
+            <input id="nric" type="text" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Date of birth</span>
+            <input id="dob" type="date" />
+          </label>
+          <label class="field">
+            <span>Phone</span>
+            <input id="phone" type="text" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Policy number</span>
+            <input id="policy-number" type="text" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Insurer</span>
+            <input id="insurer" type="text" autocomplete="off" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Address</span>
+          <input id="address" type="text" autocomplete="off" />
+        </label>
+      </details>
+
+      <!--
+        Not decoration. The identifiers are found by pattern, never by a
+        model: they are the dictionary redaction uses to scrub the paste
+        before any of it is sent, so they have to exist before the model does.
       -->
       <p class="note">
-        Names and identifiers above never reach the model. They are used to
-        redact the note, and are written onto the form directly.
+        Names and identifiers are found by pattern, never by a model. They are
+        what the paste is redacted against before any of it is sent to one,
+        and they are written onto the form directly.
       </p>
 
       <button id="map-btn" class="primary" type="button">Map fields</button>
