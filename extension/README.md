@@ -11,9 +11,26 @@ So this directory holds the third fill target, alongside `acroform` and
 also **the product's main surface** — the doctor pastes the note into this
 extension's side panel rather than into a separate website.
 
-**Current state: complete enough to load, never run in a browser.** 83 tests
-pass against jsdom and a synthetic fixture, which proves the logic and says
-nothing about the fit.
+**Current state: loads and runs in Chrome 150; no browser fill confirmed yet.**
+101 tests pass against jsdom and a synthetic fixture. Running it in a browser
+has already found four things the suite could not — see the table in
+`../CLAUDE.md` — so read a green suite as "the logic holds", never as
+readiness.
+
+There is now a route that can be run end to end **without an `ANTHROPIC_API_KEY`**:
+`roboform_test_v1` targets RoboForm's public 39-field test page and is
+all-demographics, so no model is called at any point.
+
+```bash
+FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1 \
+  ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
+```
+
+Then open <https://www.roboform.com/filling-test-all-fields>, click the
+ClaimFill icon **on that tab**, paste a case from `docs/test_notes.md`, and
+Map. Five fields fill; Date Of Birth is reported ambiguous, because three
+`<select>`s there share that one label and picking one of them would be a
+guess.
 
 ---
 
@@ -36,7 +53,7 @@ requests no storage permission, so there is nowhere to persist it).
 |---|---|
 | `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`, no `storage`. |
 | `background.js` | Opens the side panel on action click. Nothing else, deliberately. |
-| `panel/` | The doctor's surface: patient + note → `POST /map` → review → fill. Holds the claim in memory. |
+| `panel/` | The doctor's surface: one pasted block → `POST /parse` → `POST /map` → review → fill. Holds the claim in memory. |
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
 | `learn/dump.js` | Learn mode, plus the control collection and label scrubbing the filler reuses. |
 | `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. |
@@ -100,7 +117,7 @@ copy(JSON.stringify(claimfillLearn.mergeDumps(steps), null, 2));
 
 | Field | Meaning |
 |---|---|
-| `label` / `labelSource` | The question text, and how it was found. `aria-label`, `label[for]` and `wrapping-label` are real associations; `preceding-sibling` and `placeholder` are guesses and should be checked by eye. |
+| `label` / `labelSource` | The question text, and how it was found. `aria-label`, `label[for]` and `wrapping-label` are real associations; `table-cell`, `preceding-sibling`, `ancestor-sibling` and `placeholder` are proximity guesses and should be checked by eye. |
 | `selector` | Fallback match key. Weaker than `label` on purpose — framework builds regenerate ids and class names, but insurers rarely reword a regulated question. |
 | `options` | Enumerations. `withheld: true` means the list looked like claim data, not choices, and only the count survives. |
 | `maxLength` | Silent truncation risk. The web equivalent of the `/MaxLen` comb-field trap in `pdf_fill.py`. |
@@ -148,9 +165,18 @@ whole is what catches it.
 
 - A list of bare names with no number or NRIC beside them would pass. Nothing
   here detects that.
-- `preceding-sibling` labels are page text adjacent to a control. Scrubbed, but
-  not covered by the prose ban.
+- `preceding-sibling` and `ancestor-sibling` labels are page text near a
+  control. Scrubbed, but by proximity rather than by association, so they are
+  the two sources a schema author should read before trusting.
 - `scrubbedStrings` undercounts: it only sees shaped identifiers.
+
+`ancestor-sibling` is the newest of these and the one that widens the surface,
+so it is bounded deliberately: two hops, never past the control's own form or
+fieldset, never a heading or a paragraph, never a node containing another
+control, nothing over 200 characters. It exists because without it a whole
+page can read as unlabelled — 36 of RoboForm's 39 controls did — and that
+failure is invisible: every label scores 0, nothing matches, and the filler
+refuses a page it could have filled.
 
 **Prefer a test or expired link.** Where that is not possible, read the dump
 before it goes anywhere — it is a few hundred lines of JSON and eyeballing it
@@ -187,13 +213,17 @@ only as good as that list.
 - **A `MutationObserver` re-run** as wizard steps render. This is what the
   declared-but-unrequested `optional_host_permissions` is for: access that
   survives a step change.
-- **`fill_mode: "web"` in `FormSchema`**, so a web target is a first-class
-  schema kind rather than a plan assembled in the panel.
 - **An AIA ClaimEZ schema**, blocked on a learn-mode dump from a live page.
 
 ## Assumptions that jsdom cannot test
 
 Every one of these fails silently or misleadingly on a real portal:
+
+- ~~Does label resolution find anything on a real page?~~ **Answered on
+  RoboForm: it did not.** 36 of 39 controls resolved to an empty label, which
+  scores 0 against every schema field, so the page could not have been filled
+  by any schema. The fixture used `<label for>` and tables throughout and could
+  not see it. Fixed by rule 6; the fixture now carries a grid row too.
 
 - ~~Does opening the side panel via the action click grant `activeTab`?~~
   **Answered on Chrome 150: no.** With
