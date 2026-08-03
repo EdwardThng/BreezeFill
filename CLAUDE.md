@@ -22,9 +22,9 @@ father, a Singapore GP.
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
-| Fly deploy | **Gone.** `formfill-backend.fly.dev` returned NXDOMAIN on 2026-08-03 — the name does not resolve at all, so this is a destroyed/renamed app, not a stopped machine. Was live on 2026-07-30. Verify with `flyctl apps list` before assuming a URL |
-| `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` and `POST /map` fail until set |
-| **Demoable?** | **Still needs a terminal, but no longer needs a key.** With no Fly app, `DEFAULT_API_BASE` points at `http://localhost:8000`, so every demo needs `uvicorn` running on the demo machine. What changed on 2026-08-03: the RoboForm route is all-demographics, so with `FORMFILL_DISABLE_SWEEP=1` **no `ANTHROPIC_API_KEY` is needed at all** to demo paste → parse → review → fill. An insurer form still needs one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
+| Fly deploy | **Live at `https://claimfill.fly.dev`**, redeployed 2026-08-03 with today's build. One machine, region `sin`, health passing. The app was never gone — the NXDOMAIN was `formfill-backend.fly.dev`, a name this project does not use; `fly.toml` says `claimfill` and always did. It **scales to zero now** (see fly.toml): first request after an idle spell is a second or two slow, not an error |
+| `ANTHROPIC_API_KEY` | **Set as a Fly secret** and confirmed working — a live `POST /map` returns 200, which exercises the sweep. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1` |
+| **Demoable?** | **Yes — no terminal, no key.** `DEFAULT_API_BASE` is `https://claimfill.fly.dev`, which is live and holds the key. Load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
 
 Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
 static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
@@ -619,20 +619,18 @@ node stage.
 
 ## Next steps
 
-1. **Redeploy the backend. This is what blocks demoing, and it blocked one
-   already.** `formfill-backend.fly.dev` no longer resolves, so the extension
-   points at `localhost:8000` and a demo needs a terminal. `flyctl apps list`
-   first — the name may have changed rather than the app having been
-   destroyed. Then `fly deploy --ha=false` and
-   `fly secrets set ANTHROPIC_API_KEY=...`, both in the owner's own terminal,
-   never through Claude Code's `!` prefix (which writes the command into the
-   transcript). Update `DEFAULT_API_BASE` in `extension/panel/panel.js` once
-   the URL is known. Check `fly status` afterwards for the two-machine trap.
+1. ~~**Redeploy the backend.**~~ **Done 2026-08-03.** `claimfill.fly.dev` runs
+   the current build, the key is a Fly secret and verified live, one machine in
+   `sin`, and `DEFAULT_API_BASE` points at it. The demo needs neither a
+   terminal nor a key now.
 
-   **Until that lands, the demo checklist is:** start uvicorn on :8000 before
-   opening the panel. A key is no longer part of it for the RoboForm route —
-   see the commands section. The panel no longer needs reopening if the backend
-   started late: `onMap` retries the form load.
+   Two things to watch, neither yet observed:
+   - **Does it actually sleep?** The app scales to zero for the first time. If
+     `fly status` shows it `started` after a long idle period, the 30s health
+     check in `fly.toml` is the first suspect.
+   - **Does waking it feel broken?** A cold start adds a second or two to the
+     first request. If that reads as a hang in the panel, the fix is a status
+     line, not a config change — do not reflexively turn scale-to-zero off.
 
 2. ~~**Make the panel survivable when the backend is down.**~~ **Done
    2026-08-03**, with `panel.test.js` to hold it: network `TypeError` → fixed
