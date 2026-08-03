@@ -101,6 +101,48 @@
     return String(node.textContent || "").replace(/\s+/g, " ").trim();
   }
 
+  // How far up the tree rule 6 looks for a label sitting in a sibling
+  // container. Two hops covers the usual grid nesting (cell -> row); more
+  // starts finding text that belongs to a different question.
+  const MAX_LABEL_HOPS = 2;
+
+  // The walk never climbs out of the control's own form or fieldset.
+  const LABEL_WALK_STOP = new Set(["FORM", "FIELDSET", "TABLE", "BODY", "HTML"]);
+
+  // Never read as a label, whatever the DOM says it is next to.
+  //
+  // Headings and paragraphs are page prose, and the ban on reading prose is
+  // the same one sectionFor() documents: the scrubber finds identifiers by
+  // SHAPE, and a name has none, so "Claim for Tan Wei Ming" is indetectable.
+  // A control adjacent to another control is the other trap — a <select>'s
+  // previous sibling is often another <select>, whose textContent is its whole
+  // option list. That is not a label, and worse, it routes option text around
+  // buildOptions()'s withholding rule, which exists precisely because option
+  // lists enumerate patients.
+  const NEVER_A_LABEL = new Set([
+    "H1", "H2", "H3", "H4", "H5", "H6", "P",
+    "INPUT", "SELECT", "TEXTAREA", "BUTTON",
+    "SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD",
+  ]);
+
+  // Longer than any question an insurer asks; shorter than a paragraph.
+  const MAX_LABEL_CHARS = 200;
+
+  /**
+   * Text of a node that might be a label, or "" if it may not be read.
+   *
+   * Unscrubbed like rawTextOf — callers are still on the hook for scrub().
+   */
+  function candidateLabelText(node) {
+    if (!node || node.nodeType !== 1) return "";
+    if (NEVER_A_LABEL.has(node.tagName)) return "";
+    if (node.querySelector && node.querySelector("input, select, textarea, button")) {
+      return "";
+    }
+    const text = rawTextOf(node);
+    return text.length > MAX_LABEL_CHARS ? "" : text;
+  }
+
   /**
    * Raw label text plus how it was found.
    *
@@ -155,8 +197,27 @@
     // 5. Nearest preceding element. Last resort and the least trustworthy —
     //    reported as such so schema authoring treats it as a guess rather
     //    than a match key.
-    const text = rawTextOf(el.previousElementSibling);
-    if (text) return { text, source: "preceding-sibling" };
+    const sibling = candidateLabelText(el.previousElementSibling);
+    if (sibling) return { text: sibling, source: "preceding-sibling" };
+
+    // 6. The same idea one step up: grid layouts put the question and the
+    //    control in *sibling containers* rather than sibling elements —
+    //    <div class="col">Home Phone</div><div class="col"><input></div> — so
+    //    the control's own previous sibling is nothing at all. This is the div
+    //    analogue of rule 4, and print-derived insurer forms use it as freely
+    //    as they use tables. Without it a whole page can read as unlabelled,
+    //    which is not a visible failure: every label scores 0, nothing matches,
+    //    and the filler refuses a page it could have filled. Confirmed against
+    //    RoboForm's 39-field test form, where 36 controls resolved to "".
+    for (let node = el.parentElement, hops = 0; node && hops < MAX_LABEL_HOPS; node = node.parentElement, hops += 1) {
+      // A label never lives outside the control's own form or fieldset, and
+      // continuing past one is how the walk reaches page prose — the exact
+      // surface sectionFor() refuses to read, for the reason spelled out
+      // there. Stop rather than climb into it.
+      if (LABEL_WALK_STOP.has(node.tagName)) break;
+      const text = candidateLabelText(node.previousElementSibling);
+      if (text) return { text, source: "ancestor-sibling" };
+    }
 
     const placeholder = el.getAttribute && el.getAttribute("placeholder");
     if (placeholder) return { text: placeholder.trim(), source: "placeholder" };
