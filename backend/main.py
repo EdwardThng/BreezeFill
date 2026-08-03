@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -27,6 +28,7 @@ from pydantic import BaseModel
 
 from demographics import ParsedDemographics, parse_demographics
 from mapping import (
+    FormField,
     FormSchema,
     MappingError,
     assemble_claim,
@@ -37,7 +39,7 @@ from mapping import (
 )
 from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
-from redaction import PatientRecord, redact
+from redaction import PatientRecord, redact, scrub_patterns
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
@@ -141,6 +143,19 @@ class MapResponse(BaseModel):
 
 class ParseRequest(BaseModel):
     text: str
+
+
+class LiveField(BaseModel):
+    """One control read off a page nobody has written a schema for."""
+
+    label: str
+    # The DOM's own type, normalised below. Anything unrecognised is text.
+    type: str = "text"
+
+
+class MapLiveRequest(BaseModel):
+    fields: list[LiveField]
+    patient: PatientRecord
 
 
 class ApproveClaimRequest(BaseModel):
@@ -261,6 +276,86 @@ def map_claim(request: CreateClaimRequest) -> MapResponse:
     request is handled and forgotten; retention is zero rather than one hour.
     """
     schema = _get_schema(request.form_id)
+    return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
+
+
+# The structured-output grammar has a bounded total size, and a live page can
+# carry far more controls than any insurer form has questions. Refused rather
+# than truncated: a silently dropped field looks exactly like a field the model
+# had nothing to say about.
+MAX_LIVE_FIELDS = 50
+
+
+def _slug(label: str, taken: set[str]) -> str:
+    """A field id from a label. Must be stable and unique — these become the
+    enum the model answers against."""
+    base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:40] or "field"
+    candidate, n = base, 2
+    while candidate in taken:
+        candidate, n = f"{base}_{n}", n + 1
+    taken.add(candidate)
+    return candidate
+
+
+def _live_schema(fields: list[LiveField]) -> FormSchema:
+    """A page's controls, as a schema for one request only.
+
+    Weaker than an authored schema, unavoidably. A real schema's `description`
+    is the instruction a colleague would be given — "Date the patient FIRST
+    consulted this doctor for this condition (not the latest visit)" — and no
+    page carries that. Here the only thing available is the question as the
+    page words it, so the model is answering with less than it usually gets.
+
+    That is the whole cost of filling a form nobody has written a schema for,
+    and it is why this path offers a draft schema afterwards: the second claim
+    on the same form should not be mapped this way.
+    """
+    taken: set[str] = set()
+    types = {"checkbox": "checkbox", "radio-group": "checkbox", "date": "date"}
+    return FormSchema(
+        form_id="__live__",
+        fill_mode="web",
+        fields=[
+            FormField(
+                id=_slug(field.label, taken),
+                type=types.get(field.type.lower(), "text"),
+                source="llm",
+                # Scrubbed a second time. The extension already ran the same
+                # patterns before this left the browser; a label reaches the
+                # model only if both passes missed it.
+                label=scrub_patterns(field.label),
+                description=scrub_patterns(field.label),
+            )
+            for field in fields
+            if field.label.strip()
+        ],
+    )
+
+
+@app.post("/map-live", response_model=MapResponse)
+def map_live(request: MapLiveRequest) -> MapResponse:
+    """Map against the page's own controls, with no schema at all.
+
+    The fallback for a form the bank does not have. Same redaction, same review
+    rows, same confirm-before-write: what changes is only where the field list
+    came from, and therefore how much the model knows about each question.
+
+    The cost is real and was accepted deliberately: **page structure becomes an
+    LLM input on every claim mapped this way**, which the schema path avoids
+    entirely. Labels are scrubbed twice before they get here, but the scrubber
+    finds identifiers by shape and a name has none — so a portal that renders
+    the patient's name into a field label defeats it. Prefer a schema; this
+    exists so that an unknown form is fillable at all, and so that filling one
+    produces the schema that replaces it.
+    """
+    schema = _live_schema(request.fields)
+    if not schema.fields:
+        raise HTTPException(status_code=422, detail="no labelled fields on this page")
+    if len(schema.fields) > MAX_LIVE_FIELDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"too many fields to map in one call ({len(schema.fields)} > {MAX_LIVE_FIELDS})",
+        )
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
 
