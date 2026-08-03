@@ -114,6 +114,30 @@
         </label>
       </fieldset>
 
+      <!-- Grid layout: the question and the control sit in SIBLING CONTAINERS
+           rather than sibling elements, so the control's own previous sibling
+           is nothing at all. Print-derived insurer forms use this as freely as
+           they use tables, and RoboForm's test form is built entirely this way
+           — 36 of its 39 controls read as unlabelled before rule 6 existed. -->
+      <fieldset>
+        <legend>Section D — Admission</legend>
+
+        <div class="row">
+          <div class="col">Date of Admission</div>
+          <div class="col"><input type="text" name="admissionDate" /></div>
+        </div>
+
+        <!-- Leak route 2, one level up. The only text near this control is
+             prose naming the patient, and rule 6 climbs through containers to
+             find a label — so this is the case that stops it turning a <p>
+             into one. Nothing else here can label it: the row above holds a
+             control, so it is not readable either. -->
+        <div class="row">
+          <p>Claim for Tan Wei Ming (S1234567D) — continued</p>
+          <div class="col"><input type="text" name="proseTrap" /></div>
+        </div>
+      </fieldset>
+
       <!-- Must never be inventoried, not even counted as a field. -->
       <label for="portal-pw">Portal password</label>
       <input type="password" id="portal-pw" name="portalPassword" />
