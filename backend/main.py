@@ -12,12 +12,14 @@ Data-retention rules enforced here (guardrails, section 10):
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import re
 import threading
 import time
 import uuid
+import zipfile
 from pathlib import Path
 
 import anthropic
@@ -450,6 +452,57 @@ def discard_claim(claim_id: str) -> Response:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "forms_loaded": len(FORM_SCHEMAS)}
+
+
+# ---------------------------------------------------------------------------
+# The extension itself
+# ---------------------------------------------------------------------------
+#
+# Zipped from the source tree on request rather than built into a static file,
+# so what a doctor downloads is always the code this server is running against
+# — a stale .crx that expects an endpoint the backend no longer has is a
+# support problem nobody would think to check for.
+#
+# Not signed and not a .crx: without a Chrome Web Store listing the install is
+# "unzip, then load unpacked", and the landing page says so rather than
+# implying a one-click install that does not exist.
+
+EXTENSION_DIR = REPO_ROOT / "extension"
+EXTENSION_ZIP_NAME = "claimfill-extension.zip"
+
+# Tests and editor droppings are not part of an install. `node_modules` is
+# excluded defensively: it is not supposed to exist under extension/, and a
+# recursive walk that quietly picked one up would produce a huge download.
+_NOT_SHIPPED = ("*.test.js", "*.map", ".DS_Store")
+_NOT_SHIPPED_DIRS = {"node_modules", "__pycache__", ".git"}
+
+
+def _ships_in_the_extension(path: Path) -> bool:
+    if any(part in _NOT_SHIPPED_DIRS for part in path.parts):
+        return False
+    return not any(path.match(pattern) for pattern in _NOT_SHIPPED)
+
+
+@app.get(f"/download/{EXTENSION_ZIP_NAME}")
+def download_extension() -> Response:
+    """The unpacked extension, as a zip the doctor loads into Chrome."""
+    if not EXTENSION_DIR.is_dir():
+        raise HTTPException(status_code=404, detail="extension not bundled in this build")
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(EXTENSION_DIR.rglob("*")):
+            if not path.is_file() or not _ships_in_the_extension(path):
+                continue
+            # Everything lands under one folder, so unzipping produces exactly
+            # the directory Chrome's "Load unpacked" wants selected.
+            archive.write(path, Path("claimfill-extension") / path.relative_to(EXTENSION_DIR))
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{EXTENSION_ZIP_NAME}"'},
+    )
 
 
 # ---------------------------------------------------------------------------
