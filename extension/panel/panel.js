@@ -175,6 +175,52 @@ function showPicker(message) {
   $("form-override").hidden = true;
 }
 
+// Thresholds for *identifying* a form, which are deliberately looser than the
+// ones for filling it. A wizard shows one step at a time, so the right schema
+// may only find a third of its fields on the page in front of us — demanding
+// fill-grade confidence here would mean never recognising a multi-step form.
+//
+// Being loose is safe because identifying is not deciding: whatever is chosen
+// here still has to clear MIN_MATCHED and MIN_MATCH_RATE in locate.js before a
+// single value is written. This picks which schema to *try*.
+const IDENTIFY_MIN_RATE = 0.4;
+const IDENTIFY_MIN_MATCHED = 3;
+// Two schemas fitting equally well is not a winner. Same insurer often means
+// several forms with overlapping questions.
+const IDENTIFY_MARGIN = 0.15;
+
+/** The schema's own field labels, which is what the page is scored against. */
+function candidatesFor(forms) {
+  return forms.map((form) => ({
+    formId: form.form_id,
+    fields: (form.fields || []).map((f) => ({ fieldId: f.id, label: f.label })),
+  }));
+}
+
+/**
+ * The best-fitting schema, or null when nothing fits or two things fit.
+ */
+function bestCandidate(scores) {
+  const ranked = scores
+    .filter((s) => s.matched >= IDENTIFY_MIN_MATCHED && s.matchRate >= IDENTIFY_MIN_RATE)
+    .sort((a, b) => b.matchRate - a.matchRate);
+
+  if (!ranked.length) return null;
+  const [best, runnerUp] = ranked;
+  if (runnerUp && best.matchRate - runnerUp.matchRate < IDENTIFY_MARGIN) return null;
+  return best;
+}
+
+function selectForm(form) {
+  $("form-id").value = form.form_id;
+  $("form-detected").textContent = form.insurer
+    ? `${form.insurer} — ${form.display_name}`
+    : form.display_name;
+  $("form-detected").classList.remove("unknown");
+  $("form-id").hidden = true;
+  $("form-override").hidden = false;
+}
+
 /**
  * Work out which schema this page needs, instead of asking.
  *
@@ -182,33 +228,54 @@ function showPicker(message) {
  * ClaimFill icon on this tab — so the survey is inside the access they just
  * granted, and it only reads: `survey` writes nothing.
  *
- * Failing here is not an error state. Every schema in the repo currently
- * declares no hosts, so the expected outcome today is the picker.
+ * Two signals, in order. The host is the strong one and costs nothing, but
+ * only a schema that declared `hosts` can use it. The fingerprint — how many
+ * of a schema's fields this page actually carries — works on any schema and
+ * survives a redesign that changes the URL, so it is what decides between
+ * several forms on one insurer's domain.
+ *
+ * Failing here is not an error state. It means the picker, which is also what
+ * a form nobody has written a schema for looks like.
  */
 async function detectForm() {
   if (!state.forms.length) return;
 
-  let host;
+  let response;
   try {
-    host = (await ask({ action: "survey", plan: [] })).host;
+    response = await ask({
+      action: "survey",
+      plan: [],
+      candidates: candidatesFor(state.forms),
+    });
   } catch {
     showPicker("Could not read this page — pick the form yourself, or click the ClaimFill icon on the tab you want to fill.");
     return;
   }
 
-  const match = state.forms.find((form) => hostMatches(host, form.hosts));
-  if (!match) {
-    showPicker(`No form is registered for ${host}. Pick one:`);
+  const { host } = response;
+  const byHost = state.forms.filter((form) => hostMatches(host, form.hosts));
+  // A host match narrows the field; it does not settle it, because an insurer
+  // serves several forms from one domain.
+  const shortlist = byHost.length ? byHost : state.forms;
+  const ids = new Set(shortlist.map((f) => f.form_id));
+
+  const best = bestCandidate((response.candidates || []).filter((c) => ids.has(c.formId)));
+  if (best) {
+    selectForm(state.forms.find((f) => f.form_id === best.formId));
+    return;
+  }
+  if (byHost.length === 1) {
+    // The page did not look like it, but the host was registered for it and
+    // nothing else fit. Worth offering: a wizard's first step carries few
+    // enough fields to score badly while still being the right form.
+    selectForm(byHost[0]);
     return;
   }
 
-  $("form-id").value = match.form_id;
-  $("form-detected").textContent = match.insurer
-    ? `${match.insurer} — ${match.display_name}`
-    : match.display_name;
-  $("form-detected").classList.remove("unknown");
-  $("form-id").hidden = true;
-  $("form-override").hidden = false;
+  state.unrecognised = true;
+  showPicker(
+    `Nothing in the bank matches this page on ${host}. Pick a form, or map without one.`
+  );
 }
 
 async function loadForms() {
