@@ -513,6 +513,122 @@ describe("the draft schema", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The whole loop
+// ---------------------------------------------------------------------------
+
+describe("a form the bank does not have, end to end", () => {
+  // The flow as specified: fill in the details, check the bank, and when the
+  // form is not there, fill the page anyway and come back with a schema for
+  // next time. The pieces are unit-tested above; this walks the whole path in
+  // one go, because the failures that matter are at the joins.
+  const CONTROLS = [
+    { ref: "c1", label: "Patient's Full Name", type: "text" },
+    { ref: "c2", label: "Diagnosis of all conditions treated", type: "text" },
+    { ref: "c3", label: "Date of admission", type: "date" },
+    { ref: "c4", label: "ICD-10 Code", type: "text" },
+  ];
+
+  const ROWS = [
+    { field_id: "patient_s_full_name", label: "Patient's Full Name", field_type: "text", help: "Patient's Full Name", value: "Chua Beng Huat", status: "demographic", needs_review: false },
+    { field_id: "diagnosis_of_all_conditions_treated", label: "Diagnosis of all conditions treated", field_type: "text", help: "Diagnosis of all conditions treated", value: "Acute appendicitis", status: "extracted", needs_review: false },
+    { field_id: "date_of_admission", label: "Date of admission", field_type: "date", help: "Date of admission", value: "14/03/2026", status: "inferred", needs_review: true },
+    { field_id: "icd_10_code", label: "ICD-10 Code", field_type: "text", help: "ICD-10 Code", value: null, status: "missing", needs_review: true },
+  ];
+
+  test("bank miss -> map the page -> fill -> get a schema back", async () => {
+    page.survey = {
+      ok: true,
+      host: "portal.someinsurer.com",
+      controlCount: 4,
+      candidates: [
+        // Both schemas in the bank score far too low to be this form.
+        { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
+        { formId: "aia_ghs_claim", matched: 1, intended: 3, matchRate: 0.33 },
+      ],
+      report: { ...EMPTY_REPORT, unknownControls: CONTROLS },
+    };
+    routes["/map-live"] = () => respond({ form_id: "__live__", fields: ROWS });
+
+    const panel = loadPanel();
+    await settle();
+
+    // 1. The bank was consulted and had nothing that fits.
+    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
+    expect($("use-live-wrap").hidden).toBe(false);
+
+    // 2. The details go in as one paste.
+    $("paste").value = "Patient: Chua Beng Huat · S7211043C · 04/11/1972\n14/03/2026. RIF pain, appendicitis.";
+    await panel.parsePaste();
+    expect($("full-name").value).toBe("Chua Beng Huat");
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    // 3. Mapping goes against the page, because there is no schema to use.
+    await panel.onMap();
+    const mapCall = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    expect(JSON.parse(mapCall[1].body).fields.map((f) => f.label)).toEqual(
+      CONTROLS.map((c) => c.label)
+    );
+    expect($("step-review").hidden).toBe(false);
+
+    // 4. The inferred row still has to be confirmed by hand — the fallback
+    //    does not get to skip the review step just because it had no schema.
+    //    Driven through the rendered UI, not by poking state, because the
+    //    guarantee is what the doctor has to click.
+    expect($("fill-btn").disabled).toBe(true);
+    const confirmButtons = $("rows").querySelectorAll("button.confirm");
+    // One button: the inferred admission date. The missing ICD code has no
+    // value, so there is nothing to confirm and nothing to write.
+    expect(confirmButtons).toHaveLength(1);
+    confirmButtons[0].click();
+    expect($("fill-btn").disabled).toBe(false);
+
+    // 5. Fill the page.
+    page.fill = { ok: true, refused: false, filled: 3, applied: [], report: EMPTY_REPORT };
+    await panel.onFill();
+    expect($("fill-status").textContent).toMatch(/filled 3 field/i);
+
+    // 6. And the form comes back as a schema for the bank.
+    expect($("step-draft").hidden).toBe(false);
+    const draft = JSON.parse($("draft-json").value);
+    expect(draft.fill_mode).toBe("web");
+    expect(draft.hosts).toEqual(["portal.someinsurer.com"]);
+    expect(draft.fields.map((f) => f.label)).toEqual(CONTROLS.map((c) => c.label));
+    // Including the one this note could not answer: the schema describes the
+    // form, not this claim.
+    expect(draft.fields.map((f) => f.id)).toContain("icd_10_code");
+  });
+
+  test("a form the bank DOES have never reaches the fallback", async () => {
+    page.survey = {
+      ok: true,
+      host: "roboform.com",
+      controlCount: 39,
+      candidates: [{ formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 }],
+      report: EMPTY_REPORT,
+    };
+    const panel = loadPanel();
+    await settle();
+
+    expect($("form-id").value).toBe("roboform_test_v1");
+    expect($("use-live-wrap").hidden).toBe(true);
+
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+    await panel.onMap();
+
+    const paths = globalThis.fetch.mock.calls.map((c) => String(c[0]));
+    expect(paths.some((p) => p.endsWith("/map"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/map-live"))).toBe(false);
+    // No draft either: the bank already describes this form, and a second
+    // schema for it is how two descriptions of one form start disagreeing.
+    expect($("step-draft").hidden).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // What gets sent
 // ---------------------------------------------------------------------------
 
