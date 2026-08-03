@@ -405,7 +405,9 @@ npm install && npm test
 # reopening, and content scripts need the insurer tab reloaded too.
 # Point it at a local backend via the panel's Advanced -> Backend URL.
 
-# backend dev
+# backend dev. The key must be exported IN THIS SHELL — the extension's only
+# backend is this process, and without the key POST /map returns 503.
+export ANTHROPIC_API_KEY=...    # never via Claude Code's `!` prefix: it is logged
 ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
 
 # frontend dev (expects backend on :8000)
