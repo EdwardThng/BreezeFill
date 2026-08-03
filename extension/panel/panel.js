@@ -272,10 +272,25 @@ async function detectForm() {
     return;
   }
 
-  state.unrecognised = true;
+  offerLiveMapping(host);
   showPicker(
-    `Nothing in the bank matches this page on ${host}. Pick a form, or map without one.`
+    `Nothing in the bank matches this page on ${host}. Pick a form, or map against the page itself.`
   );
+}
+
+/**
+ * Offer the schema-free path, having established there is no schema.
+ *
+ * Not offered otherwise, and never selected by default. A schema supplies each
+ * field's *meaning* — the instruction a colleague would be given — and the
+ * live page cannot: without one the model is handed the question as the page
+ * words it and nothing more. So this is the answer to "this form is not in the
+ * bank", not a general-purpose mode.
+ */
+function offerLiveMapping(host) {
+  state.host = host;
+  $("use-live-wrap").hidden = false;
+  $("use-live").checked = true;
 }
 
 async function loadForms() {
@@ -424,8 +439,30 @@ function messageFor(error) {
   return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
 }
 
+/** Is the doctor mapping against the page rather than against a schema? */
+function mappingLive() {
+  return !$("use-live-wrap").hidden && $("use-live").checked;
+}
+
+/**
+ * Every fillable control on the page, as a field list.
+ *
+ * `unknownControls` with an empty plan is exactly "everything nothing claimed"
+ * — which, with nothing in the plan, is everything. Labels have already been
+ * through the dumper's scrubber by the time they get here; the backend runs
+ * the same patterns again on the way in.
+ */
+async function liveFields() {
+  const response = await ask({ action: "survey", plan: [] });
+  state.host = response.host;
+  return response.report.unknownControls
+    .filter((control) => control.label)
+    .map((control) => ({ label: control.label, type: control.type }));
+}
+
 async function onMap() {
   const status = $("map-status");
+  const live = mappingLive();
 
   // The form list is loaded once, when the panel opens. A backend started
   // afterwards used to mean an empty picker and a 404 on a "" form id until
@@ -435,7 +472,7 @@ async function onMap() {
     await loadForms();
     await detectForm();
   }
-  if (!state.forms.length) {
+  if (!live && !state.forms.length) {
     setStatus(
       status,
       state.formsFailed ? UNREACHABLE : "The backend is running but has no forms loaded.",
@@ -443,7 +480,7 @@ async function onMap() {
     );
     return;
   }
-  if (!$("form-id").value) {
+  if (!live && !$("form-id").value) {
     setStatus(status, "Pick the insurer form first.", "error");
     return;
   }
@@ -457,13 +494,16 @@ async function onMap() {
   }
 
   $("map-btn").disabled = true;
-  setStatus(status, "Redacting and mapping…", "busy");
+  setStatus(status, live ? "Reading this page, then mapping…" : "Redacting and mapping…", "busy");
 
   try {
-    const response = await fetch(`${apiBase()}/map`, {
+    const [path, request] = live
+      ? ["/map-live", { fields: await liveFields(), patient }]
+      : ["/map", { form_id: $("form-id").value, patient }];
+    const response = await fetch(`${apiBase()}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ form_id: $("form-id").value, patient }),
+      body: JSON.stringify(request),
     });
     if (!response.ok) {
       // Fixed strings keyed on status, never the response body: the backend
@@ -688,6 +728,66 @@ async function onCheck() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Growing the bank
+// ---------------------------------------------------------------------------
+
+/**
+ * A draft schema for the form just filled, for a human to read and commit.
+ *
+ * Deliberately not installed anywhere. A schema is used on every later claim
+ * against that form, so an unreviewed one turns one mis-mapped field into a
+ * permanent wrong answer that nothing re-checks — and the fields here were
+ * named by a model reading a page, not by anyone who has seen the form. The
+ * review is cheap: it is a few dozen lines of JSON, and the labels are the
+ * questions the doctor just answered.
+ *
+ * The descriptions are the weakest part and are worth editing by hand. A
+ * schema earns its keep by telling the model what a question *means* — "the
+ * date the patient FIRST consulted this doctor for this condition, not the
+ * latest visit" — and all a page can supply is the wording of the question.
+ */
+function draftSchema() {
+  const host = state.host || "";
+  // The registrable label, which for an insurer is the brand: aia.com.sg ->
+  // aia, claimez.aia.com.sg -> aia. A guess, flagged as one in the panel.
+  const parts = host.split(".").filter(Boolean);
+  const brand = parts.length > 2 ? parts[parts.length - 3] : parts[0] || "insurer";
+
+  return {
+    form_id: `${brand}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_v1`,
+    display_name: `Drafted from ${host} — rename me`,
+    insurer: brand.toUpperCase(),
+    fill_mode: "web",
+    hosts: [parts.slice(-2).join(".") || host],
+    fields: state.rows.map((row) => ({
+      id: row.field_id,
+      label: row.label,
+      type: row.field_type,
+      source: "llm",
+      description: row.help || row.label,
+    })),
+  };
+}
+
+function showDraft() {
+  $("draft-json").value = JSON.stringify(draftSchema(), null, 2);
+  $("step-draft").hidden = false;
+  setStatus($("draft-status"), "");
+}
+
+async function onCopyDraft() {
+  const status = $("draft-status");
+  try {
+    await navigator.clipboard.writeText($("draft-json").value);
+    setStatus(status, "Copied. Save it into backend/schemas/ and restart the backend.");
+  } catch {
+    // Clipboard access can be refused; selecting the text is always available.
+    $("draft-json").select();
+    setStatus(status, "Select-all and copy — the clipboard was not available.", "error");
+  }
+}
+
 async function onFill() {
   const status = $("fill-status");
   setStatus(status, "Filling…", "busy");
@@ -700,6 +800,11 @@ async function onFill() {
       setStatus(status, `Nothing was filled: ${response.reason}`, "error");
     } else {
       setStatus(status, `Filled ${response.filled} field${response.filled === 1 ? "" : "s"}. Check each one, then submit the form yourself.`);
+      // The form worked and nothing in the bank described it. Offer the
+      // schema now, while the page that produced it is still in front of the
+      // doctor — this is the only moment anyone can sanity-check the labels
+      // against the form they are looking at.
+      if (mappingLive()) showDraft();
     }
     renderReport(response);
   } catch (error) {
@@ -723,6 +828,11 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
 $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);
+$("draft-copy").addEventListener("click", onCopyDraft);
+// Choosing a schema from the picker is choosing not to map against the page.
+$("form-id").addEventListener("change", () => {
+  $("use-live").checked = false;
+});
 $("form-override").addEventListener("click", () => {
   $("form-id").hidden = false;
   $("form-override").hidden = true;
@@ -735,4 +845,14 @@ loadForms().then(detectForm);
 // than reimplementing it. Nothing else reads it, and it holds no patient data
 // — the claim lives in `state`, in this document, and is gone when the panel
 // closes.
-globalThis.claimfillPanel = { onMap, parsePaste, updateFound, patientRecord, state };
+globalThis.claimfillPanel = {
+  onMap,
+  onFill,
+  parsePaste,
+  updateFound,
+  patientRecord,
+  detectForm,
+  bestCandidate,
+  draftSchema,
+  state,
+};
