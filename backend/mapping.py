@@ -107,11 +107,16 @@ class FormField(BaseModel):
 
 class FormSchema(BaseModel):
     form_id: str
-    pdf_path: str
+    # Empty for fill_mode="web": there is no PDF to write into.
+    pdf_path: str = ""
     fields: list[FormField]
     # "acroform" writes into the PDF's own fields; "overlay" stamps text at
-    # coordinates, for insurers who publish no fillable version.
-    fill_mode: Literal["acroform", "overlay"] = "acroform"
+    # coordinates, for insurers who publish no fillable version; "web" is
+    # filled in place in the browser by the extension, for insurers who send a
+    # link instead of a form. A web schema is the same rows and the same
+    # review — only the target differs, which is why it is a mode here rather
+    # than a second kind of object.
+    fill_mode: Literal["acroform", "overlay", "web"] = "acroform"
     # Shown in the form picker instead of the raw form_id.
     display_name: str | None = None
     insurer: str | None = None
@@ -137,6 +142,18 @@ class FormSchema(BaseModel):
     def _check_addressing(self) -> FormSchema:
         """Catch a half-written schema at load time rather than at the moment
         a doctor clicks Approve."""
+        # A web form is located at fill time by matching the schema's labels
+        # against the live page, so there is nothing to address here — and
+        # nothing to open either. Requiring a pdf_path would mean pointing a
+        # web schema at some unrelated PDF, which is the kind of untrue field
+        # that later gets believed.
+        if self.fill_mode == "web":
+            if self.pdf_path:
+                raise ValueError("web form has a pdf_path; it has no PDF to fill")
+            return self
+
+        if not self.pdf_path:
+            raise ValueError(f"{self.fill_mode} form has no pdf_path")
         for field in self.fields:
             if self.fill_mode == "overlay" and field.box is None:
                 raise ValueError(f"overlay field {field.id!r} has no box")
