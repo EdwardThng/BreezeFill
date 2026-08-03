@@ -265,6 +265,24 @@ def redact(record: PatientRecord, llm_sweep: LlmSweep | None = None) -> Redactio
     return RedactionResult(redacted_text=text, redaction_map=redaction_map)
 
 
+def scrub_patterns(text: str) -> str:
+    """Pass 2 alone, on a string that is not clinical text and has no
+    dictionary behind it.
+
+    For structural strings that arrive from a page — a form field's label — and
+    are about to be sent to a model. The extension already scrubs these with
+    the same patterns before they leave the browser (`learn/dump.js`), so this
+    is the second of two independent applications rather than the only one: a
+    label reaches the model only if both miss it.
+
+    The known hole is the one that shapes the whole dumper, and it is not
+    closable here: **a name has no shape.** A page that renders "Claim for Tan
+    Wei Ming" into a field label defeats this and every regex like it. That is
+    why labels are scrubbed twice and prose is not read at all.
+    """
+    return _pass2_patterns(str(text or ""), {})
+
+
 def remerge(text: str, redaction_map: dict[str, str]) -> tuple[str, list[str]]:
     """Substitute tokens back to real values. Returns (merged_text,
     unresolved_tokens). Any unresolved token means the field must be flagged
