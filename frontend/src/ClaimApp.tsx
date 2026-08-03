@@ -12,7 +12,17 @@ type Stage =
 
 const STEP_OF: Record<Stage["name"], number> = { input: 1, review: 2, done: 3 };
 
-export default function App() {
+/**
+ * The PDF claim flow: paste notes, review, download a filled form.
+ *
+ * No longer the front door. The extension is the product surface now (it fills
+ * the insurer's own web form in place), and the site's job is to hand that out
+ * — see Landing.tsx. This is kept, and kept working, because not every insurer
+ * sends a link: the five acroform/overlay schemas are real forms doctors still
+ * receive as PDFs, and this is the only way to use them. It lives at #/app and
+ * is not advertised.
+ */
+export default function ClaimApp() {
   const [forms, setForms] = useState<FormInfo[] | null>(null);
   const [stage, setStage] = useState<Stage>({ name: "input" });
   const [busy, setBusy] = useState(false);
