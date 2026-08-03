@@ -4,18 +4,32 @@
 # Singapore region: clinical text must not leave SG-adjacent infrastructure
 # unnecessarily, and latency to the clinic matters.
 #
-# Exactly ONE machine, never auto-stopped: claims live in an in-memory store
-# (a privacy feature — nothing persists), so a second machine or a mid-review
-# stop/start would lose or split claims.
+# Exactly ONE machine. Claims live in an in-memory store (a privacy feature —
+# nothing persists), so a SECOND machine splits them: a claim created on
+# machine A 404s when the approve request lands on machine B.
 #
 # ALWAYS DEPLOY WITH:  fly deploy --ha=false
-# min_machines_running below does NOT stop this. Fly's default is to add a
-# second machine for high availability, which silently breaks the app: a claim
-# created on machine A 404s when the approve request lands on machine B. The
-# first deploy did exactly that and needed `fly scale count 1` to undo.
+# The count settings below do NOT stop this. Fly's default is to add a second
+# machine for high availability. The first deploy did exactly that and needed
+# `fly scale count 1` to undo. Check `fly status` after every deploy.
+#
+# It DOES now scale to zero, which it deliberately did not before (2026-08-03).
+# The old rule — auto_stop off, min_machines_running 1 — protected a claim
+# sitting in memory between the doctor reviewing it and approving it, which is
+# the website's flow. The extension is the product surface now and holds no
+# server-side state at all: /map, /map-live and /parse store nothing, so there
+# is nothing for a sleeping machine to lose. What it costs is a cold start on
+# the first request after an idle period.
+#
+# "suspend" rather than "stop" because it restores from a memory snapshot,
+# which is both faster and the variant that could still hold a live claim.
+# The residual risk is the website path only: a claim created via POST /claims
+# and left unapproved across a sleep may be gone. Claims already expire after
+# an hour by design; this makes that window shorter and less predictable.
 #
 # Required secret (fly secrets set NAME=value):
-#   ANTHROPIC_API_KEY   - LLM calls
+#   ANTHROPIC_API_KEY   - LLM calls. Already set on this app; secrets survive
+#                         deploys, so it does not need re-setting.
 
 app = "claimfill"
 primary_region = "sin"
@@ -23,10 +37,14 @@ primary_region = "sin"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
+# Watch this one now that the app scales to zero: if the machine never reaches
+# a stopped/suspended state while idle, this check is the first suspect —
+# something polling every 30s is the obvious candidate for keeping it awake.
+# Confirm with `fly status` after an idle period before blaming the config.
 [[http_service.checks]]
   interval = "30s"
   timeout = "5s"
