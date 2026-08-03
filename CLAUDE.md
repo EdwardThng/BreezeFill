@@ -20,7 +20,8 @@ father, a Singapore GP.
 | `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
 | Bank → fallback → draft schema | Working, 114 extension tests + 13 backend. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. **Not yet run in a browser** — RoboForm is in the bank, so exercising the fallback needs a page that is not |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
-| React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
+| Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
+| `GET /download/claimfill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | Fly deploy | **Live at `https://claimfill.fly.dev`**, redeployed 2026-08-03 with today's build. One machine, region `sin`, health passing. The app was never gone — the NXDOMAIN was `formfill-backend.fly.dev`, a name this project does not use; `fly.toml` says `claimfill` and always did. It **scales to zero now** (see fly.toml): first request after an idle spell is a second or two slow, not an error |
 | `ANTHROPIC_API_KEY` | **Set as a Fly secret** and confirmed working — a live `POST /map` returns 200, which exercises the sweep. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1` |
@@ -273,6 +274,28 @@ purge. Retention on the extension path is zero rather than one hour. `redact →
 map → assemble` lives in `_review_rows` so both endpoints share one path — a
 second caller that reimplemented it is how a route that skips redaction gets
 introduced.
+
+**The website's job is now to hand out the extension** (2026-08-03). The owner's
+call, and the completion of the pivot above: `#/` is a landing page, `#/demo` is
+a walkthrough, and the download button serves `extension/` zipped from the
+source tree.
+
+Three things decided while building it that are easy to undo:
+
+- **The claim UI was moved, not deleted.** Deleting it would have taken the
+  five PDF forms with it — they are real forms doctors still receive and this
+  is their only interface. It lives at `#/app`, unadvertised.
+- **The demo talks to nothing.** No fetch, no model, every value written into
+  `Demo.tsx`. It therefore works while the machine sleeps and cannot be spoiled
+  by a bad generation. Do not "improve" it by wiring it to the live API.
+- **The demo will not let you skip the confirm step**, and the field the note
+  cannot answer stays blank in the filled form. Both are asserted. A demo that
+  glossed over either would teach a doctor the wrong thing about what they are
+  signing, which is worse than having no demo.
+
+The landing copy is held to the same standard: `Landing.test.tsx` fails if the
+page ever claims to be fully automatic or to need no review. The product's
+pitch is a set of refusals, and marketing copy is where those get softened.
 
 What did **not** change, and must not:
 
@@ -549,6 +572,12 @@ omission to "fix".
 
 # extension tests (separate toolchain — vitest + jsdom, from the repo root)
 npm install && npm test
+
+# website tests (a THIRD project: its own vitest, its own jsdom, React plugin)
+cd frontend && npm install && npm test
+# Both vitest projects carry an explicit `include`. Without one the root runner
+# discovers frontend/src/*.test.tsx and runs them without the React plugin —
+# 28 failures that look like the website is broken when it is green.
 
 # load the extension: chrome://extensions -> Developer mode -> Load unpacked
 # -> select extension/. Reload it after every change; the side panel needs
