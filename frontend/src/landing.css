@@ -1,0 +1,600 @@
+/* ClaimFill marketing site.
+ *
+ * Scoped under .landing and .demo so it cannot leak into the claim UI at
+ * #/app, which keeps its own styles.css and its own light theme.
+ *
+ * Dark, one accent, large type, generous space. The restraint is deliberate:
+ * this page asks a doctor to trust software with clinical notes, and a page
+ * that looks like a growth-hacked SaaS funnel undercuts that before a word is
+ * read. No stock photography, no invented testimonials, no logos of companies
+ * that have not agreed to appear.
+ */
+
+.landing,
+.demo {
+  --ink: #e8edf2;
+  --ink-dim: #93a1b0;
+  --ink-faint: #6b7a8a;
+  --bg: #080b0f;
+  --bg-raise: #10161d;
+  --bg-card: #131b23;
+  --line: #1f2a35;
+  --accent: #4fd1a5;
+  --accent-ink: #04120d;
+  --amber: #e8b04b;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.landing a,
+.demo a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing h1,
+.landing h2,
+.landing h3,
+.demo h1,
+.demo h2 {
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+/* Nav ---------------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px clamp(16px, 5vw, 56px);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(8, 11, 15, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.logo-page {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+}
+
+.logo-lines {
+  stroke: var(--ink-faint);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.logo-tick {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-links {
+  display: flex;
+  gap: 26px;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.nav-links a:hover {
+  color: var(--ink);
+}
+
+/* Buttons ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14.5px;
+  font-weight: 560;
+  border: 1px solid var(--line);
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn-primary:hover {
+  background: #62e0b6;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+}
+
+.btn-small {
+  padding: 7px 14px;
+  font-size: 13.5px;
+}
+
+.btn-large {
+  padding: 13px 24px;
+  font-size: 16px;
+}
+
+/* Hero --------------------------------------------------------------------- */
+
+.hero {
+  text-align: center;
+  padding: clamp(56px, 9vw, 112px) clamp(16px, 5vw, 56px) 0;
+  max-width: 1120px;
+  margin: 0 auto;
+  /* A single soft light source behind the headline, not a rainbow gradient. */
+  background:
+    radial-gradient(60% 55% at 50% 0%, rgba(79, 209, 165, 0.13), transparent 70%);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--accent);
+  margin: 0 0 18px;
+}
+
+.hero h1 {
+  font-size: clamp(34px, 6.2vw, 66px);
+  font-weight: 680;
+}
+
+.lede {
+  max-width: 620px;
+  margin: 22px auto 0;
+  font-size: clamp(15.5px, 1.6vw, 18.5px);
+  color: var(--ink-dim);
+}
+
+.cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+
+.fineprint {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.fineprint code {
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+/* The product still ------------------------------------------------------- */
+
+.hero-visual {
+  margin: clamp(40px, 6vw, 72px) auto 0;
+  max-width: 1000px;
+}
+
+.mock {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 14px;
+  padding: 14px;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  border-bottom: none;
+  text-align: left;
+  box-shadow: 0 -1px 60px rgba(79, 209, 165, 0.07);
+}
+
+@media (max-width: 720px) {
+  .mock {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mock-panel,
+.mock-form {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.mock-panel-head {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+.mock-paste {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: #0b1116;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.ln {
+  height: 5px;
+  border-radius: 3px;
+  background: #223040;
+}
+
+.ln.short {
+  width: 55%;
+}
+
+.mock-rows {
+  display: grid;
+  gap: 9px;
+}
+
+.mock-row {
+  display: grid;
+  gap: 5px;
+}
+
+.pill {
+  font-size: 9.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 2px 7px;
+  border-radius: 20px;
+  justify-self: start;
+}
+
+.pill.green {
+  background: rgba(79, 209, 165, 0.16);
+  color: var(--accent);
+}
+
+.pill.amber {
+  background: rgba(232, 176, 75, 0.16);
+  color: var(--amber);
+}
+
+.pill.grey {
+  background: #1c262f;
+  color: var(--ink-faint);
+}
+
+.bar {
+  height: 7px;
+  border-radius: 4px;
+  background: #2b3a49;
+}
+
+.bar.short {
+  width: 60%;
+}
+
+.bar.empty {
+  background: repeating-linear-gradient(
+    -45deg,
+    #1a232c,
+    #1a232c 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.mock-form-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #253340;
+}
+
+.url {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.mock-field {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.mock-label {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+
+.mock-input {
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: #0b1116;
+}
+
+/* Filled fields carry the accent, so "what the tool did" is legible at a
+   glance — and the one it left blank is visibly, deliberately blank. */
+.mock-input.filled {
+  border-color: rgba(79, 209, 165, 0.45);
+  background: linear-gradient(90deg, rgba(79, 209, 165, 0.14), transparent 70%);
+}
+
+/* Marquee ------------------------------------------------------------------ */
+
+.marquee {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 40px;
+  padding: 20px clamp(16px, 5vw, 56px);
+  border-block: 1px solid var(--line);
+  background: var(--bg-raise);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.marquee span::before {
+  content: "✓";
+  color: var(--accent);
+  margin-right: 8px;
+}
+
+/* Sections ----------------------------------------------------------------- */
+
+.section {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(56px, 8vw, 104px) clamp(16px, 5vw, 56px);
+  border-bottom: 1px solid var(--line);
+}
+
+.section h2 {
+  font-size: clamp(26px, 3.6vw, 40px);
+  font-weight: 660;
+  max-width: 22ch;
+}
+
+.section-lede {
+  max-width: 62ch;
+  margin: 18px 0 0;
+  color: var(--ink-dim);
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(24px, 4vw, 56px);
+  margin-top: 36px;
+}
+
+.two-col h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+
+.two-col p {
+  color: var(--ink-dim);
+  margin: 0;
+}
+
+.problem .two-col > div:last-child h3 {
+  color: var(--accent);
+}
+
+/* Steps -------------------------------------------------------------------- */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+  margin: 40px 0 32px;
+}
+
+.step {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.step-n {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+.step h3 {
+  font-size: 18px;
+  margin: 12px 0 10px;
+}
+
+.step p {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink-dim);
+}
+
+/* Guarantees --------------------------------------------------------------- */
+
+.guarantees {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 40px;
+}
+
+.guarantee {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 12px 12px 0;
+  padding: 22px 24px;
+  background: var(--bg-raise);
+}
+
+.guarantee h3 {
+  font-size: 16.5px;
+  margin-bottom: 10px;
+}
+
+.guarantee p {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink-dim);
+}
+
+/* Coverage ----------------------------------------------------------------- */
+
+.coverage .two-col p {
+  margin-bottom: 14px;
+}
+
+.coverage-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 26px;
+  align-self: start;
+}
+
+.coverage-card h3 {
+  font-size: 18px;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.coverage-card p {
+  margin-bottom: 18px;
+}
+
+/* FAQ ---------------------------------------------------------------------- */
+
+.faq-list {
+  margin-top: 32px;
+  border-top: 1px solid var(--line);
+}
+
+.faq-list details {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-list summary {
+  cursor: pointer;
+  padding: 18px 0;
+  font-size: 16.5px;
+  font-weight: 560;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-list summary::after {
+  content: "+";
+  color: var(--accent);
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.faq-list details[open] summary::after {
+  content: "−";
+}
+
+.faq-list p {
+  margin: 0 0 20px;
+  max-width: 68ch;
+  color: var(--ink-dim);
+  font-size: 15px;
+}
+
+/* Final CTA + footer ------------------------------------------------------- */
+
+.final-cta {
+  text-align: center;
+  border-bottom: none;
+}
+
+.final-cta h2 {
+  max-width: none;
+}
+
+.final-cta p {
+  color: var(--ink-dim);
+  margin: 16px auto 0;
+  max-width: 52ch;
+}
+
+.final-cta .cta-row {
+  margin-top: 28px;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 32px clamp(16px, 5vw, 56px) 48px;
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.footer p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  max-width: 60ch;
+}
