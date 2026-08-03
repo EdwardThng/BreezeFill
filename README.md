@@ -51,6 +51,7 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | `GET` | `/forms` | List available form schemas |
 | `POST` | `/parse` | Split one pasted block into demographic fields. Patterns only — no model, nothing stored |
 | `POST` | `/map` | Redact + extract for the browser extension. Stateless: no `claim_id`, nothing retained |
+| `POST` | `/map-live` | Same, against a page's own field labels, for a form no schema describes. A successful fill then drafts that schema |
 | `POST` | `/claims` | Redact + extract; returns review rows and a `claim_id` |
 | `GET` | `/claims/{id}` | Re-fetch review rows |
 | `POST` | `/claims/{id}/approve` | Fill the PDF with final values; returns the PDF and deletes the claim |
@@ -138,6 +139,12 @@ Coverage includes a golden set of synthetic clinical notes asserting zero identi
 4. Restart the backend. The form appears in `GET /forms` and the UI dropdown.
 
 A synthetic sample form (`dev_sample_v1`) ships with the repo so the pipeline can be exercised without any real insurer forms; regenerate its PDF with `python scripts/make_dev_form.py`.
+
+**For a web form, you do not have to write the schema first.** Fill it once with
+the extension's fallback — it maps against the page's own field labels — and it
+hands back a draft schema to review and drop into `backend/schemas/`. Read it
+before committing: the field descriptions start out as the page's own wording,
+and a description is what tells the model what a question *means*.
 
 ---
 
