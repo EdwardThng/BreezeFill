@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from demographics import ParsedDemographics, parse_demographics
 from mapping import (
     FormSchema,
     MappingError,
@@ -138,6 +139,10 @@ class MapResponse(BaseModel):
     fields: list[MappedField]
 
 
+class ParseRequest(BaseModel):
+    text: str
+
+
 class ApproveClaimRequest(BaseModel):
     # Doctor-edited final values keyed by field_id. Fields omitted here keep
     # the value from the review rows; explicit null blanks the field.
@@ -182,6 +187,24 @@ def list_forms() -> list[dict]:
         for s in FORM_SCHEMAS.values()
         if show_internal or not s.internal
     ]
+
+
+@app.post("/parse", response_model=ParsedDemographics)
+def parse_paste(request: ParseRequest) -> ParsedDemographics:
+    """One pasted block -> a draft of the demographic fields.
+
+    Patterns only, no model — see demographics.py for why that is the privacy
+    model rather than a preference. Nothing is stored and nothing is logged:
+    this is the one place the server sees the paste before redaction has a
+    dictionary to work with, so it holds it for exactly the length of the
+    call. The doctor corrects the result before it is used for anything.
+
+    It lives on the server rather than in the panel so that there is one
+    definition of what an NRIC looks like. A JavaScript copy of redaction.py's
+    patterns that drifted from the Python one is a leak, and the same reasoning
+    keeps redaction itself server-side today.
+    """
+    return parse_demographics(request.text)
 
 
 def _review_rows(schema: FormSchema, patient: PatientRecord) -> list[MappedField]:
