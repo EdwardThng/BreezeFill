@@ -29,12 +29,16 @@
 // Overridable in the Advanced section, in memory only. A wrong value here
 // costs a failed request, not a leak: the panel only ever posts to it.
 //
-// Local by default because there is currently no deployed backend —
-// formfill-backend.fly.dev stopped resolving on 2026-08-03. Pointing at it
-// guaranteed a "could not reach the backend" error every time the panel
-// opened, which is worse than pointing at nothing. **Change this the moment a
-// deploy exists**, because a doctor will not be running uvicorn.
-const DEFAULT_API_BASE = "http://localhost:8000";
+// The deployed backend (2026-08-03, region sin). A doctor will not be running
+// uvicorn, so this has to be a URL that answers on its own. The machine scales
+// to zero when idle, which shows up as a second or two of delay on the first
+// request after a quiet period, not as an error.
+//
+// Point this at http://localhost:8000 under Advanced for the RoboForm test
+// route: `roboform_test_v1` is `internal: true` and FORMFILL_SHOW_INTERNAL is
+// deliberately unset in production, so the deployed backend does not offer it
+// — a doctor must never be shown a form that is not a real insurer's.
+const DEFAULT_API_BASE = "https://claimfill.fly.dev";
 
 // Order matters: the orchestrator expects the other three to have registered
 // themselves on globalThis by the time it runs.
