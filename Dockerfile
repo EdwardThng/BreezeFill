@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/ backend/
 COPY forms/ forms/
+# The site's download button zips this directory on request, so the extension
+# has to be in the image. It is not imported or executed by the server — it is
+# payload, served as a file.
+COPY extension/ extension/
 COPY --from=frontend /build/dist frontend/dist
 
 EXPOSE 8080
