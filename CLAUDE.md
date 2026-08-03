@@ -14,15 +14,16 @@ father, a Singapore GP.
 
 | Piece | State |
 |---|---|
-| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 112 backend tests pass (1 skipped) |
-| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 85 tests. **Runs in Chrome 150.** Verified on a live page (RoboForm's 39-field test form): panel opens, `activeTab` granted, injection works, 39 controls collected, `POST /map` round-trips, review renders, and Fill **refused** an unrecognised page. Not yet run on an insurer portal, and nothing has been successfully filled anywhere |
+| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 146 backend tests pass (1 skipped) |
+| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150.** Verified on a live page (RoboForm's 39-field test form): panel opens, `activeTab` granted, injection works, 39 controls collected, `POST /map` round-trips, review renders. Not yet run on an insurer portal, and **no browser fill has been confirmed yet** — but see "the RoboForm route" below: it now matches 5 of 6 and writes them in jsdom against the real page markup |
+| One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | Fly deploy | **Gone.** `formfill-backend.fly.dev` returned NXDOMAIN on 2026-08-03 — the name does not resolve at all, so this is a destroyed/renamed app, not a stopped machine. Was live on 2026-07-30. Verify with `flyctl apps list` before assuming a URL |
 | `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` and `POST /map` fail until set |
-| **Demoable?** | **No — not without a terminal.** With no Fly app, `DEFAULT_API_BASE` points at `http://localhost:8000`, so every demo needs `uvicorn` running on the demo machine *and* `ANTHROPIC_API_KEY` exported in that shell. A demo was attempted on 2026-08-03 without either and failed at the first click. See "the demo failure" below — this is the single thing standing between the extension and being shown to anyone |
+| **Demoable?** | **Still needs a terminal, but no longer needs a key.** With no Fly app, `DEFAULT_API_BASE` points at `http://localhost:8000`, so every demo needs `uvicorn` running on the demo machine. What changed on 2026-08-03: the RoboForm route is all-demographics, so with `FORMFILL_DISABLE_SWEEP=1` **no `ANTHROPIC_API_KEY` is needed at all** to demo paste → parse → review → fill. An insurer form still needs one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
 
 Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
 static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
@@ -55,7 +56,9 @@ a green suite as readiness.
 | "Could not reach the backend" | `formfill-backend.fly.dev` returns NXDOMAIN — destroyed or renamed, not stopped. Confirmed against `example.com` returning 200 from the same shell | `DEFAULT_API_BASE` → `http://localhost:8000` until a deploy exists |
 | "Failed to fetch" with no status code, on Map fields | A missing `ANTHROPIC_API_KEY` makes the SDK raise a plain **`TypeError`** ("Could not resolve authentication method"), not an `anthropic.APIError`, so it escaped both `except` clauses. Starlette's `ServerErrorMiddleware` sits **outside** `CORSMiddleware`, so the resulting 500 carried zero `Access-Control-*` headers and the browser could not even report the status | Broad `except Exception` in `_review_rows` → 503 when the key is absent, 502 otherwise. Log the exception **type only**; a message or traceback can quote clinical text |
 | Values silently cleared from fields the doctor had typed into | `applyOne` treated an absent value as an empty one and wrote `""` over it — then reported it filled | Absent-vs-empty guard at the top of `applyOne`, plus three tests |
-| Fill refused on a 39-field page | **Correct behaviour**, and the run that proved the refusal path works end to end. But it exposed the next hole | `MIN_MATCHED = 3` alongside `MIN_MATCH_RATE` — see below |
+| Fill refused on a 39-field page | Read at the time as the schema-mismatch refusal working. **It was not.** See the row below — the page had no usable labels at all, so no schema could ever have matched it | `MIN_MATCHED = 3` alongside `MIN_MATCH_RATE` is still right and still needed — but it was not what refused here |
+| **36 of RoboForm's 39 controls had an empty label**, and an empty label scores 0, so nothing could match on that page whatever the schema said | The dumper's last-resort rule read `el.previousElementSibling`, which is **nothing at all** on a grid layout: the question sits in one `<div>` and the control in the next one over. Print-derived insurer forms use this as freely as they use tables. Not visible from any test — the fixture used `<label for>` and tables throughout | Rule 6 in `rawLabelFor`: walk up two hops and read the *container's* previous sibling. Bounded hard — stops at the form or fieldset, never reads headings or paragraphs, never reads a node containing a control. All 39 now resolve |
+| The 3 controls that *did* have labels had junk ones — a `<select>`'s "label" was the option list of the `<select>` beside it | Same rule 5, no check that the neighbour was a control. Worse than junk: option text bypasses `buildOptions`'s withholding rule, which exists precisely because option lists enumerate patients | `NEVER_A_LABEL` — controls, headings, prose, and anything over 200 chars |
 
 ### The demo failure (2026-08-03) — two symptoms, one cause
 
@@ -87,9 +90,34 @@ click. Two consequences to fix rather than document around:
   that came back mid-session would 404 until the panel is reopened.
 
 **The lesson, and it is not a UI one:** the product currently cannot be shown
-to anyone without a terminal running `uvicorn` with an API key exported. That
-is next steps item 1, and it is now the top priority — ahead of proof mode and
-ahead of the ClaimEZ dump.
+to anyone without a terminal running `uvicorn`. Redeploying is still next steps
+item 1.
+
+Both UI consequences above are now fixed and pinned by `panel.test.js`, which
+did not exist before: a network `TypeError` maps to a fixed sentence, `onMap`
+retries `loadForms` rather than posting a `""` form id, Map refuses when no
+form is selected, and a failed parse reports itself in the details drawer so
+two messages never compete for one status line. A third was found while
+testing: an empty form list was reported as "could not reach the backend",
+which sends someone to check the URL of a server that answered.
+
+### The RoboForm route (2026-08-03) — a demo that needs no API key
+
+`roboform_test_v1` is a `fill_mode: "web"` schema against RoboForm's public
+39-field test page. Every field is `demographics.*`, so `map_fields` returns
+early without an LLM call, and with `FORMFILL_DISABLE_SWEEP=1` the whole path
+— paste, parse, map, review, fill — runs with **no `ANTHROPIC_API_KEY`**.
+That matters beyond convenience: the key was the thing blocking a demo.
+
+Dry-run against the real page markup in jsdom: 5 of 6 matched, rate 0.83,
+`safeToFill` true, five values in the right controls. The sixth is deliberate
+— three `<select>`s share the label "Date Of Birth", so the matcher calls it
+ambiguous and fills none of them. A test schema that only demonstrated success
+would not be worth having.
+
+It is `internal: true`, so it needs `FORMFILL_SHOW_INTERNAL=1` to appear in the
+picker. It is also the first schema to declare `hosts`, so it is the first
+thing that exercises host auto-detection at all.
 
 ---
 
@@ -131,6 +159,43 @@ regression check: a one-line note should come back almost entirely `missing`.
 **Doctors confirm, they don't just read.** Anything not directly `extracted`
 requires an explicit confirm click before the PDF can be generated. Editing a
 value counts as confirming it. Do not "helpfully" pre-confirm inferred fields.
+
+**One paste box, and the split is done by patterns — never by a model.** The
+owner's call (2026-08-03): seven inputs and a note box collapse into a single
+textarea; the doctor pastes the consultation as it sits in the CMS.
+
+The question that actually mattered was who does the splitting, and the answer
+is not a style preference. **`redaction.py` pass 1 uses the demographics AS THE
+DICTIONARY** it scrubs the note with, because a name has no shape for a regex
+to find. A model asked to split the block would have read the patient's name
+and NRIC *before any dictionary existed* — and the note could no longer be
+scrubbed of the name either, because nothing would know what it was. The
+ordering is the privacy model, not a preference. `backend/demographics.py`
+does it with the patterns `redaction.py` already defines.
+
+What it refuses to do is most of the design, and it is the same bet the rest
+of the product makes:
+
+- A labelled line is believed. A shape in unlabelled prose is believed **only
+  when it occurs exactly once in the whole paste** — every note in
+  `docs/test_notes.md` carries the clinic's own phone number under the
+  doctor's signature, so two candidates means neither is returned.
+- **A date of birth is never taken from unlabelled text.** A clinical note is
+  nothing but dates: consultation, admission, discharge, MC.
+- **A name is never guessed at all**, from anything.
+- Compound patient lines are split by segment, because that is how the pilot
+  writes them: name, NRIC, DOB, phone, address, policy on one middot-separated
+  line — which also *wraps*, so continuation lines are rejoined when the
+  previous line ends in a separator.
+
+The parsed fields stay on screen and stay editable, in a drawer that opens
+itself when something required is missing. They are not a summary: they are
+what redaction searches for, so a name that arrived wrong there is a name left
+in the text that goes to the model.
+
+It lives on the server rather than in the panel for the same reason redaction
+does — a JavaScript copy of those patterns that drifted from the Python one is
+a leak.
 
 **Auto-filling demographics from the clinic CMS was investigated and
 deferred.** Recommendation stands: paste-and-parse (extract NRIC/DOB/phone
@@ -318,12 +383,15 @@ install needs no call.
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
 
-**Two fill modes.** `fill_mode: "acroform"` writes into the PDF's own fields
+**Three fill modes.** `fill_mode: "acroform"` writes into the PDF's own fields
 (AIA GHS, GE GHS — official fillable PDFs). `fill_mode: "overlay"` stamps text
 at coordinates onto flat CamScanner scans that have no fields at all
 (Prudential, Henner, AIA Medical Report). Overlay boxes are **points from the
 page top-left**, not PDF's bottom-left origin — the conversion happens once in
-`overlay_fill._box_to_pdf_rect`.
+`overlay_fill._box_to_pdf_rect`. `fill_mode: "web"` is the extension's target:
+no `pdf_path` and no `pdf_field_name`, because the control is located at fill
+time by matching labels against the live page. `POST /claims/{id}/approve`
+refuses a web schema — there is no PDF to hand back.
 
 **Never eyeball overlay coordinates — use the proof loop.**
 `python scripts/calibrate_overlay.py <pdf> <out>` renders each page with a
@@ -360,7 +428,12 @@ omission to "fix".
 ## Guardrails — do not relax these
 
 - Demographics never reach the LLM. They are copied onto the form
-  deterministically and double as the redaction dictionary.
+  deterministically and double as the redaction dictionary. **This extends to
+  finding them**: `POST /parse` splits the paste with patterns and no model,
+  because a model that split it would have read the name before the dictionary
+  that redacts the name existed. Do not "improve" the parser by handing the
+  block to Claude when a field comes back blank — a blank field is a doctor
+  typing one line.
 - The token→value map stays in server memory; claims are in-memory only,
   deleted on download, purged after 1h. `POST /map` stores nothing at all.
 - **No `chrome.storage`, and the permission is not requested.** Patient notes
@@ -410,6 +483,15 @@ npm install && npm test
 export ANTHROPIC_API_KEY=...    # never via Claude Code's `!` prefix: it is logged
 ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
 
+# ...except for the RoboForm route, which needs NO key at all. Its schema is
+# all-demographics, so map_fields never calls the model; disabling the sweep
+# removes the only other call. FORMFILL_SHOW_INTERNAL puts the test schema in
+# the picker, which is the only way the panel can name it.
+export FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1
+./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
+# then: https://www.roboform.com/filling-test-all-fields, click the ClaimFill
+# icon ON THAT TAB, paste a case from docs/test_notes.md, Map, Fill.
+
 # frontend dev (expects backend on :8000)
 cd frontend && npm run dev            # http://localhost:5173
 
@@ -451,24 +533,33 @@ node stage.
    transcript). Update `DEFAULT_API_BASE` in `extension/panel/panel.js` once
    the URL is known. Check `fly status` afterwards for the two-machine trap.
 
-   **Until that lands, the demo checklist is:** start uvicorn on :8000, with
-   `ANTHROPIC_API_KEY` exported *in that same shell*, **before** opening the
-   panel — the panel loads the form list once, on open, so a backend started
-   afterwards needs the panel reopened.
+   **Until that lands, the demo checklist is:** start uvicorn on :8000 before
+   opening the panel. A key is no longer part of it for the RoboForm route —
+   see the commands section. The panel no longer needs reopening if the backend
+   started late: `onMap` retries the form load.
 
-2. **Make the panel survivable when the backend is down**, because the
-   failure above was made worse by the UI. `onMap` overwrites the standing
-   "could not reach the backend" message with `TypeError: Failed to fetch`,
-   which no doctor can act on; a network throw should map to a fixed string
-   the way the HTTP statuses already do. And Map should refuse outright when
-   `form-id` is empty rather than posting a `""` form id for a 404. Both are
-   small and both are testable in jsdom.
-3. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
+2. ~~**Make the panel survivable when the backend is down.**~~ **Done
+   2026-08-03**, with `panel.test.js` to hold it: network `TypeError` → fixed
+   sentence, `onMap` retries `loadForms` instead of posting a `""` form id, Map
+   refuses with no form selected, a failed parse stays out of the Map status
+   line, and an empty form list is no longer reported as an unreachable
+   backend.
+3. **Run the RoboForm route in a real browser.** Everything below the browser
+   is verified: 5 of 6 fields match and write against the real page markup in
+   jsdom, and the backend path runs live with no API key. What that does *not*
+   prove is the part only Chrome can answer — that an isolated-world write
+   lands, and that the panel drives it end to end. This is the next thing to
+   actually do, and it needs no key:
+   `FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, then
+   the ClaimFill icon **on the RoboForm tab**, paste case 1 from
+   `docs/test_notes.md`, Map, Fill. Expect five filled and Date Of Birth
+   reported ambiguous.
+4. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
    on RoboForm's test page — panel opens, `activeTab` granted, injection works,
    39 controls collected, `POST /map` round-trips against a local backend, the
-   review screen renders, and Fill refused an unrecognised page. What has
-   *not* happened: a successful fill of anything, anywhere. Remaining
-   assumptions, each of which fails in a way the tests cannot see:
+   review screen renders. What has *not* happened: a successful fill in a real
+   browser, anywhere. Remaining assumptions, each of which fails in a way the
+   tests cannot see:
    - ~~Whether an action click that opens the side panel grants `activeTab`.~~
      **Answered 2026-08-03, on Chrome 150: it does not.**
      `setPanelBehavior({openPanelOnActionClick: true})` makes Chrome handle the
@@ -488,30 +579,35 @@ node stage.
      it would read as a page with no controls and refuse. Safe direction to
      fail, but it needs `allFrames` plus a decision on how per-frame reports
      merge and which frame the match rate is computed over.
-4. **Prove a write actually lands in a framework-rendered field.** No field
-   has been successfully filled anywhere yet, so the `_valueTracker` question
-   above is wide open — and it is the one that fails *looking correct*: right
-   value on screen, stale value submitted. `tests/fixtures/portal_like.html`
-   is plain static HTML and proves nothing here. Either add a small React page
-   with a controlled input, or get onto a real portal.
-5. **Proof mode** — outline each filled control and stamp its field id, the
+5. **Prove a write actually lands in a *framework-rendered* field.** RoboForm
+   is plain HTML, so a successful fill there answers "does the panel drive a
+   real page" and says nothing about `_valueTracker` — which is the one that
+   fails *looking correct*: right value on screen, stale value submitted.
+   `tests/fixtures/portal_like.html` is static too. Either add a small React
+   page with a controlled input, or get onto a real portal.
+6. **Proof mode** — outline each filled control and stamp its field id, the
    port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
    adjacent controls are usually different questions, and a misplaced value is
    obvious in a render and invisible in a report. Then the `MutationObserver`
    re-run as wizard steps render (this is what `optional_host_permissions` is
    declared for).
-6. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
+7. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
    page.** The pivot did not move this. An expired link renders an error page
    with no fields, `submit-offline` is post-submission only, and the portal is
    a JS-rendered SPA so no fetch-based tool can see its DOM. It has to be a
    real page in a real browser. Run the dump before filling the claim; it is
-   read-only and does not consume the token. Note that **no schema declares
-   `hosts` yet**, so host auto-detection cannot succeed on any page today —
-   the picker is the expected outcome, not a bug.
-7. **Paste-and-parse demographics** — one pasted block from ClinicAssist fills
-   name/NRIC/DOB/phone instead of six fields.
-8. **SG-region inference** before any real patient note.
-9. Deferred: coordinate-overlay fill for the three scanned forms.
+   read-only and does not consume the token. `roboform_test_v1` is now the only
+   schema declaring `hosts`, so auto-detection succeeds there and nowhere else
+   — on any insurer page the picker is still the expected outcome, not a bug.
+8. ~~**Paste-and-parse demographics.**~~ **Done 2026-08-03** — one box,
+   `POST /parse`, patterns only. What is left is narrower and worth doing after
+   the pilot has pasted a few real CMS exports: the label synonyms in
+   `demographics.py` are a guess at what ClinicAssist emits, and the parser
+   cannot find an insurer that is only implied by a policy prefix (`GHS-`,
+   `GE-`, `PRU-`). Deriving it from the selected schema's `insurer` would be
+   deterministic and is probably right.
+9. **SG-region inference** before any real patient note.
+10. Deferred: coordinate-overlay fill for the three scanned forms.
 
 ---
 
