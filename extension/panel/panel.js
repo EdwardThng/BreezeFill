@@ -747,19 +747,32 @@ async function onCheck() {
  * date the patient FIRST consulted this doctor for this condition, not the
  * latest visit" — and all a page can supply is the wording of the question.
  */
+// Enough of a public-suffix list to guess an insurer's name from a host, and
+// not one character more — this is used for a display string a human edits,
+// never for matching. Singapore's are two-part (aia.com.sg), which is exactly
+// the trap: "the last two labels" of claimez.aia.com.sg is "com.sg".
+const HOST_SUFFIXES = new Set([
+  "com", "net", "org", "edu", "gov", "co", "sg", "uk", "au", "my", "id", "hk", "www",
+]);
+
 function draftSchema() {
   const host = state.host || "";
-  // The registrable label, which for an insurer is the brand: aia.com.sg ->
-  // aia, claimez.aia.com.sg -> aia. A guess, flagged as one in the panel.
   const parts = host.split(".").filter(Boolean);
-  const brand = parts.length > 2 ? parts[parts.length - 3] : parts[0] || "insurer";
+  // The rightmost label that is not a suffix: claimez.aia.com.sg -> aia,
+  // roboform.com -> roboform. A guess, and labelled as one in display_name.
+  const brand = parts.filter((p) => !HOST_SUFFIXES.has(p)).pop() || "insurer";
 
   return {
     form_id: `${brand}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_v1`,
     display_name: `Drafted from ${host} — rename me`,
     insurer: brand.toUpperCase(),
     fill_mode: "web",
-    hosts: [parts.slice(-2).join(".") || host],
+    // The full host, never a guess at the registrable domain. `hostMatches`
+    // matches subdomains too, so a wrong guess here does not merely miss —
+    // "com.sg" would claim every commercial site in Singapore. Widening this
+    // by hand to aia.com.sg is a one-word edit for whoever commits it; a
+    // schema that silently claims a whole TLD is not recoverable by review.
+    hosts: [host],
     fields: state.rows.map((row) => ({
       id: row.field_id,
       label: row.label,
