@@ -439,15 +439,29 @@ node stage.
 
 ## Next steps
 
-1. **Work out what happened to the Fly app, then redeploy and set the secret.**
-   `formfill-backend.fly.dev` no longer resolves, so there is nothing to point
-   the extension at but a local backend. `flyctl apps list` first — the name
-   may have changed rather than the app having been destroyed. Then
-   `fly deploy --ha=false` and `fly secrets set ANTHROPIC_API_KEY=...`, both in
-   the owner's own terminal, never through Claude Code's `!` prefix (which
-   writes the command into the transcript). Update `DEFAULT_API_BASE` in
-   `extension/panel/panel.js` once the URL is known.
-2. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
+1. **Redeploy the backend. This is what blocks demoing, and it blocked one
+   already.** `formfill-backend.fly.dev` no longer resolves, so the extension
+   points at `localhost:8000` and a demo needs a terminal. `flyctl apps list`
+   first — the name may have changed rather than the app having been
+   destroyed. Then `fly deploy --ha=false` and
+   `fly secrets set ANTHROPIC_API_KEY=...`, both in the owner's own terminal,
+   never through Claude Code's `!` prefix (which writes the command into the
+   transcript). Update `DEFAULT_API_BASE` in `extension/panel/panel.js` once
+   the URL is known. Check `fly status` afterwards for the two-machine trap.
+
+   **Until that lands, the demo checklist is:** start uvicorn on :8000, with
+   `ANTHROPIC_API_KEY` exported *in that same shell*, **before** opening the
+   panel — the panel loads the form list once, on open, so a backend started
+   afterwards needs the panel reopened.
+
+2. **Make the panel survivable when the backend is down**, because the
+   failure above was made worse by the UI. `onMap` overwrites the standing
+   "could not reach the backend" message with `TypeError: Failed to fetch`,
+   which no doctor can act on; a network throw should map to a fixed string
+   the way the HTTP statuses already do. And Map should refuse outright when
+   `form-id` is empty rather than posting a `""` form id for a 404. Both are
+   small and both are testable in jsdom.
+3. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
    on RoboForm's test page — panel opens, `activeTab` granted, injection works,
    39 controls collected, `POST /map` round-trips against a local backend, the
    review screen renders, and Fill refused an unrecognised page. What has
@@ -472,22 +486,30 @@ node stage.
      it would read as a page with no controls and refuse. Safe direction to
      fail, but it needs `allFrames` plus a decision on how per-frame reports
      merge and which frame the match rate is computed over.
-3. **Proof mode** — outline each filled control and stamp its field id, the
+4. **Prove a write actually lands in a framework-rendered field.** No field
+   has been successfully filled anywhere yet, so the `_valueTracker` question
+   above is wide open — and it is the one that fails *looking correct*: right
+   value on screen, stale value submitted. `tests/fixtures/portal_like.html`
+   is plain static HTML and proves nothing here. Either add a small React page
+   with a controlled input, or get onto a real portal.
+5. **Proof mode** — outline each filled control and stamp its field id, the
    port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
    adjacent controls are usually different questions, and a misplaced value is
    obvious in a render and invisible in a report. Then the `MutationObserver`
    re-run as wizard steps render (this is what `optional_host_permissions` is
    declared for).
-4. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
+6. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
    page.** The pivot did not move this. An expired link renders an error page
    with no fields, `submit-offline` is post-submission only, and the portal is
    a JS-rendered SPA so no fetch-based tool can see its DOM. It has to be a
    real page in a real browser. Run the dump before filling the claim; it is
-   read-only and does not consume the token.
-3. **Paste-and-parse demographics** — one pasted block from ClinicAssist fills
+   read-only and does not consume the token. Note that **no schema declares
+   `hosts` yet**, so host auto-detection cannot succeed on any page today —
+   the picker is the expected outcome, not a bug.
+7. **Paste-and-parse demographics** — one pasted block from ClinicAssist fills
    name/NRIC/DOB/phone instead of six fields.
-4. **SG-region inference** before any real patient note.
-5. Deferred: coordinate-overlay fill for the three scanned forms.
+8. **SG-region inference** before any real patient note.
+9. Deferred: coordinate-overlay fill for the three scanned forms.
 
 ---
 
