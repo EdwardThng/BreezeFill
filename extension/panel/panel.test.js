@@ -25,7 +25,28 @@ const PANEL_HTML = readFileSync(resolve(HERE, "panel.html"), "utf8");
 const PANEL_JS = readFileSync(resolve(HERE, "panel.js"), "utf8");
 
 const FORMS = [
-  { form_id: "roboform_test_v1", display_name: "RoboForm test page", insurer: "Test", hosts: ["roboform.com"] },
+  {
+    form_id: "roboform_test_v1",
+    display_name: "RoboForm test page",
+    insurer: "Test",
+    hosts: ["roboform.com"],
+    fields: [
+      { id: "full_name", label: "Full Name" },
+      { id: "nric", label: "Social Security Number" },
+      { id: "phone", label: "Home Phone" },
+    ],
+  },
+  {
+    form_id: "aia_ghs_claim",
+    display_name: "Group H&S claim",
+    insurer: "AIA",
+    hosts: [],
+    fields: [
+      { id: "diagnosis", label: "Diagnosis of all conditions treated" },
+      { id: "icd", label: "ICD-10 Code" },
+      { id: "admitted", label: "Date of admission" },
+    ],
+  },
 ];
 
 const PARSED = {
@@ -39,8 +60,19 @@ const PARSED = {
   sources: { full_name: "patient-line" },
 };
 
-/** Queue of responses, consumed in order, keyed by the path being called. */
+/** Backend responses, keyed by the path being called. */
 let routes;
+/** What the injected script answers, per action. */
+let page;
+
+const EMPTY_REPORT = {
+  results: [],
+  unknownControls: [],
+  matched: 0,
+  intended: 0,
+  matchRate: 0,
+  safeToFill: false,
+};
 
 function respond(body, ok = true, status = 200) {
   return Promise.resolve({
@@ -57,7 +89,9 @@ function loadPanel() {
   globalThis.chrome = {
     tabs: {
       query: vi.fn().mockResolvedValue([{ id: 1 }]),
-      sendMessage: vi.fn().mockResolvedValue({ ok: true, host: "roboform.com", controlCount: 39, report: { results: [], unknownControls: [], matched: 0, intended: 0, safeToFill: false } }),
+      sendMessage: vi.fn((_tabId, message) =>
+        Promise.resolve(page[message.action] || { ok: false })
+      ),
     },
     scripting: { executeScript: vi.fn().mockResolvedValue([]) },
   };
@@ -76,7 +110,14 @@ beforeEach(() => {
   routes = {
     "/forms": () => respond(FORMS),
     "/parse": () => respond(PARSED),
+    "/map-live": () => respond({ form_id: "__live__", fields: [] }),
     "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
+  };
+  // A page nothing in the bank recognises, which is the interesting default:
+  // it is what an insurer portal looks like on the first visit.
+  page = {
+    survey: { ok: true, host: "portal.example.com", controlCount: 4, report: EMPTY_REPORT, candidates: [] },
+    fill: { ok: true, refused: false, filled: 0, applied: [], report: EMPTY_REPORT },
   };
   globalThis.fetch = vi.fn((url) => {
     const path = Object.keys(routes).find((p) => String(url).endsWith(p));
@@ -125,7 +166,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    expect($("form-id").options).toHaveLength(1);
+    expect($("form-id").options).toHaveLength(FORMS.length);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/map"),
       expect.anything()
@@ -236,6 +277,238 @@ describe("reading the paste", () => {
 
     const parses = globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/parse"));
     expect(parses).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Which form is this?
+// ---------------------------------------------------------------------------
+
+describe("identifying the form", () => {
+  const scored = (scores) => {
+    page.survey = { ...page.survey, candidates: scores };
+  };
+
+  test("the best-fitting schema is chosen and the picker stays out of the way", async () => {
+    scored([
+      { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
+      { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
+    ]);
+    loadPanel();
+    await settle();
+
+    expect($("form-id").value).toBe("aia_ghs_claim");
+    expect($("form-detected").textContent).toContain("Group H&S claim");
+    expect($("form-id").hidden).toBe(true);
+  });
+
+  test("two schemas fitting equally well is not a winner", async () => {
+    // Same insurer, several forms, overlapping questions. Guessing between
+    // them would put a value under a question from the wrong form.
+    scored([
+      { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
+      { formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 },
+    ]);
+    loadPanel();
+    await settle();
+
+    expect($("form-id").hidden).toBe(false);
+    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
+  });
+
+  test("a thin match still counts, because a wizard shows one step at a time", async () => {
+    // Identification is looser than filling on purpose: the right schema may
+    // only find a third of its fields on the step in front of us. Whatever is
+    // picked still has to clear the fill guards before anything is written.
+    scored([{ formId: "aia_ghs_claim", matched: 3, intended: 7, matchRate: 0.43 }]);
+    loadPanel();
+    await settle();
+
+    expect($("form-id").value).toBe("aia_ghs_claim");
+  });
+
+  test("a match too thin to mean anything does not count", async () => {
+    scored([{ formId: "aia_ghs_claim", matched: 2, intended: 24, matchRate: 0.08 }]);
+    loadPanel();
+    await settle();
+
+    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
+  });
+
+  test("the host registered for a form wins when nothing scores", async () => {
+    page.survey = { ...page.survey, host: "roboform.com", candidates: [] };
+    loadPanel();
+    await settle();
+
+    expect($("form-id").value).toBe("roboform_test_v1");
+  });
+
+  test("schemas are scored by their own field labels", async () => {
+    loadPanel();
+    await settle();
+
+    const [, message] = globalThis.chrome.tabs.sendMessage.mock.calls[0];
+    expect(message.candidates).toEqual([
+      {
+        formId: "roboform_test_v1",
+        fields: [
+          { fieldId: "full_name", label: "Full Name" },
+          { fieldId: "nric", label: "Social Security Number" },
+          { fieldId: "phone", label: "Home Phone" },
+        ],
+      },
+      {
+        formId: "aia_ghs_claim",
+        fields: [
+          { fieldId: "diagnosis", label: "Diagnosis of all conditions treated" },
+          { fieldId: "icd", label: "ICD-10 Code" },
+          { fieldId: "admitted", label: "Date of admission" },
+        ],
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The form nobody has a schema for
+// ---------------------------------------------------------------------------
+
+describe("the schema-free fallback", () => {
+  const CONTROLS = [
+    { ref: "c1", label: "Diagnosis of all conditions treated", type: "text" },
+    { ref: "c2", label: "Date of admission", type: "date" },
+    { ref: "c3", label: "", type: "text" },
+  ];
+
+  async function unrecognisedPanel() {
+    page.survey = {
+      ...page.survey,
+      candidates: [],
+      report: { ...EMPTY_REPORT, unknownControls: CONTROLS },
+    };
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+    return panel;
+  }
+
+  test("it is offered only when nothing in the bank fits", async () => {
+    page.survey = { ...page.survey, candidates: [{ formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 }] };
+    loadPanel();
+    await settle();
+    expect($("use-live-wrap").hidden).toBe(true);
+  });
+
+  test("mapping posts the page's own labels, not a form id", async () => {
+    const panel = await unrecognisedPanel();
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    expect(call).toBeTruthy();
+    const sent = JSON.parse(call[1].body);
+    // The unlabelled control is dropped here rather than posted as "": a
+    // field with no question cannot be answered, and asking wastes a call.
+    expect(sent.fields).toEqual([
+      { label: "Diagnosis of all conditions treated", type: "text" },
+      { label: "Date of admission", type: "date" },
+    ]);
+    expect(sent.form_id).toBeUndefined();
+  });
+
+  test("picking a schema turns the fallback off", async () => {
+    await unrecognisedPanel();
+    expect($("use-live").checked).toBe(true);
+
+    $("form-id").value = "aia_ghs_claim";
+    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect($("use-live").checked).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Growing the bank
+// ---------------------------------------------------------------------------
+
+describe("the draft schema", () => {
+  const ROWS = [
+    { field_id: "diagnosis_of_all_conditions_treated", label: "Diagnosis of all conditions treated", field_type: "text", help: "Diagnosis of all conditions treated", value: "Appendicitis", needs_review: false, status: "extracted" },
+    { field_id: "date_of_admission", label: "Date of admission", field_type: "date", help: null, value: "14/03/2026", needs_review: false, status: "extracted" },
+  ];
+
+  async function filledLive() {
+    page.survey = { ...page.survey, host: "claimez.aia.com.sg", candidates: [] };
+    const panel = loadPanel();
+    await settle();
+    panel.state.rows = ROWS;
+    panel.state.host = "claimez.aia.com.sg";
+    return panel;
+  }
+
+  test("it describes the form, and says where it came from", async () => {
+    const panel = await filledLive();
+    const draft = panel.draftSchema();
+
+    expect(draft.fill_mode).toBe("web");
+    // The full host, not a guess at the registrable domain. "The last two
+    // labels" of a Singapore host is "com.sg", and hostMatches() matches
+    // subdomains — that schema would claim every .com.sg site there is.
+    expect(draft.hosts).toEqual(["claimez.aia.com.sg"]);
+    // The insurer name is guessed past the suffixes, which is safe: it is a
+    // display string whoever commits the schema will edit.
+    expect(draft.insurer).toBe("AIA");
+    // The name is a guess off the host and has to be corrected by whoever
+    // commits it, so the draft says so rather than looking authoritative.
+    expect(draft.display_name).toMatch(/rename me/i);
+    expect(draft.fields).toEqual([
+      {
+        id: "diagnosis_of_all_conditions_treated",
+        label: "Diagnosis of all conditions treated",
+        type: "text",
+        source: "llm",
+        description: "Diagnosis of all conditions treated",
+      },
+      {
+        id: "date_of_admission",
+        label: "Date of admission",
+        type: "date",
+        source: "llm",
+        description: "Date of admission",
+      },
+    ]);
+  });
+
+  test("every field is described, not just the ones this note answered", async () => {
+    const panel = await filledLive();
+    panel.state.rows = [...ROWS, { field_id: "icd_10_code", label: "ICD-10 Code", field_type: "text", help: null, value: null, status: "missing", needs_review: true }];
+    // A schema describes the form. Dropping the blanks would mean the next
+    // claim, with a fuller note, could not fill the fields this one missed.
+    expect(panel.draftSchema().fields).toHaveLength(3);
+  });
+
+  test("it appears after a schema-free fill, and not before", async () => {
+    const panel = await filledLive();
+    expect($("step-draft").hidden).toBe(true);
+
+    page.fill = { ok: true, refused: false, filled: 2, applied: [], report: EMPTY_REPORT };
+    await panel.onFill();
+
+    expect($("step-draft").hidden).toBe(false);
+    expect(JSON.parse($("draft-json").value).fields).toHaveLength(2);
+  });
+
+  test("a refused fill produces no draft", async () => {
+    // Nothing was written, so nothing was confirmed against the real page.
+    // A schema drafted from a page we could not fill is a guess about a form
+    // nobody has seen work.
+    const panel = await filledLive();
+    page.fill = { ok: true, refused: true, reason: "the page does not match", filled: 0, applied: [], report: EMPTY_REPORT };
+    await panel.onFill();
+
+    expect($("step-draft").hidden).toBe(true);
   });
 });
 
