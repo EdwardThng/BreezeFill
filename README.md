@@ -30,7 +30,11 @@ FormFill turns a pasted clinical note into a filled insurance claim PDF in minut
 ## Architecture
 
 ```
-frontend/   React + Vite single-page review UI
+frontend/   The website: landing page, interactive demo, and the older
+            PDF claim UI kept at #/app
+  ├── Landing.tsx   what the product is, and what it refuses to do
+  ├── Demo.tsx      one synthetic claim, walked step by step, no backend
+  └── ClaimApp.tsx  paste -> review -> filled PDF (unadvertised, still works)
 extension/  Chrome side panel — fills insurer web forms in place, never submits
 backend/    FastAPI service
   ├── demographics.py  one pasted block -> demographic fields (no LLM, ever)
@@ -57,6 +61,7 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | `POST` | `/claims/{id}/approve` | Fill the PDF with final values; returns the PDF and deletes the claim |
 | `DELETE` | `/claims/{id}` | Discard a claim |
 | `GET` | `/health` | Liveness + loaded form count |
+| `GET` | `/download/claimfill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
 
 ---
 
@@ -86,7 +91,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 .venv\Scripts\python -m uvicorn main:app --app-dir backend --port 8000
 ```
 
-### Frontend
+### Website
 
 ```bash
 cd frontend
@@ -94,7 +99,13 @@ npm install
 npm run dev          # dev server on http://localhost:5173
 ```
 
-The UI expects the backend at `http://localhost:8000`; point it elsewhere with `VITE_API_URL`:
+Three screens, routed by hash so the backend's catch-all static mount never
+sees them: `#/` is the landing page, `#/demo` is a walkthrough of one synthetic
+claim that talks to nothing, and `#/app` is the older PDF claim UI — kept
+because not every insurer sends a link, and those five forms have no other
+interface.
+
+The PDF UI expects the backend at `http://localhost:8000`; point it elsewhere with `VITE_API_URL`:
 
 ```bash
 VITE_API_URL=https://your-backend.example.com npm run build
@@ -113,11 +124,12 @@ VITE_API_URL=https://your-backend.example.com npm run build
 
 ### Tests
 
-The entire suite runs offline — no API key needed:
+Three suites, all offline — no API key needed for any of them:
 
 ```bash
-.venv\Scripts\python -m pytest        # Windows
-.venv/bin/python -m pytest            # macOS/Linux
+.venv\Scripts\python -m pytest    # backend
+npm test                          # browser extension (from the repo root)
+cd frontend && npm test           # website
 ```
 
 Coverage includes a golden set of synthetic clinical notes asserting zero identifiers survive redaction, adversarial redaction cases, PDF fill round-trips, and the full API flow with the LLM stubbed.
