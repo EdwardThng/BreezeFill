@@ -591,6 +591,15 @@ before the install will not.
 command-not-found here, and it reads exactly like a PATH problem that reopening
 the terminal should fix. It is not.
 
+**`flyctl auth login` cannot be run through Claude Code.** It needs an
+interactive terminal, and both the PowerShell tool and the `!` prefix run
+non-interactively with stdin on the null device — it exits 1 with "requires an
+interactive terminal" rather than hanging. It must be a real terminal window
+the owner opens themselves. This is one-time: the token lands in
+`~/.fly/config.yml`, and every later command (`apps list`, `secrets list`,
+`deploy`) is non-interactive and can be run from here. Quote the path when
+invoking it directly — the profile directory has a space in it.
+
 The `!` prefix in Claude Code runs **Bash**, not PowerShell.
 
 **Toolchain quirks that cost a session to work out.** On the OneDrive-synced
