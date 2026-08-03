@@ -5,12 +5,12 @@ insurer form). **Read that first.** This file records decisions, current
 state, and the traps — the things not derivable from the code.
 
 Stack: FastAPI + pypdf backend, React/Vite frontend, Anthropic structured
-output. Repo `EdwardThng/DocBot` (private). Pilot user is the owner's father,
-a Singapore GP.
+output. Repo `EdwardThng/ClaimFill` (private). Pilot user is the owner's
+father, a Singapore GP.
 
 ---
 
-## Status as of 2026-08-03 (HEAD `97f3a54`)
+## Status as of 2026-08-03 (HEAD `65e1253`)
 
 | Piece | State |
 |---|---|
@@ -21,7 +21,8 @@ a Singapore GP.
 | React UI: 3-step flow, form picker, review screen | Working, but **superseded as the product surface** — see the pivot below |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | Fly deploy | **Gone.** `formfill-backend.fly.dev` returned NXDOMAIN on 2026-08-03 — the name does not resolve at all, so this is a destroyed/renamed app, not a stopped machine. Was live on 2026-07-30. Verify with `flyctl apps list` before assuming a URL |
-| `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` fails until set |
+| `ANTHROPIC_API_KEY` | **Not set anywhere** — no local env var, no Fly secret. `POST /claims` and `POST /map` fail until set |
+| **Demoable?** | **No — not without a terminal.** With no Fly app, `DEFAULT_API_BASE` points at `http://localhost:8000`, so every demo needs `uvicorn` running on the demo machine *and* `ANTHROPIC_API_KEY` exported in that shell. A demo was attempted on 2026-08-03 without either and failed at the first click. See "the demo failure" below — this is the single thing standing between the extension and being shown to anyone |
 
 Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
 static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
