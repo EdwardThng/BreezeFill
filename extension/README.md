@@ -56,7 +56,7 @@ requests no storage permission, so there is nowhere to persist it).
 | `panel/` | The doctor's surface: one pasted block → `POST /parse` → `POST /map` → review → fill. Holds the claim in memory. |
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
 | `learn/dump.js` | Learn mode, plus the control collection and label scrubbing the filler reuses. |
-| `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. |
+| `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. Also what identifies a form: the same measurement, read at a looser threshold. |
 | `fill/apply.js` | Writes values past a framework's value tracker. Never submits. |
 
 ### What it can reach, and when
@@ -75,6 +75,53 @@ memory while it is open and nowhere else, so a clinical note cannot reach disk
 by mistake. This is also why `background.js` stays empty of state: an MV3
 service worker is evicted after ~30s idle, so anything it had to remember
 would have to be persisted.
+
+### Which form is this, and what if we don't have it
+
+Three steps, in order.
+
+**1. The bank.** Every schema is scored against the live controls and the best
+fit wins. This asks "does this page carry the fields this schema describes",
+which is what matters, rather than reading a form id out of the markup, which
+rots at the insurer's next deploy. A host in a schema's `hosts` narrows the
+shortlist first but does not settle it — one insurer serves several forms from
+one domain. Two schemas fitting equally well is not a winner; that falls back
+to the picker.
+
+Identification uses looser thresholds than filling (`IDENTIFY_MIN_RATE` 0.4 vs
+`MIN_MATCH_RATE` 0.7). A wizard shows one step at a time, so the right schema
+may only find a third of its fields on the page in front of you. That is safe
+because identifying is not deciding: whatever is picked still has to clear the
+fill guards before a value is written.
+
+**2. No schema? Map against the page.** `POST /map-live` takes the page's own
+labels instead of a schema's fields. Same redaction, same review, same confirm
+before anything is written. Offered only when nothing fits, and never the
+default, because it is **strictly weaker** — a schema's `description` is the
+instruction you would give a colleague ("the date the patient FIRST consulted
+this doctor for this condition, not the latest visit"), and a page can only
+supply the question as it is worded.
+
+It also has a cost the schema path does not: **page structure becomes an LLM
+input on every claim mapped this way.** Labels are scrubbed twice, in the
+browser and again server-side, and that still cannot catch a name.
+
+Note this path *does* need an `ANTHROPIC_API_KEY` — unlike the RoboForm route
+above, its fields are all `source: "llm"`.
+
+**3. A successful schema-free fill hands back a draft schema.** JSON in the
+panel, for you to read and commit into `backend/schemas/`. It is not installed
+and not committed automatically, and that is deliberate: a schema governs every
+later claim against that form, so an unreviewed one turns one mis-mapped field
+into a permanent wrong answer nothing re-checks. Two things to fix by hand
+every time — `display_name` (guessed from the host, and it says so) and the
+`description`s, which start as the labels and are where a schema earns its
+keep.
+
+`hosts` in a draft is the **full host**, not a guessed registrable domain: the
+last two labels of `claimez.aia.com.sg` are `com.sg`, and host matching covers
+subdomains, so that draft would have claimed every commercial site in
+Singapore. Widen it by hand if you want the whole domain.
 
 ### Two refusals worth knowing before you debug
 
@@ -214,6 +261,8 @@ only as good as that list.
   declared-but-unrequested `optional_host_permissions` is for: access that
   survives a step change.
 - **An AIA ClaimEZ schema**, blocked on a learn-mode dump from a live page.
+- **A run of the schema-free fallback against a real unknown page.** It is
+  tested, but RoboForm is in the bank now, so it exercises the wrong branch.
 
 ## Assumptions that jsdom cannot test
 
