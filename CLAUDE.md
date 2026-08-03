@@ -37,6 +37,62 @@ every deploy.
 
 ---
 
+## What running it actually broke, and what fixed it
+
+Everything below was found by loading the extension in Chrome and clicking
+things. None of it was findable from the 85 + 112 tests, and that is the point
+worth internalising: the test suites cover logic the extension owns, and every
+single failure so far has been at a **boundary the tests stub out** — Chrome's
+permission model, Chrome's side-panel lifecycle, DNS, and the CORS envelope
+around an unhandled exception. Budget for browser time accordingly; do not read
+a green suite as readiness.
+
+| Symptom the doctor sees | Real cause | Fix |
+|---|---|---|
+| Extension absent from `chrome://extensions` | Nothing wrong with the code — manifest was valid, all 8 referenced files present, OneDrive files were real and not cloud placeholders, Chrome 150 was past the 114 floor. It was the load step | Developer mode → Load unpacked → select `extension/` |
+| "ClaimFill has no access to this tab", on a page plainly in view | `setPanelBehavior({openPanelOnActionClick: true})` opens the panel but grants **no `activeTab`** — Chrome handles the click itself, so `action.onClicked` never fires, and a click that never reaches the extension is not an invocation | Take `action.onClicked` and call `sidePanel.open({tabId})` from inside it. That *is* the canonical `activeTab` trigger |
+| `Error: No SW` in the worker console, every start | `chrome.sidePanel.setPanelBehavior()` throws from the worker's top level **and** from `onInstalled`. Moving it to another lifecycle event was tried and failed | Delete the call. `false` is already the default, so it could never have helped a clean install — it was pure liability |
+| "Could not reach the backend" | `formfill-backend.fly.dev` returns NXDOMAIN — destroyed or renamed, not stopped. Confirmed against `example.com` returning 200 from the same shell | `DEFAULT_API_BASE` → `http://localhost:8000` until a deploy exists |
+| "Failed to fetch" with no status code, on Map fields | A missing `ANTHROPIC_API_KEY` makes the SDK raise a plain **`TypeError`** ("Could not resolve authentication method"), not an `anthropic.APIError`, so it escaped both `except` clauses. Starlette's `ServerErrorMiddleware` sits **outside** `CORSMiddleware`, so the resulting 500 carried zero `Access-Control-*` headers and the browser could not even report the status | Broad `except Exception` in `_review_rows` → 503 when the key is absent, 502 otherwise. Log the exception **type only**; a message or traceback can quote clinical text |
+| Values silently cleared from fields the doctor had typed into | `applyOne` treated an absent value as an empty one and wrote `""` over it — then reported it filled | Absent-vs-empty guard at the top of `applyOne`, plus three tests |
+| Fill refused on a 39-field page | **Correct behaviour**, and the run that proved the refusal path works end to end. But it exposed the next hole | `MIN_MATCHED = 3` alongside `MIN_MATCH_RATE` — see below |
+
+### The demo failure (2026-08-03) — two symptoms, one cause
+
+Reported as *"failed to fetch, and no specific form listed in the dropdown"*.
+Both come from the same thing: **no backend was running.** Confirmed after the
+fact — `curl http://localhost:8000/health` returned nothing at all.
+
+The chain is worth writing down because the two symptoms look unrelated and
+the useful message is destroyed before it can be read:
+
+1. On open, `loadForms()` fetches `/forms`, throws, and its `catch` does two
+   things: writes *"Could not reach the backend. Check the URL under
+   Advanced."* into `#map-status`, and calls `showPicker("No forms loaded.")`,
+   which reveals an **empty `<select>`**. That is the missing dropdown entry —
+   not a form-detection bug.
+2. `detectForm()` then returns immediately on `if (!state.forms.length)`, so no
+   host matching is even attempted.
+3. Clicking **Map fields** calls `setStatus(status, "Redacting and mapping…")`
+   on that *same element*, **overwriting the one actionable message on screen**,
+   and then fails with the browser's raw `TypeError: Failed to fetch`.
+
+So the panel knew the right answer at load and then threw it away on the first
+click. Two consequences to fix rather than document around:
+
+- `onMap` should not clobber a standing connectivity error, and a bare
+  "Failed to fetch" should be translated the way the HTTP statuses already are
+  — a doctor cannot act on it, and neither could the owner mid-demo.
+- With an empty `<select>`, `$("form-id").value` is `""`, so even a backend
+  that came back mid-session would 404 until the panel is reopened.
+
+**The lesson, and it is not a UI one:** the product currently cannot be shown
+to anyone without a terminal running `uvicorn` with an API key exported. That
+is next steps item 1, and it is now the top priority — ahead of proof mode and
+ahead of the ClaimEZ dump.
+
+---
+
 ## Decisions and why
 
 **One app on Fly, not Vercel + Fly.** The frontend is built into the image and
