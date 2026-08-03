@@ -580,8 +580,14 @@ cd frontend && npm run build          # backend then serves it at /
 ./.venv/Scripts/python.exe backend/pdf_fill.py forms/your_form.pdf
 ```
 
-`flyctl` is installed at `~/.fly/bin/flyctl.exe` (not on PATH). The `!` prefix
-in Claude Code runs **Bash**, not PowerShell.
+**`flyctl` is NOT installed on this machine** (checked 2026-08-03: no
+`~/.fly/`, nothing on PATH, no scoop/choco/winget shim). An earlier note here
+claimed `~/.fly/bin/flyctl.exe`; that path is gone, which fits the app having
+been destroyed. Install with `iwr https://fly.io/install.ps1 -useb | iex`, then
+add `~\.fly\bin` to PATH. Nothing about Fly can be checked — not the app list,
+not whether a secret exists — until it is back.
+
+The `!` prefix in Claude Code runs **Bash**, not PowerShell.
 
 **Toolchain quirks that cost a session to work out.** On the OneDrive-synced
 copy, `node`/`npm` are installed but invisible to both the Bash tool and
