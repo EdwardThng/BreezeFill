@@ -142,6 +142,10 @@ describe("when the backend is not running", () => {
 
     const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map"));
     expect(mapped).toBe(false);
+    // ...and a backend that answered is not reported as unreachable. Sending
+    // someone to check a URL that just responded wastes the debugging.
+    expect($("map-status").textContent).not.toContain("Could not reach");
+    expect($("map-status").textContent).toContain("no forms loaded");
   });
 
   test("a failed parse does not overwrite the Map status line", async () => {
