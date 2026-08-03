@@ -63,6 +63,8 @@ const REQUIRED_FIELDS = ["full-name", "nric", "dob", "insurer"];
 
 const state = {
   forms: [],
+  /** Whether the last /forms call failed, as opposed to returning nothing. */
+  formsFailed: false,
   /** Review rows from POST /map. */
   rows: [],
   /** field_id -> doctor's value, when they have changed one. */
@@ -215,8 +217,14 @@ async function loadForms() {
     const response = await fetch(`${apiBase()}/forms`);
     if (!response.ok) throw new Error(String(response.status));
     state.forms = await response.json();
+    state.formsFailed = false;
   } catch {
-    setStatus($("map-status"), "Could not reach the backend. Check the URL under Advanced.", "error");
+    // Recorded rather than inferred from an empty list. A backend that is
+    // running and offers no forms is a different problem from one that is not
+    // running, and telling a doctor to check the URL of a server that
+    // answered is how twenty minutes get spent on the wrong thing.
+    state.formsFailed = true;
+    setStatus($("map-status"), UNREACHABLE, "error");
     showPicker("No forms loaded.");
     return;
   }
@@ -361,7 +369,11 @@ async function onMap() {
     await detectForm();
   }
   if (!state.forms.length) {
-    setStatus(status, UNREACHABLE, "error");
+    setStatus(
+      status,
+      state.formsFailed ? UNREACHABLE : "The backend is running but has no forms loaded.",
+      "error"
+    );
     return;
   }
   if (!$("form-id").value) {
