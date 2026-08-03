@@ -151,7 +151,15 @@ class ApproveClaimRequest(BaseModel):
 
 @app.get("/forms")
 def list_forms() -> list[dict]:
-    """Forms offered in the picker — internal fixtures are excluded."""
+    """Forms offered in the picker — internal fixtures are excluded.
+
+    FORMFILL_SHOW_INTERNAL=1 puts them back, which is the only way to reach a
+    test schema from the extension: the panel fills the picker from this
+    endpoint and has no other way to name a form. Read per request rather than
+    at import so a test can toggle it, and unset in every environment a doctor
+    will ever touch — a fake form in the picker is a form someone can file.
+    """
+    show_internal = bool(os.environ.get("FORMFILL_SHOW_INTERNAL"))
     return [
         {
             "form_id": s.form_id,
@@ -172,7 +180,7 @@ def list_forms() -> list[dict]:
             ],
         }
         for s in FORM_SCHEMAS.values()
-        if not s.internal
+        if show_internal or not s.internal
     ]
 
 
@@ -269,6 +277,15 @@ def get_claim(claim_id: str) -> ClaimResponse:
 def approve_claim(claim_id: str, request: ApproveClaimRequest) -> Response:
     claim = _get_claim(claim_id)
     schema = _get_schema(claim.form_id)
+
+    # A web form has no PDF to return: the extension writes the values into the
+    # insurer's own page and the doctor submits it there. Refused explicitly
+    # rather than left to fail on a missing pdf_path, so the reason is legible.
+    if schema.fill_mode == "web":
+        raise HTTPException(
+            status_code=422,
+            detail="this form is filled in the browser, not downloaded as a PDF",
+        )
 
     # Overlay forms address fields by id (the schema carries the box);
     # AcroForm forms address them by the PDF's own field name.
