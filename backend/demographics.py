@@ -197,6 +197,27 @@ def _parse_patient_line(value: str) -> dict[str, tuple[str, str]]:
     return found
 
 
+def _logical_lines(text: str) -> list[str]:
+    """Rejoin a patient block that wrapped.
+
+    A long header line arrives wrapped as often as not — docs/test_notes.md
+    itself breaks mid-block, right after the phone number — and the half that
+    ends up on the second physical line carries no label, so a strictly
+    line-based parser drops the address and the policy number silently.
+
+    Only a line ending in a segment separator is continued. That character is
+    the author saying more follows; without it, joining lines would swallow the
+    clinical note into the patient block.
+    """
+    lines: list[str] = []
+    for line in text.splitlines():
+        if lines and re.search(r"[·|;,—-]\s*$", lines[-1]):
+            lines[-1] = f"{lines[-1].rstrip()} {line.strip()}"
+            continue
+        lines.append(line)
+    return lines
+
+
 def _sole_match(pattern: re.Pattern[str], text: str) -> str | None:
     """A shape found in unlabelled prose, but only when there is exactly one
     candidate. Two distinct phone numbers in a note (the patient's and the
@@ -212,6 +233,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
     Never raises: unparseable input is an empty result, which the doctor fills
     in by hand exactly as they do today.
     """
+    text = str(text or "")
     values: dict[str, str] = {}
     sources: dict[str, str] = {}
 
@@ -220,7 +242,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
             values[field] = value
             sources[field] = source
 
-    for line in str(text or "").splitlines():
+    for line in _logical_lines(text):
         match = LABELLED_LINE.match(line)
         if not match:
             continue
