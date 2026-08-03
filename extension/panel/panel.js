@@ -45,6 +45,22 @@ const INJECT_FILES = [
   "content/fill.js",
 ];
 
+// The demographic inputs, and the PatientRecord key each one carries.
+const DEMOGRAPHIC_FIELDS = {
+  "full-name": "full_name",
+  nric: "nric",
+  dob: "dob",
+  phone: "phone",
+  "policy-number": "policy_number",
+  insurer: "insurer",
+  address: "address",
+};
+
+// Without these there is no claim: the first four are required by the form
+// schemas, and full_name doubly so — it is the only identifier redaction
+// cannot find by shape, so an absent name is a name left in the text.
+const REQUIRED_FIELDS = ["full-name", "nric", "dob", "insurer"];
+
 const state = {
   forms: [],
   /** Review rows from POST /map. */
@@ -53,6 +69,18 @@ const state = {
   edited: new Map(),
   /** field_ids the doctor has explicitly confirmed. */
   confirmed: new Set(),
+  /**
+   * Input ids the doctor has typed in themselves.
+   *
+   * Parsing re-runs on every pause in typing, and a doctor who corrected a
+   * misparsed name would watch the next parse put the wrong one back. Their
+   * edit wins from then on, for that paste.
+   */
+  touched: new Set(),
+  /** Cancels the debounce when the paste changes again before it fires. */
+  parseTimer: null,
+  /** Whether the details drawer has already opened itself for this paste. */
+  openedForMissing: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -202,28 +230,145 @@ async function loadForms() {
   }
 }
 
+/** The visible wording of a field, so a message can name it the way the
+ *  doctor sees it rather than by its id. */
+function labelOf(id) {
+  const span = $(id).closest(".field").querySelector("span");
+  return (span ? span.textContent : id).toLowerCase();
+}
+
 function patientRecord() {
+  const value = (id) => $(id).value.trim();
   const record = {
-    full_name: $("full-name").value.trim(),
-    nric: $("nric").value.trim(),
+    full_name: value("full-name"),
+    nric: value("nric"),
     dob: $("dob").value,
-    phone: $("phone").value.trim() || null,
-    address: $("address").value.trim() || null,
-    policy_number: $("policy-number").value.trim() || null,
-    insurer: $("insurer").value.trim(),
-    clinical_text: $("clinical-text").value,
+    phone: value("phone") || null,
+    address: value("address") || null,
+    policy_number: value("policy-number") || null,
+    insurer: value("insurer"),
+    // One box now: the whole paste is the note. Redaction runs over all of it
+    // with the demographics above as its dictionary, so the header lines come
+    // back as [PATIENT] and [NRIC] like anything else.
+    clinical_text: $("paste").value,
   };
 
-  const missing = ["full_name", "nric", "dob", "insurer", "clinical_text"].filter(
-    (key) => !record[key]
-  );
+  if (!record.clinical_text.trim()) throw new Error("Paste the consultation first.");
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
   // Names the empty fields, never their contents.
-  if (missing.length) throw new Error(`Fill in: ${missing.join(", ").replace(/_/g, " ")}`);
+  if (missing.length) {
+    $("found").open = true;
+    throw new Error(`Still needed: ${missing.map(labelOf).join(", ")}.`);
+  }
   return record;
+}
+
+// ---------------------------------------------------------------------------
+// Reading the paste
+// ---------------------------------------------------------------------------
+//
+// The identifiers are found by pattern on the server (backend/demographics.py),
+// never by a model, and that ordering is the privacy model rather than a
+// preference: redaction pass 1 uses these values AS THE DICTIONARY it scrubs
+// the paste with, because a name has no shape for a regex to find. A model
+// asked to split the block would have read the name before any dictionary
+// existed — and the note could no longer be scrubbed of it either.
+//
+// It is also why parsing is not done here in JavaScript. A second copy of
+// redaction.py's patterns that drifted from the Python one is a leak.
+
+const PARSE_DEBOUNCE_MS = 400;
+
+function scheduleParse() {
+  clearTimeout(state.parseTimer);
+  if (!$("paste").value.trim()) {
+    state.openedForMissing = false;
+    return;
+  }
+  state.parseTimer = setTimeout(parsePaste, PARSE_DEBOUNCE_MS);
+}
+
+async function parsePaste() {
+  let parsed;
+  try {
+    const response = await fetch(`${apiBase()}/parse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: $("paste").value }),
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    parsed = await response.json();
+  } catch {
+    // Deliberately quiet. Parsing is an assist, not the path: the fields
+    // below are still typeable, and Map reports the backend being down in
+    // one place rather than two messages competing for the same line.
+    $("found-summary").textContent = "Patient details — could not read the paste, fill these in";
+    $("found").open = true;
+    return;
+  }
+
+  for (const [id, key] of Object.entries(DEMOGRAPHIC_FIELDS)) {
+    if (state.touched.has(id)) continue;
+    const value = parsed[key];
+    $(id).value = value == null ? "" : value;
+  }
+  updateFound();
+}
+
+/**
+ * Say what was found and what is still missing.
+ *
+ * The drawer opens itself when something required is absent, but only once
+ * per paste — re-opening it on every keystroke would fight the doctor who
+ * just closed it.
+ */
+function updateFound() {
+  const ids = Object.keys(DEMOGRAPHIC_FIELDS);
+  const found = ids.filter((id) => $(id).value.trim()).length;
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+
+  $("found-summary").textContent = missing.length
+    ? `Patient details — ${missing.map(labelOf).join(", ")} still needed`
+    : `Patient details — ${found} of ${ids.length} found`;
+
+  if (missing.length && !state.openedForMissing) {
+    $("found").open = true;
+    state.openedForMissing = true;
+  }
+}
+
+// A network throw carries no status code — the request never reached a
+// server, or reached one whose 500 came out of Starlette's error handler,
+// which sits outside the CORS middleware and so answers with no
+// Access-Control headers at all. Either way the browser hands us a bare
+// TypeError: "Failed to fetch", which no doctor can act on.
+const UNREACHABLE =
+  "Could not reach the backend. Check it is running, then check the URL under Advanced.";
+
+function messageFor(error) {
+  return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
 }
 
 async function onMap() {
   const status = $("map-status");
+
+  // The form list is loaded once, when the panel opens. A backend started
+  // afterwards used to mean an empty picker and a 404 on a "" form id until
+  // the panel was reopened — so try again here rather than making the doctor
+  // work that out.
+  if (!state.forms.length) {
+    await loadForms();
+    await detectForm();
+  }
+  if (!state.forms.length) {
+    setStatus(status, UNREACHABLE, "error");
+    return;
+  }
+  if (!$("form-id").value) {
+    setStatus(status, "Pick the insurer form first.", "error");
+    return;
+  }
+
   let patient;
   try {
     patient = patientRecord();
@@ -262,7 +407,7 @@ async function onMap() {
     $("step-fill").hidden = false;
     setStatus(status, "");
   } catch (error) {
-    setStatus(status, error.message || "Mapping failed.", "error");
+    setStatus(status, messageFor(error), "error");
   } finally {
     $("map-btn").disabled = false;
   }
@@ -487,6 +632,15 @@ async function onFill() {
 
 $("api-base").value = DEFAULT_API_BASE;
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
+$("paste").addEventListener("input", scheduleParse);
+for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
+  // A hand-typed value outranks the parser from here on: re-parsing on the
+  // next keystroke in the paste box must not undo a correction.
+  $(id).addEventListener("input", () => {
+    state.touched.add(id);
+    updateFound();
+  });
+}
 $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);
@@ -495,4 +649,11 @@ $("form-override").addEventListener("click", () => {
   $("form-override").hidden = true;
 });
 
+updateFound();
 loadForms().then(detectForm);
+
+// Exposed for the tests, which drive this file the way the panel does rather
+// than reimplementing it. Nothing else reads it, and it holds no patient data
+// — the claim lives in `state`, in this document, and is gone when the panel
+// closes.
+globalThis.claimfillPanel = { onMap, parsePaste, updateFound, patientRecord, state };
