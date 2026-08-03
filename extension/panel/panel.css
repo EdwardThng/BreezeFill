@@ -157,6 +157,32 @@ button:focus-visible {
   gap: 0 10px;
 }
 
+/* A checkbox reads as a choice, not as a field: label beside the box, both
+   on one line, no uppercase caption. */
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.checkbox > span {
+  color: var(--muted);
+}
+
+/* The drafted schema. Monospace and roomy — it is JSON someone has to read
+   before committing it, not a status line. */
+#draft-json {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 /* Buttons ----------------------------------------------------------------- */
 
 button {
