@@ -15,7 +15,7 @@ father, a Singapore GP.
 | Piece | State |
 |---|---|
 | Pipeline: redact → LLM map → doctor review → PDF fill | Working, 146 backend tests pass (1 skipped) |
-| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150.** Verified on a live page (RoboForm's 39-field test form): panel opens, `activeTab` granted, injection works, 39 controls collected, `POST /map` round-trips, review renders. Not yet run on an insurer portal, and **no browser fill has been confirmed yet** — but see "the RoboForm route" below: it now matches 5 of 6 and writes them in jsdom against the real page markup |
+| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150, and has now filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
@@ -108,6 +108,10 @@ which sends someone to check the URL of a server that answered.
 early without an LLM call, and with `FORMFILL_DISABLE_SWEEP=1` the whole path
 — paste, parse, map, review, fill — runs with **no `ANTHROPIC_API_KEY`**.
 That matters beyond convenience: the key was the thing blocking a demo.
+
+**Run in Chrome on 2026-08-03 and the fields filled.** Paste → parse → map →
+review → fill, end to end, no API key. Everything before this date that said
+"nothing has been successfully filled anywhere" is now out of date.
 
 Dry-run against the real page markup in jsdom: 5 of 6 matched, rate 0.83,
 `safeToFill` true, five values in the right controls. The sixth is deliberate
@@ -544,16 +548,13 @@ node stage.
    refuses with no form selected, a failed parse stays out of the Map status
    line, and an empty form list is no longer reported as an unreachable
    backend.
-3. **Run the RoboForm route in a real browser.** Everything below the browser
-   is verified: 5 of 6 fields match and write against the real page markup in
-   jsdom, and the backend path runs live with no API key. What that does *not*
-   prove is the part only Chrome can answer — that an isolated-world write
-   lands, and that the panel drives it end to end. This is the next thing to
-   actually do, and it needs no key:
-   `FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, then
-   the ClaimFill icon **on the RoboForm tab**, paste case 1 from
-   `docs/test_notes.md`, Map, Fill. Expect five filled and Date Of Birth
-   reported ambiguous.
+3. ~~**Run the RoboForm route in a real browser.**~~ **Done 2026-08-03, and it
+   filled.** The recipe, for repeating it: `FORMFILL_SHOW_INTERNAL=1
+   FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, the ClaimFill icon **on the
+   RoboForm tab**, paste case 1 from `docs/test_notes.md`, Map, Fill. Five
+   filled, Date Of Birth ambiguous. What this does *not* answer: anything about
+   a framework-rendered field (item 5), or whether an insurer portal will let
+   the extension near its form at all (item 4).
 4. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
    on RoboForm's test page — panel opens, `activeTab` granted, injection works,
    39 controls collected, `POST /map` round-trips against a local backend, the
@@ -579,6 +580,22 @@ node stage.
      it would read as a page with no controls and refuse. Safe direction to
      fail, but it needs `allFrames` plus a decision on how per-frame reports
      merge and which frame the match rate is computed over.
+   - Whether the controls are in a **shadow root**. `collectControls` uses
+     `document.querySelectorAll`, which does not pierce one, so a portal built
+     from web components reads as a page with no controls — identical symptom
+     to the iframe case, different fix (walk `shadowRoot` on every element;
+     a *closed* root cannot be reached at all).
+   - Whether the controls are **real controls**. The query is `input, select,
+     textarea, [contenteditable]`. A `<div role="combobox">` or a rich date
+     picker is invisible to it, and the ones that do render an `<input>` often
+     ignore a value written into it — they want a click on an option. This is
+     the likeliest shape of "the portal looks filled but submits nothing".
+
+   Note what is **not** on this list: the portal's own CSP. A content script
+   runs in an isolated world and is not governed by the page's CSP, so a site
+   cannot refuse the extension that way. The risks are structural, not
+   permission-based — which is why one learn-mode dump from a live page answers
+   nearly all of them at once.
 5. **Prove a write actually lands in a *framework-rendered* field.** RoboForm
    is plain HTML, so a successful fill there answers "does the panel drive a
    real page" and says nothing about `_valueTracker` — which is the one that
