@@ -103,7 +103,34 @@
     };
   }
 
-  function survey(plan) {
+  /**
+   * Score several schemas against this page at once.
+   *
+   * "Is this form one we already have?" is a question the page can answer
+   * itself, and this is a better key than anything in the source: a form id or
+   * version string in the markup rots at the insurer's next deploy, while what
+   * actually matters is whether the page carries the fields a schema
+   * describes. That is precisely what `locate` already computes, so
+   * identifying a form and deciding whether it is safe to fill are the same
+   * measurement read at two different thresholds.
+   *
+   * Only the counts cross back. The per-field results would name which of the
+   * schema's questions this page asks, which the panel has no use for until a
+   * schema is actually chosen.
+   */
+  function score(candidates, controls) {
+    return (candidates || []).map((candidate) => {
+      const report = locate.locate(candidate.fields || [], controls);
+      return {
+        formId: candidate.formId,
+        matched: report.matched,
+        intended: report.intended,
+        matchRate: report.matchRate,
+      };
+    });
+  }
+
+  function survey(plan, candidates) {
     const { controls, skippedPassword } = learn.collectControls(document);
     const report = locate.locate(plan || [], controls);
     return {
@@ -112,6 +139,7 @@
       controlCount: controls.length,
       skippedPassword,
       report: serialise(report),
+      candidates: score(candidates, controls),
     };
   }
 
@@ -135,7 +163,7 @@
 
     try {
       if (message.action === "survey") {
-        sendResponse(survey(message.plan));
+        sendResponse(survey(message.plan, message.candidates));
       } else if (message.action === "fill") {
         sendResponse(fill(message.plan, message.values));
       } else {
@@ -152,5 +180,5 @@
     return undefined;
   });
 
-  globalThis.claimfillContent = { survey, fill, labelOf, serialise };
+  globalThis.claimfillContent = { survey, fill, labelOf, serialise, score };
 })();
