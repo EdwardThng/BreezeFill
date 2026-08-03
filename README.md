@@ -8,7 +8,7 @@ FormFill turns a pasted clinical note into a filled insurance claim PDF in minut
 
 ## What it does
 
-1. **Ingest** — Patient demographics (name, NRIC, DOB, phone, address, policy number, insurer) are entered into structured fields; the free-text clinical note is pasted alongside them.
+1. **Ingest** — The consultation is pasted in one block. Patient demographics (name, NRIC, DOB, phone, address, policy number, insurer) are pulled back out of it **by pattern, never by a model** — that ordering is what the next step depends on — and shown as editable fields for the doctor to correct or complete.
 2. **Redact** — Every identifier is stripped from the clinical text *before* it reaches the LLM, in three passes:
    - **Dictionary pass:** the entered demographics are removed from the note (name in any ordering or partial form, NRIC even with stray spaces, phone in any separator format, DOB in common renderings, address, policy number), each replaced with a token like `[PATIENT]` or `[NRIC]`.
    - **Pattern pass:** NRIC/FIN, Singapore phone number, and email regexes catch identifiers that were *not* entered — family members, other patients mentioned in the note.
@@ -19,7 +19,7 @@ FormFill turns a pasted clinical note into a filled insurance claim PDF in minut
 
 ### Privacy model
 
-- **Demographics never reach the LLM.** They are copied onto the form deterministically and double as the redaction dictionary.
+- **Demographics never reach the LLM.** They are copied onto the form deterministically and double as the redaction dictionary. This extends to *finding* them: the paste is split by pattern, because a model asked to do it would have read the patient's name before the dictionary that redacts the name existed.
 - **The LLM only ever sees de-identified text.** The token→value mapping lives in server memory for the duration of the request flow and is never sent to any model or written to logs.
 - **Zero retention.** Claims exist only in an in-memory store, are deleted on download or discard, and are purged automatically after one hour. No database holds patient data.
 - **No silent guesses.** Every AI-proposed value carries its supporting quote or a `missing` flag, and nothing reaches a PDF without doctor approval. A redaction token can never leak into a generated PDF — it is blocked at three independent layers.
@@ -31,7 +31,9 @@ FormFill turns a pasted clinical note into a filled insurance claim PDF in minut
 
 ```
 frontend/   React + Vite single-page review UI
+extension/  Chrome side panel — fills insurer web forms in place, never submits
 backend/    FastAPI service
+  ├── demographics.py  one pasted block -> demographic fields (no LLM, ever)
   ├── redaction.py   identifier stripping + re-merge (no LLM required)
   ├── mapping.py     LLM field extraction + validation + claim assembly
   ├── pdf_fill.py    AcroForm filling (pypdf) + form field dump tool
@@ -47,6 +49,8 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/forms` | List available form schemas |
+| `POST` | `/parse` | Split one pasted block into demographic fields. Patterns only — no model, nothing stored |
+| `POST` | `/map` | Redact + extract for the browser extension. Stateless: no `claim_id`, nothing retained |
 | `POST` | `/claims` | Redact + extract; returns review rows and a `claim_id` |
 | `GET` | `/claims/{id}` | Re-fetch review rows |
 | `POST` | `/claims/{id}/approve` | Fill the PDF with final values; returns the PDF and deletes the claim |
@@ -103,6 +107,7 @@ VITE_API_URL=https://your-backend.example.com npm run build
 | `FORMFILL_MAPPING_MODEL` | `claude-opus-4-8` | Model for form-field extraction |
 | `FORMFILL_SWEEP_MODEL` | `claude-haiku-4-5` | Model for the redaction safety sweep |
 | `FORMFILL_DISABLE_SWEEP` | unset | Set to `1` to skip the LLM redaction sweep |
+| `FORMFILL_SHOW_INTERNAL` | unset | Set to `1` to offer internal test schemas in `GET /forms`. Never set this where a doctor works |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL baked into the frontend |
 
 ### Tests
@@ -138,7 +143,10 @@ A synthetic sample form (`dev_sample_v1`) ships with the repo so the pipeline ca
 
 ## Limitations
 
-- **Fillable AcroForm PDFs only.** Flat/scanned forms are not supported.
+- **Three fill targets, and a schema declares which.** `acroform` writes into a
+  fillable PDF's own fields, `overlay` stamps text at coordinates onto a flat
+  scan, and `web` fills an insurer's own web form in place through the browser
+  extension. A `web` schema has no PDF, so there is nothing to download.
 - **In-memory claim store.** Run a single backend process; claims do not survive a restart (by design — this is a privacy feature as much as a limitation).
 - **Data residency is your responsibility.** If regulations require in-region inference, point the model configuration at a regional endpoint before processing real patient data, and verify redaction tests pass in your environment.
 - FormFill assists with form completion; the reviewing doctor remains responsible for the accuracy of every submitted form.
