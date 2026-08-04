@@ -1,0 +1,13 @@
+# Not uploaded to Vercel at all. Distinct from excludeFiles in vercel.json,
+# which trims the function bundle after upload — this trims the upload itself.
+.venv/
+node_modules/
+frontend/node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+public/
+
+# Scanned insurer PDFs the overlay schemas point at ARE needed at runtime, so
+# forms/ is deliberately absent from this list. Same for extension/, which the
+# download endpoint zips on request.
