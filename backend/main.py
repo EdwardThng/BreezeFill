@@ -1,13 +1,28 @@
-"""FastAPI app (README section 8): POST /claims, POST /claims/{id}/approve.
+"""FastAPI app: map a note onto a form's fields, and fill the form.
 
-Data-retention rules enforced here (guardrails, section 10):
-- Claims live in an in-memory store only. Nothing patient-related touches
-  disk except the filled PDF streamed back to the client.
-- The raw clinical_text and redaction map are dropped as soon as the claim
-  rows are assembled — after create, the server holds only the review rows.
-- Approve returns the filled PDF and deletes the claim. Stale claims are
-  purged after CLAIM_TTL.
+**Every route here is stateless.** The server holds nothing between requests —
+no claim store, no session, no id to purge — so patient data exists only for
+the duration of the request that carried it in. Retention is zero rather than
+bounded.
+
+It was not always so. The website used to review on one screen and download
+from another, and something had to hold the rows in between: an in-memory
+claim store with a one-hour TTL. That store was also the reason this app could
+never run on more than one machine — a claim created on machine A 404s when
+approve lands on machine B — which made `--ha=false` load-bearing and ruled
+out any serverless host.
+
+The extension never needed it (the panel that reviews the rows is the panel
+that writes them), and the website does not either: the review screen already
+holds every value, so it can send them all to `POST /forms/{id}/pdf` in one
+request. Removing the store deleted the retention window, the HA trap and the
+purge timer together. Do not reintroduce it — a shared store would be a
+database holding patient data, which is a thing this product says publicly it
+does not have.
+
+Other rules enforced here:
 - No patient data in logs or error messages.
+- Nothing patient-related touches disk, ever.
 """
 
 from __future__ import annotations
@@ -16,9 +31,6 @@ import io
 import logging
 import os
 import re
-import threading
-import time
-import uuid
 import zipfile
 from pathlib import Path
 
@@ -46,7 +58,6 @@ from redaction import PatientRecord, redact, scrub_patterns
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
 FRONTEND_DIR = REPO_ROOT / "frontend" / "dist"
-CLAIM_TTL_SECONDS = 60 * 60  # zero long-term retention; 1h working window
 
 # Exception *types* only ever reach this. See _review_rows: a message or
 # traceback can quote the clinical text that caused it.
@@ -97,29 +108,6 @@ def _get_schema(form_id: str) -> FormSchema:
 
 
 # ---------------------------------------------------------------------------
-# In-memory claim store (patient data never persisted)
-# ---------------------------------------------------------------------------
-
-
-class ClaimSession(BaseModel):
-    claim_id: str
-    form_id: str
-    rows: list[MappedField]
-    created_at: float
-
-
-_claims: dict[str, ClaimSession] = {}
-_claims_lock = threading.Lock()
-
-
-def _purge_stale_claims() -> None:
-    cutoff = time.time() - CLAIM_TTL_SECONDS
-    with _claims_lock:
-        for claim_id in [c for c, s in _claims.items() if s.created_at < cutoff]:
-            del _claims[claim_id]
-
-
-# ---------------------------------------------------------------------------
 # Request/response models
 # ---------------------------------------------------------------------------
 
@@ -129,15 +117,9 @@ class CreateClaimRequest(BaseModel):
     patient: PatientRecord
 
 
-class ClaimResponse(BaseModel):
-    claim_id: str
-    form_id: str
-    fields: list[MappedField]
-
-
 class MapResponse(BaseModel):
-    """Same review rows as ClaimResponse, minus the claim id — because there
-    is no claim to refer back to."""
+    """The review rows. No id, because there is nothing to refer back to —
+    the caller holds these until it is ready to fill something with them."""
 
     form_id: str
     fields: list[MappedField]
@@ -160,9 +142,14 @@ class MapLiveRequest(BaseModel):
     patient: PatientRecord
 
 
-class ApproveClaimRequest(BaseModel):
-    # Doctor-edited final values keyed by field_id. Fields omitted here keep
-    # the value from the review rows; explicit null blanks the field.
+class FillPdfRequest(BaseModel):
+    """The doctor's final values, keyed by field_id.
+
+    Every field the caller wants filled must be here. There is no server-side
+    copy to fall back on — that is the point — so an omitted field is a blank
+    one. The review screen already holds every row, so it sends every row.
+    """
+
     values: dict[str, str | bool | None] = {}
 
 
@@ -361,42 +348,15 @@ def map_live(request: MapLiveRequest) -> MapResponse:
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
 
-@app.post("/claims", response_model=ClaimResponse)
-def create_claim(request: CreateClaimRequest) -> ClaimResponse:
-    _purge_stale_claims()
-    schema = _get_schema(request.form_id)
-    rows = _review_rows(schema, request.patient)
-    # From here on, only the review rows are retained — the raw record,
-    # redacted text, and redaction map go out of scope now.
-    claim = ClaimSession(
-        claim_id=uuid.uuid4().hex,
-        form_id=schema.form_id,
-        rows=rows,
-        created_at=time.time(),
-    )
-    with _claims_lock:
-        _claims[claim.claim_id] = claim
-    return ClaimResponse(claim_id=claim.claim_id, form_id=claim.form_id, fields=rows)
+@app.post("/forms/{form_id}/pdf")
+def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
+    """Final values in, filled PDF out. One request, nothing kept.
 
-
-def _get_claim(claim_id: str) -> ClaimSession:
-    with _claims_lock:
-        claim = _claims.get(claim_id)
-    if claim is None:
-        raise HTTPException(status_code=404, detail="claim not found or already completed")
-    return claim
-
-
-@app.get("/claims/{claim_id}", response_model=ClaimResponse)
-def get_claim(claim_id: str) -> ClaimResponse:
-    claim = _get_claim(claim_id)
-    return ClaimResponse(claim_id=claim.claim_id, form_id=claim.form_id, fields=claim.rows)
-
-
-@app.post("/claims/{claim_id}/approve")
-def approve_claim(claim_id: str, request: ApproveClaimRequest) -> Response:
-    claim = _get_claim(claim_id)
-    schema = _get_schema(claim.form_id)
+    The schema — not a stored claim — is what says how each field is addressed:
+    an AcroForm field by the PDF's own name, an overlay field by its box. That
+    is why this needs no memory of the mapping call that produced the values.
+    """
+    schema = _get_schema(form_id)
 
     # A web form has no PDF to return: the extension writes the values into the
     # insurer's own page and the doctor submits it there. Refused explicitly
@@ -407,31 +367,24 @@ def approve_claim(claim_id: str, request: ApproveClaimRequest) -> Response:
             detail="this form is filled in the browser, not downloaded as a PDF",
         )
 
-    # Overlay forms address fields by id (the schema carries the box);
-    # AcroForm forms address them by the PDF's own field name.
-    by_id: dict[str, str | bool | None] = {}
-    for row in claim.rows:
-        by_id[row.field_id] = (
-            request.values[row.field_id] if row.field_id in request.values else row.value
-        )
-    unknown = sorted(set(request.values) - set(by_id))
+    # A field id that is not in the schema is a caller bug — most likely a
+    # stale build posting against a form that has since changed. Better a 422
+    # than a PDF that silently omits it.
+    unknown = sorted(set(request.values) - {field.id for field in schema.fields})
     if unknown:
         raise HTTPException(status_code=422, detail=f"unknown field ids: {unknown}")
+
+    by_id = {field.id: request.values.get(field.id) for field in schema.fields}
 
     pdf_path = (REPO_ROOT / schema.pdf_path).resolve()
     try:
         if schema.fill_mode == "overlay":
             pdf_bytes = overlay_fill(pdf_path, schema.boxes, by_id)
         else:
-            named = {row.pdf_field_name: by_id[row.field_id] for row in claim.rows}
+            named = {field.pdf_field_name: by_id[field.id] for field in schema.fields}
             pdf_bytes = fill_pdf(pdf_path, named)
     except (PdfFillError, OverlayFillError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    # Success: the claim is done — delete server-side state (guardrail:
-    # process -> download -> delete).
-    with _claims_lock:
-        _claims.pop(claim_id, None)
 
     return Response(
         content=pdf_bytes,
@@ -440,13 +393,6 @@ def approve_claim(claim_id: str, request: ApproveClaimRequest) -> Response:
             "Content-Disposition": f'attachment; filename="{schema.form_id}_filled.pdf"'
         },
     )
-
-
-@app.delete("/claims/{claim_id}", status_code=204)
-def discard_claim(claim_id: str) -> Response:
-    with _claims_lock:
-        _claims.pop(claim_id, None)
-    return Response(status_code=204)
 
 
 @app.get("/health")
