@@ -41,7 +41,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
-| Vercel migration | **Prepared, not deployed.** `api/index.py`, `vercel.json` (region `sin1`, maxDuration 120), root `requirements.txt` with a drift test. Needs `vercel link` + a preview deploy by the owner. Fly is deliberately left running as the fallback |
+| Vercel migration | **Preview deployed and verified end to end (2026-08-05)**, project `breeze-fill/breezefill`, region `sin1`. `/health` reports 7 forms, `/forms` and the extension download answer, and `POST /map` returns real review rows from a live model call — demographics copied deterministically, an `extracted` value with its source quote, and `missing` where the note was silent. `ANTHROPIC_API_KEY` is set **Preview-scoped only**. Two things still true: **Deployment Protection is on**, so the extension cannot reach a preview URL (its `fetch` 401s and reads as "Could not reach the backend"), and `DEFAULT_API_BASE` still points at Fly. Fly is deliberately left running as the fallback |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
 | `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
@@ -745,6 +745,35 @@ only way to clear a stored `true` is to **remove the extension and load it
 again**; a plain reload keeps the flag. `false` is the default, so a clean
 install needs no call.
 
+**Three traps cost attempts on the first Vercel deploy (2026-08-05).** None is
+derivable from the code, and all three recur on a fresh clone or a rebuild.
+
+1. **`pyproject.toml` breaks the build.** Vercel's Python runtime is uv-based,
+   and uv treats *any* `pyproject.toml` as a project manifest. This one is
+   three lines of pytest config with no `[project]` table, so `uv lock` fails
+   and the deploy dies before bundling: ``No `project` table found``. It is
+   excluded in `.vercelignore` — which has to be `.vercelignore` and not
+   `excludeFiles`, because the latter trims the bundle *after* upload and this
+   fails earlier than that. Do not "fix" it by adding a `[project]` table: that
+   gives uv a second dependency list to resolve against, and
+   `test_requirements_sync.py` exists because one duplicate is already one too
+   many.
+2. **A UTF-8 BOM makes a JSON file invalid, and npm hides it.** `package-lock.json`
+   was committed with `EF BB BF`; npm tolerates it, Vercel does not, and the
+   deploy reports `Error while parsing config file` against a file that looks
+   fine in every editor. This is the PowerShell trap already recorded below
+   under toolchain quirks — `>` and `Out-File` default to UTF-8 **with** BOM
+   here — landing in a tracked file. To sweep: check `head -c 3` of every
+   tracked `.json` for `efbbbf`. Only that one file had it.
+3. **`vercel curl` takes the first path-like token as the request path**, not
+   the URL you meant. `-o /dev/null` therefore fetches `/dev/null` and returns
+   a 404 that looks exactly like a broken route — this produced a phantom 404
+   on `/download` twice, and was confirmed by requesting `$url/dev/null` and
+   getting the identical 22-byte body. **Put the URL first and never pass
+   `-o`.** A 22-byte `{"detail":"Not Found"}` is FastAPI's generic 404; the
+   route's own "extension not bundled" reply is 48 bytes, so the length alone
+   tells you whether the route was even reached.
+
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
@@ -892,6 +921,20 @@ cd frontend && npm run build          # backend then serves it at /
 
 # dump a PDF's field names when adding a form
 ./.venv/Scripts/python.exe backend/pdf_fill.py forms/your_form.pdf
+
+# Vercel. Login and `env add` need a real terminal; everything else runs from
+# here once ~/.vercel auth and .vercel/project.json exist — same shape as
+# flyctl. `vercel env ls` prints names and "Encrypted", never values.
+vercel deploy --yes                 # preview
+vercel deploy --prod --yes          # production
+vercel env ls
+
+# Probing a PROTECTED preview: only `vercel curl` carries the SSO bypass, and
+# the URL must come FIRST. See Traps — it reads the first path-like token as
+# the path, so `-o /dev/null` silently fetches /dev/null instead.
+vercel curl https://<deployment>/health
+vercel curl https://<deployment>/map -s -i -X POST \
+  -H "Content-Type: application/json" --data-binary @probe.json
 ```
 
 **`flyctl` is installed at `~/.fly/bin/flyctl.exe`** (reinstalled 2026-08-03
@@ -945,14 +988,24 @@ at once. Paste `extension/learn/dump.js` into the console on the form page,
 run `breezefillLearn.dump()` per step, then `mergeDumps([...])`. Read it before
 sharing it — see `extension/README.md` for the residual risks.
 
-**2. Finish the Vercel migration.** Everything is committed; it needs
-`vercel link`, `vercel env add ANTHROPIC_API_KEY` (owner's terminal only — a
-key pasted into a transcript is a key to rotate), then `vercel` for a preview
-and `vercel --prod` once the preview checks out. Validate `/health`, the
-download, and one `/map` on the preview URL. The parts most likely to need
-adjusting are the build command (whether Node is on the path in a Python
-build) and whether `public/` is picked up. Then point `DEFAULT_API_BASE` at
-the new domain and leave Fly running for a week.
+**2. Finish the Vercel migration — preview is done, three things remain.**
+Linked, deployed and verified on 2026-08-05 (see the status table). The build
+command and `public/` both turned out fine; what actually broke was three
+things nobody would have predicted, now in Traps. What is left:
+
+- **Turn off Deployment Protection for previews, or issue a bypass token.**
+  This is the blocker on ever driving the *extension* against Vercel: a
+  protected preview 401s the panel's `fetch`, which surfaces as "Could not
+  reach the backend" and looks like a backend fault.
+- **Add `ANTHROPIC_API_KEY` for Production** (`vercel env add
+  ANTHROPIC_API_KEY production`). It is Preview-scoped today, so production
+  `/map` 503s until this lands *and* a deploy follows — an env change does not
+  reach a function that is already deployed.
+- **Point `DEFAULT_API_BASE` at the new domain, and leave Fly running a week.**
+  Only after the extension has actually filled something against Vercel.
+
+Owner's terminal for anything holding the key — a key pasted into a transcript
+is a key to rotate.
 
 **3. ~~Wizard support~~ — built 2026-08-04, now waiting on the dump to be
 verified.** All three problems are addressed in code and covered by tests; see
