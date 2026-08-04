@@ -56,19 +56,46 @@
       </div>
 
       <!--
-        One box. The doctor pastes the patient's details and the note
-        together, exactly as they sit in the CMS, and the identifiers are
-        pulled back out by pattern — see backend/demographics.py.
+        The consultation as it sits in the CMS: patient details and note
+        together, with the identifiers pulled back out by pattern — see
+        backend/demographics.py.
       -->
       <label class="field">
         <span>Paste the consultation</span>
         <textarea
           id="paste"
-          rows="14"
+          rows="12"
           spellcheck="false"
           placeholder="Paste the patient's details and the clinical note together."
         ></textarea>
       </label>
+
+      <!--
+        A second box, not a second pipeline. Claim forms ask for things a
+        consultation note does not hold — the admitting hospital's own
+        reference, a ward class, an operation code from the billing system —
+        and a doctor keeps those somewhere else. They are appended to the
+        note and go through exactly the same redaction; nothing here takes a
+        shortcut past it.
+
+        Optional, and collapsed by default, so the common case is still one
+        box and one paste.
+      -->
+      <details class="extra" id="other-notes-wrap">
+        <summary>Other notes (optional)</summary>
+        <label class="field">
+          <span class="visually-hidden">Other notes</span>
+          <textarea
+            id="other-notes"
+            rows="6"
+            spellcheck="false"
+            placeholder="Anything the form asks for that is not in the consultation note — admission references, ward class, billing details."
+          ></textarea>
+        </label>
+        <p class="note">
+          Redacted with the note, and read for identifiers the same way.
+        </p>
+      </details>
 
       <!--
         Not a summary — a correction surface, and a required one. These values
