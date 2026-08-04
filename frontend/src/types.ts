@@ -15,8 +15,15 @@ export interface MappedField {
   needs_review: boolean;
 }
 
+/**
+ * What POST /map returns: the rows, and which form they are for.
+ *
+ * There is deliberately no claim id. The server keeps nothing between the
+ * mapping call and the fill, so there would be nothing for an id to refer to —
+ * and a field declared here that the server does not send is worse than no
+ * field at all, because the compiler would promise it is a string.
+ */
 export interface ClaimResponse {
-  claim_id: string;
   form_id: string;
   fields: MappedField[];
 }
