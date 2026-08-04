@@ -17,12 +17,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mapping import (
+    SYSTEM_PROMPT,
     FieldAnswer,
     FormSchema,
     MappingError,
     assemble_claim,
     build_output_schema,
     llm_sweep,
+    load_form_schema,
     map_fields,
 )
 from redaction import PatientRecord, redact
@@ -430,3 +432,88 @@ def test_end_to_end_pipeline_offline():
     assert by_id["patient_name"].value == "Tan Wei Ming"
     assert by_id["diagnosis_primary"].value == "Acute appendicitis"
     assert by_id["symptoms_preexisting"].needs_review is True
+
+
+# ---------------------------------------------------------------------------
+# Date format: the field's boxes, not a global rule
+# ---------------------------------------------------------------------------
+#
+# Regression for a real production run against aia_ghs_claim on 2026-08-05,
+# which returned 14/03/26 in two date boxes and 14/03/2026 in two others. Every
+# date description in that schema asks for DD/MM/YY while SYSTEM_PROMPT
+# mandated DD/MM/YYYY, so the model had two instructions and split the
+# difference.
+
+DATE_SCHEMA = FormSchema.model_validate(
+    {
+        "form_id": "dates_v1",
+        "fill_mode": "web",
+        "fields": [
+            {
+                "id": "short_year",
+                "type": "date",
+                "source": "llm",
+                "description": "Date of surgical procedure (DD/MM/YY)",
+            },
+            {
+                "id": "long_year",
+                "type": "date",
+                "source": "llm",
+                "description": "Date of admission (DD/MM/YYYY)",
+            },
+            {
+                "id": "unstated",
+                "type": "date",
+                "source": "llm",
+                "description": "Date the patient was discharged",
+            },
+        ],
+    }
+)
+
+
+def date_answer(field_id: str, value: str):
+    reply = {"fields": [{"id": field_id, "value": value, "status": "extracted", "source": "s"}]}
+    return map_fields(DATE_SCHEMA, "notes", client=FakeClient(json.dumps(reply)))[field_id]
+
+
+def test_the_prompt_lets_a_field_override_the_date_format():
+    # Guards the half of the fix that is instruction rather than code. An
+    # absolute "dates must be DD/MM/YYYY" is what caused the split.
+    assert "unless the field's own description states a different" in SYSTEM_PROMPT
+
+
+def test_a_field_asking_for_a_short_year_gets_one():
+    # The exact production failure: the model answered in full-year form for a
+    # field whose box holds two digits.
+    assert date_answer("short_year", "15/03/2026").value == "15/03/26"
+
+
+def test_a_short_year_is_never_expanded_into_a_century():
+    # 26 is 2026 or 1926 depending on which box it sits in, and a claim form
+    # carries dates of birth as readily as dates of admission. The answer is
+    # left as the model wrote it and reaches the doctor in review.
+    assert date_answer("long_year", "15/03/26").value == "15/03/26"
+
+
+def test_a_field_that_states_no_format_is_left_alone():
+    assert date_answer("unstated", "15/03/2026").value == "15/03/2026"
+
+
+def test_reformatting_never_invents_or_drops_an_answer():
+    # Formatting is not validation: a date that does not parse is still the
+    # doctor's answer to correct, not something to silently blank.
+    answer = date_answer("short_year", "mid-March 2026")
+    assert answer.value == "mid-March 2026"
+    assert answer.status == "extracted"
+
+
+def test_the_aia_schema_and_the_prompt_no_longer_disagree():
+    # The schema that produced the bug, checked against the rule that fixes it:
+    # every date-typed field states its format, so nothing falls back to the
+    # global default by accident.
+    schema = load_form_schema(Path(__file__).parent.parent / "backend" / "schemas" / "aia_ghs_claim.json")
+    dated = [f for f in schema.fields if f.type == "date"]
+    assert dated, "expected date fields on the AIA form"
+    for field in dated:
+        assert "DD/MM/YY" in (field.description or ""), f"{field.id} states no date format"
