@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { approveClaim, createClaim, discardClaim, getForms } from "./api";
+import { fillPdf, getForms, mapClaim } from "./api";
 import PatientForm from "./PatientForm";
 import ReviewScreen from "./ReviewScreen";
 import Stepper from "./Stepper";
@@ -43,7 +43,7 @@ export default function ClaimApp() {
     setBusy(true);
     setError(null);
     try {
-      const claim = await createClaim(formId, patient);
+      const claim = await mapClaim(formId, patient);
       setStage({ name: "review", claim });
       window.scrollTo({ top: 0 });
     } catch (e) {
@@ -60,7 +60,7 @@ export default function ClaimApp() {
     setBusy(true);
     setError(null);
     try {
-      const blob = await approveClaim(claim.claim_id, values);
+      const blob = await fillPdf(claim.form_id, values);
       const fileName = `${claim.form_id}_filled.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -77,17 +77,11 @@ export default function ClaimApp() {
     }
   };
 
-  const handleDiscard = async (claim: ClaimResponse) => {
-    setBusy(true);
-    try {
-      await discardClaim(claim.claim_id);
-    } catch {
-      // Discard is best-effort; the server purges stale claims anyway.
-    } finally {
-      setBusy(false);
-      setError(null);
-      setStage({ name: "input" });
-    }
+  // Discarding needs no request. The server never had a copy — dropping the
+  // stage is the whole of it.
+  const handleDiscard = () => {
+    setError(null);
+    setStage({ name: "input" });
   };
 
   // The LLM call takes 10-30s. Without a full-screen state people click twice
@@ -133,7 +127,7 @@ export default function ClaimApp() {
           busy={busy}
           error={error}
           onApprove={(values) => handleApprove(stage.claim, values)}
-          onDiscard={() => handleDiscard(stage.claim)}
+          onDiscard={handleDiscard}
         />
       )}
 
@@ -152,8 +146,8 @@ export default function ClaimApp() {
             <li>Print, sign and stamp it as usual.</li>
           </ol>
           <p className="hint">
-            This patient's details have already been deleted from the server.
-            Nothing was saved.
+            Nothing was saved. The server kept no copy of this patient at any
+            point — it read the note, returned the answers, and forgot both.
           </p>
           <button onClick={() => setStage({ name: "input" })}>
             Start another claim
