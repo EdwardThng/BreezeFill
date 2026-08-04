@@ -130,11 +130,28 @@ class ParseRequest(BaseModel):
 
 
 class LiveField(BaseModel):
-    """One control read off a page nobody has written a schema for."""
+    """One control read off the page in front of the doctor.
+
+    Not only for a page nobody has a schema for any more. The panel maps the
+    live page every time and enriches each control with the matching schema
+    field where one exists, so a single request can carry both — a question
+    the bank describes, and the one next to it that it does not.
+    """
 
     label: str
     # The DOM's own type, normalised below. Anything unrecognised is text.
     type: str = "text"
+    # The instruction from the schema field that matched this control, when one
+    # did. This is the whole difference between a page's own wording ("7. When
+    # did the patient first consult you") and the instruction a colleague would
+    # be given ("the date the patient FIRST consulted this doctor for this
+    # condition, not the latest visit"). Absent means no schema claimed this
+    # control and its label is all there is.
+    description: str | None = None
+    # The answers the control accepts, read off the control itself. Empty for a
+    # free-text box, and empty when the browser withheld the list because it
+    # looked like claim data rather than choices.
+    options: list[str] = []
 
 
 class MapLiveRequest(BaseModel):
@@ -294,17 +311,25 @@ def _slug(label: str, taken: set[str]) -> str:
 
 
 def _live_schema(fields: list[LiveField]) -> FormSchema:
-    """A page's controls, as a schema for one request only.
+    """The page's controls, as a schema for one request only.
 
-    Weaker than an authored schema, unavoidably. A real schema's `description`
-    is the instruction a colleague would be given — "Date the patient FIRST
-    consulted this doctor for this condition (not the latest visit)" — and no
-    page carries that. Here the only thing available is the question as the
-    page words it, so the model is answering with less than it usually gets.
+    Each field is as strong as the evidence behind it, and the two cases are
+    genuinely different:
 
-    That is the whole cost of filling a form nobody has written a schema for,
-    and it is why this path offers a draft schema afterwards: the second claim
-    on the same form should not be mapped this way.
+    - A control a schema field matched arrives with that field's
+      `description` — the instruction a colleague would be given ("the date
+      the patient FIRST consulted this doctor for this condition, not the
+      latest visit"). This is as good as the schema path, because it *is* the
+      schema, applied to the control actually on screen.
+    - A control nothing matched has only the question as the page words it.
+      Weaker, unavoidably, and it is why a draft schema is still offered
+      afterwards: the second claim on this form should be better informed than
+      the first.
+
+    Mixing them in one request is the point. The alternative — refusing the
+    whole page because the bank does not describe all of it — leaves the
+    doctor filling by hand a form the product could have half-filled
+    correctly, and they have to submit it either way.
     """
     taken: set[str] = set()
     types = {"checkbox": "checkbox", "radio-group": "checkbox", "date": "date"}
@@ -320,7 +345,17 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
                 # patterns before this left the browser; a label reaches the
                 # model only if both passes missed it.
                 label=scrub_patterns(field.label),
-                description=scrub_patterns(field.label),
+                # The schema's instruction when there is one, the page's own
+                # words when there is not. Scrubbed either way: a description
+                # is authored in this repo and needs no cleaning, but the
+                # merge that fills this in runs in the panel, and a bug there
+                # that let page text through would otherwise reach the model
+                # unscrubbed.
+                description=scrub_patterns(field.description or field.label),
+                # Constrains the answer to something the control will accept,
+                # exactly as an authored schema's options do — and these come
+                # from the control itself, so they cannot be out of date.
+                options=[scrub_patterns(o) for o in field.options if o.strip()],
             )
             for field in fields
             if field.label.strip()
