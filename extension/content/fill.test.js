@@ -18,10 +18,18 @@ import { beforeEach, describe, expect, test } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "../../tests/fixtures/portal_like.html");
 
-// Must exist before fill.js runs: it registers a message listener at load.
+// Must exist before fill.js runs: it registers a message listener at load,
+// and starts watching the page for a wizard step rendering.
 const listeners = [];
+const sent = [];
 globalThis.chrome = {
-  runtime: { onMessage: { addListener: (fn) => listeners.push(fn) } },
+  runtime: {
+    onMessage: { addListener: (fn) => listeners.push(fn) },
+    sendMessage: (message) => {
+      sent.push(message);
+      return Promise.resolve();
+    },
+  },
 };
 
 await import("../learn/dump.js");
@@ -181,5 +189,70 @@ describe("message handling", () => {
       ok: false,
       error: "unknown action",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Noticing a wizard step
+// ---------------------------------------------------------------------------
+//
+// A ClaimEZ step change is not a navigation — the URL is fixed until the final
+// step — so nothing tells the panel that the page it identified is no longer
+// the page in front of the doctor.
+
+describe("watching for a step change", () => {
+  beforeEach(() => {
+    sent.length = 0;
+  });
+
+  test("the shape changes when a different step renders", () => {
+    document.documentElement.innerHTML =
+      `<body><form><label for="a">Date of admission</label><input id="a" /></form></body>`;
+    const first = content.shapeOf();
+
+    document.documentElement.innerHTML =
+      `<body><form><label for="b">ICD-10 Code</label><input id="b" /></form></body>`;
+
+    expect(content.shapeOf()).not.toBe(first);
+  });
+
+  test("the shape changes when a step is merely hidden", () => {
+    // A wizard that keeps every step in the DOM and toggles display would
+    // otherwise look unchanged forever, and the panel would never re-identify.
+    document.documentElement.innerHTML =
+      `<body><form><label for="a">Date of admission</label><input id="a" /></form></body>`;
+    const shown = content.shapeOf();
+
+    document.querySelector("form").style.display = "none";
+
+    expect(content.shapeOf()).not.toBe(shown);
+  });
+
+  test("a real change is announced to the panel, once", () => {
+    document.documentElement.innerHTML =
+      `<body><form><label for="a">Date of admission</label><input id="a" /></form></body>`;
+    content.announceIfChanged();
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ target: "breezefill-panel", action: "page-changed" });
+
+    // Frameworks re-render constantly. Only a change in the questions on the
+    // page is worth waking the panel for.
+    content.announceIfChanged();
+    expect(sent).toHaveLength(1);
+  });
+
+  test("the announcement carries no page content", () => {
+    // It says "something changed", not what. Everything the panel needs comes
+    // from the survey it then runs, which goes through the same scrubbing as
+    // any other report.
+    document.documentElement.innerHTML = readFileSync(FIXTURE, "utf8");
+    content.announceIfChanged();
+
+    const body = JSON.stringify(sent);
+    for (const identifier of PLANTED) {
+      expect(body).not.toContain(identifier);
+    }
+    expect(Object.keys(sent[0]).sort()).toEqual(["action", "host", "target"]);
   });
 });
