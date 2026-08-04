@@ -3,10 +3,11 @@
 Six synthetic cases for trying BreezeFill at
 **https://breezefill-livid.vercel.app**.
 
-**Install the extension from that URL, not from anywhere else.** The old Fly
-address serves a build from 2026-08-03 that still calls itself ClaimFill, and
-an extension from there talks to that same old backend — which surfaces as
-unrelated-looking failures rather than as "you have the wrong version".
+**Install the extension from that URL, and delete any copy you downloaded
+earlier.** There used to be a second address serving an older build, and an
+extension from there talked to that older backend — which showed up as
+unrelated-looking failures rather than as "you have the wrong version". That
+address is gone, but a zip already on disk still works and is still wrong.
 
 **If the panel says it has no access to the tab**, remove the extension from
 `chrome://extensions` completely and load it again. A plain reload is not
