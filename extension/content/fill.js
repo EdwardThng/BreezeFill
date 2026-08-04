@@ -88,6 +88,12 @@
       intended: report.intended,
       matchRate: report.matchRate,
       safeToFill: report.safeToFill,
+      // Wizard bookkeeping. `steps` is how each step of the plan scored against
+      // what is currently rendered, and `deferred` counts fields belonging to
+      // steps that are not — so the panel can say "these are waiting for the
+      // next step" rather than letting them read as fields that failed.
+      steps: report.steps || [],
+      deferred: report.deferred || 0,
       results: report.results.map((r) => ({
         fieldId: r.fieldId,
         status: r.status,
@@ -120,19 +126,32 @@
    */
   function score(candidates, controls) {
     return (candidates || []).map((candidate) => {
-      const report = locate.locate(candidate.fields || [], controls);
+      // Per step, for the same reason filling is: a four-step schema scored
+      // whole against a page carrying one step's worth of its fields looks
+      // like the wrong form. `locateSteps` reports the steps that ARE here,
+      // so a schema is judged on the step in front of us rather than on the
+      // three that are not in the DOM.
+      const report = locate.locateSteps(candidate.fields || [], controls);
+      const best = (report.steps || [])
+        .slice()
+        .sort((a, b) => b.matchRate - a.matchRate || b.matched - a.matched)[0];
       return {
         formId: candidate.formId,
         matched: report.matched,
         intended: report.intended,
         matchRate: report.matchRate,
+        // What the best-fitting single step scored. For a stepless schema this
+        // is absent and the flat numbers above are the whole story; for a
+        // wizard it is the number that says "this page is one of my steps".
+        bestStepRate: best ? best.matchRate : null,
+        bestStepMatched: best ? best.matched : null,
       };
     });
   }
 
   function survey(plan, candidates) {
     const { controls, skippedPassword } = learn.collectControls(document);
-    const report = locate.locate(plan || [], controls);
+    const report = locate.locateSteps(plan || [], controls);
     return {
       ok: true,
       host: location.host,
@@ -145,7 +164,7 @@
 
   function fill(plan, values) {
     const { controls, elements } = learn.collectControls(document);
-    const report = locate.locate(plan || [], controls);
+    const report = locate.locateSteps(plan || [], controls);
     const result = apply.applyPlan(report, elements, values || {}, { labelOf });
     return {
       ok: true,
