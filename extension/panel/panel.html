@@ -38,21 +38,17 @@
       -->
       <div class="field">
         <span>Insurer form</span>
+        <!--
+          What is being read, not a choice to make. BreezeFill answers the
+          questions on the page in front of the doctor either way; naming a
+          form here only means the bank has better instructions for some of
+          those questions than the page's own wording provides.
+        -->
         <p class="detected" id="form-detected">Checking this page…</p>
         <button class="link" id="form-override" type="button" hidden>
           Choose a different form
         </button>
         <select id="form-id" hidden aria-label="Insurer form"></select>
-        <!--
-          The fallback, offered only when nothing in the bank fits this page.
-          Deliberately not the default: without a schema the model is given
-          the question as the page words it and nothing more, which is less
-          than a schema's description tells it.
-        -->
-        <label class="checkbox" id="use-live-wrap" hidden>
-          <input type="checkbox" id="use-live" />
-          <span>Map against this page's own fields instead</span>
-        </label>
       </div>
 
       <!--

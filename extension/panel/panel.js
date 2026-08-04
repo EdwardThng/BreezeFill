@@ -99,6 +99,14 @@ const state = {
    * kind of thing that gets noticed after the form is submitted.
    */
   formChosenByHand: false,
+  /**
+   * The schema whose instructions sharpen this page's questions, or null.
+   *
+   * Null is an ordinary state, not a failure: it means the page's own wording
+   * is the best instruction available, and every question on it is still
+   * answered and still filled.
+   */
+  schema: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -191,6 +199,13 @@ function hostMatches(host, patterns) {
   });
 }
 
+/**
+ * Say what is going on, and open the picker.
+ *
+ * Only for the cases where something is genuinely wrong and a human choice
+ * might help — not for "the bank does not describe this page", which is an
+ * ordinary outcome handled by selectForm(null).
+ */
 function showPicker(message) {
   const detected = $("form-detected");
   detected.textContent = message;
@@ -255,12 +270,36 @@ function bestCandidate(scores) {
   return best;
 }
 
-function selectForm(form) {
-  $("form-id").value = form.form_id;
-  $("form-detected").textContent = form.insurer
-    ? `${form.insurer} — ${form.display_name}`
-    : form.display_name;
-  $("form-detected").classList.remove("unknown");
+/**
+ * Record what will be used to sharpen this page's questions, and say so.
+ *
+ * `form` may be null, and that is a normal outcome rather than a failure
+ * state: it means the page's own wording is the best instruction available.
+ * Either way the panel is ready to map — nothing here disables anything.
+ */
+function selectForm(form, host) {
+  state.schema = form || null;
+  const detected = $("form-detected");
+
+  if (form) {
+    $("form-id").value = form.form_id;
+    detected.textContent = form.insurer
+      ? `${form.insurer} — ${form.display_name}`
+      : form.display_name;
+    detected.classList.remove("unknown");
+  } else {
+    // Deliberately not phrased as a problem. Nothing is broken and there is
+    // nothing for the doctor to do: BreezeFill reads the questions on the page
+    // and answers those. Naming the host is the one useful detail, because it
+    // is how they would tell us which form to describe properly later.
+    detected.textContent = host
+      ? `Reading the questions on this page (${host})`
+      : "Reading the questions on this page";
+    detected.classList.add("unknown");
+  }
+
+  // The picker stays reachable, never required. A doctor who knows the bank
+  // has a better description for this form than the page does can say so.
   $("form-id").hidden = true;
   $("form-override").hidden = false;
 }
@@ -280,6 +319,23 @@ function selectForm(form) {
  *
  * Failing here is not an error state. It means the picker, which is also what
  * a form nobody has written a schema for looks like.
+ */
+/**
+ * Which schema, if any, describes the page in front of the doctor.
+ *
+ * This used to decide whether BreezeFill would work at all: no match meant a
+ * picker, and picking wrong or not at all meant no fill. That was the wrong
+ * question. The doctor has to submit the form on their screen whatever this
+ * server knows about it, so the answer to "is this in the bank" can only
+ * change how *well* each question is answered, never whether they are
+ * attempted.
+ *
+ * So it is now an enrichment lookup, and nothing in the flow waits on it. A
+ * hit means every question it describes is answered with a real instruction
+ * ("the date the patient FIRST consulted this doctor for this condition") and
+ * that its own wording, not the page's, is what leaves the browser. A miss
+ * means the page's questions are answered from the page's own words. Both
+ * fill.
  */
 async function detectForm() {
   if (!state.forms.length) return;
@@ -308,37 +364,14 @@ async function detectForm() {
   const ids = new Set(shortlist.map((f) => f.form_id));
 
   const best = bestCandidate((response.candidates || []).filter((c) => ids.has(c.formId)));
-  if (best) {
-    selectForm(state.forms.find((f) => f.form_id === best.formId));
-    return;
-  }
-  if (byHost.length === 1) {
+  const match =
+    (best && state.forms.find((f) => f.form_id === best.formId)) ||
     // The page did not look like it, but the host was registered for it and
-    // nothing else fit. Worth offering: a wizard's first step carries few
-    // enough fields to score badly while still being the right form.
-    selectForm(byHost[0]);
-    return;
-  }
+    // nothing else fit. Worth using: a wizard's first step carries few enough
+    // fields to score badly while still being the right form.
+    (byHost.length === 1 ? byHost[0] : null);
 
-  offerLiveMapping(host);
-  showPicker(
-    `Nothing in the bank matches this page on ${host}. Pick a form, or map against the page itself.`
-  );
-}
-
-/**
- * Offer the schema-free path, having established there is no schema.
- *
- * Not offered otherwise, and never selected by default. A schema supplies each
- * field's *meaning* — the instruction a colleague would be given — and the
- * live page cannot: without one the model is handed the question as the page
- * words it and nothing more. So this is the answer to "this form is not in the
- * bank", not a general-purpose mode.
- */
-function offerLiveMapping(host) {
-  state.host = host;
-  $("use-live-wrap").hidden = false;
-  $("use-live").checked = true;
+  selectForm(match, host);
 }
 
 async function loadForms() {
@@ -354,8 +387,11 @@ async function loadForms() {
     // running, and telling a doctor to check the URL of a server that
     // answered is how twenty minutes get spent on the wrong thing.
     state.formsFailed = true;
+    // Not fatal any more, and the wording says so. Without the bank the page's
+    // questions are still answerable from their own labels — what is lost is
+    // the sharper instruction behind each one, not the fill. The mapping call
+    // itself will report the backend properly if it is really unreachable.
     setStatus($("map-status"), UNREACHABLE, "error");
-    showPicker("No forms loaded.");
     return;
   }
 
@@ -504,50 +540,70 @@ function messageFor(error) {
   return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
 }
 
-/** Is the doctor mapping against the page rather than against a schema? */
+/** Did the bank describe any of this page? Reporting only — never a gate. */
 function mappingLive() {
-  return !$("use-live-wrap").hidden && $("use-live").checked;
+  return !state.schema;
 }
 
 /**
- * Every fillable control on the page, as a field list.
+ * The page's questions, each carrying the best instruction available for it.
  *
- * `unknownControls` with an empty plan is exactly "everything nothing claimed"
- * — which, with nothing in the plan, is everything. Labels have already been
- * through the dumper's scrubber by the time they get here; the backend runs
- * the same patterns again on the way in.
+ * Every fillable control becomes a field to answer. The ones the matched
+ * schema describes carry its wording and its instruction; the rest carry the
+ * page's own. The join happens in the page (see `locate.enrich`), so the
+ * schema's instructions reach the controls without page structure being sent
+ * anywhere to arrange it — and a control the schema described contributes no
+ * page text to the request at all.
+ *
+ * Labels have been through the dumper's scrubber by the time they get here;
+ * the backend runs the same patterns again on the way in.
  */
 async function liveFields() {
-  const response = await ask({ action: "survey", plan: [] });
+  const response = await ask({
+    action: "survey",
+    plan: [],
+    enrichWith: state.schema ? schemaFieldsOf(state.schema) : [],
+  });
   state.host = response.host;
-  return response.report.unknownControls
-    .filter((control) => control.label)
-    .map((control) => ({ label: control.label, type: control.type }));
+  return (response.liveFields || []).map((field) => ({
+    label: field.label,
+    type: field.type,
+    options: field.options || [],
+    description: field.description,
+  }));
+}
+
+/** A schema's fields in the shape `locate.enrich` joins against. */
+function schemaFieldsOf(form) {
+  return (form.fields || [])
+    // Demographics are copied deterministically and never go to the model, so
+    // a demographic field has no instruction to lend anything.
+    .filter((f) => f.source === "llm")
+    .map((f) => ({
+      fieldId: f.id,
+      label: f.label,
+      // Normalised, because this crosses to the injected script and then to
+      // the server: an absent key and an explicit null must not produce two
+      // different requests for the same form.
+      description: f.description || null,
+      options: f.options || [],
+    }));
 }
 
 async function onMap() {
   const status = $("map-status");
-  const live = mappingLive();
 
   // The form list is loaded once, when the panel opens. A backend started
-  // afterwards used to mean an empty picker and a 404 on a "" form id until
-  // the panel was reopened — so try again here rather than making the doctor
-  // work that out.
+  // afterwards used to mean the bank was empty for the whole session, so try
+  // again here rather than making the doctor work that out.
+  //
+  // It is no longer fatal if this fails. An empty bank costs the sharper
+  // instructions, not the fill: the page's own questions are still there to
+  // answer. Only a backend that cannot be reached at all stops the mapping,
+  // and that surfaces from the request below.
   if (!state.forms.length) {
     await loadForms();
     await detectForm();
-  }
-  if (!live && !state.forms.length) {
-    setStatus(
-      status,
-      state.formsFailed ? UNREACHABLE : "The backend is running but has no forms loaded.",
-      "error"
-    );
-    return;
-  }
-  if (!live && !$("form-id").value) {
-    setStatus(status, "Pick the insurer form first.", "error");
-    return;
   }
 
   let patient;
@@ -559,13 +615,18 @@ async function onMap() {
   }
 
   $("map-btn").disabled = true;
-  setStatus(status, live ? "Reading this page, then mapping…" : "Redacting and mapping…", "busy");
+  setStatus(status, "Reading this page, then mapping…", "busy");
 
   try {
-    const [path, request] = live
-      ? ["/map-live", { fields: await liveFields(), patient }]
-      : ["/map", { form_id: $("form-id").value, patient }];
-    const response = await fetch(`${apiBase()}${path}`, {
+    // One path now. The page in front of the doctor is always what gets
+    // mapped; the bank only changes how well each of its questions is put.
+    const request = { fields: await liveFields(), patient };
+    if (!request.fields.length) {
+      throw new Error(
+        "No fillable questions found on this page. Click the BreezeFill icon on the tab with the form open."
+      );
+    }
+    const response = await fetch(`${apiBase()}/map-live`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -969,10 +1030,12 @@ $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
-// Choosing a schema from the picker is choosing not to map against the page.
+// Choosing from the picker names the schema whose instructions should sharpen
+// this page's questions. It does not change *what* is filled — the page's own
+// questions, either way — only how well each one is put to the model.
 $("form-id").addEventListener("change", () => {
-  $("use-live").checked = false;
   state.formChosenByHand = true;
+  state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
 });
 $("form-override").addEventListener("click", () => {
   $("form-id").hidden = false;

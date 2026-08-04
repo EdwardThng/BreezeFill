@@ -30,10 +30,13 @@ const FORMS = [
     display_name: "RoboForm test page",
     insurer: "Test",
     hosts: ["roboform.com"],
+    // `source` is what /forms really returns, and it matters here: only llm
+    // fields have an instruction to lend a control. Demographics are copied
+    // deterministically and never reach the model.
     fields: [
-      { id: "full_name", label: "Full Name" },
-      { id: "nric", label: "Social Security Number" },
-      { id: "phone", label: "Home Phone" },
+      { id: "full_name", label: "Full Name", source: "demographics.full_name" },
+      { id: "nric", label: "Social Security Number", source: "demographics.nric" },
+      { id: "phone", label: "Home Phone", source: "demographics.phone" },
     ],
   },
   {
@@ -42,9 +45,9 @@ const FORMS = [
     insurer: "AIA",
     hosts: [],
     fields: [
-      { id: "diagnosis", label: "Diagnosis of all conditions treated" },
-      { id: "icd", label: "ICD-10 Code" },
-      { id: "admitted", label: "Date of admission" },
+      { id: "diagnosis", label: "Diagnosis of all conditions treated", source: "llm" },
+      { id: "icd", label: "ICD-10 Code", source: "llm" },
+      { id: "admitted", label: "Date of admission", source: "llm" },
     ],
   },
 ];
@@ -75,6 +78,15 @@ const EMPTY_REPORT = {
   matchRate: 0,
   safeToFill: false,
 };
+
+// What the injected script reports back about the questions on the page. The
+// join to a schema's instructions has already happened in the page by this
+// point, so a described control arrives carrying a `description` and the
+// schema's wording, and an undescribed one carries the page's own.
+const LIVE_FIELDS = [
+  { label: "Diagnosis of all conditions treated", type: "text", options: [], description: null },
+  { label: "Date of admission", type: "date", options: [], description: null },
+];
 
 function respond(body, ok = true, status = 200) {
   return Promise.resolve({
@@ -126,9 +138,18 @@ beforeEach(() => {
     "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
   };
   // A page nothing in the bank recognises, which is the interesting default:
-  // it is what an insurer portal looks like on the first visit.
+  // it is what an insurer portal looks like on the first visit. It still has
+  // questions on it, and answering those is now the whole job — so the survey
+  // hands back liveFields whether or not a schema was recognised.
   page = {
-    survey: { ok: true, host: "portal.example.com", controlCount: 4, report: EMPTY_REPORT, candidates: [] },
+    survey: {
+      ok: true,
+      host: "portal.example.com",
+      controlCount: 4,
+      report: EMPTY_REPORT,
+      candidates: [],
+      liveFields: LIVE_FIELDS,
+    },
     fill: { ok: true, refused: false, filled: 0, applied: [], report: EMPTY_REPORT },
   };
   globalThis.fetch = vi.fn((url) => {
@@ -148,11 +169,19 @@ afterEach(() => {
 
 describe("when the backend is not running", () => {
   test("Map says so, rather than reporting a bare TypeError", async () => {
+    // The whole backend, not just the form list: an unreachable /forms alone
+    // no longer stops anything, since the page's own questions are still
+    // answerable without the bank.
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
+    routes["/map-live"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
 
     $("paste").value = "Patient: Chua Beng Huat";
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
     await panel.onMap();
 
     // The browser's own wording is what the doctor saw last time, and there
@@ -161,10 +190,30 @@ describe("when the backend is not running", () => {
     expect($("map-status").textContent).toContain("Could not reach the backend");
   });
 
+  test("a bank that will not load costs sharpness, not the fill", async () => {
+    // The change in posture, asserted. Without /forms there are no schema
+    // instructions to enrich with — and the questions on the page are still
+    // there, so they are still mapped.
+    routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
+    const panel = loadPanel();
+    await settle();
+
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    expect(call).toBeTruthy();
+    expect(JSON.parse(call[1].body).fields).toHaveLength(LIVE_FIELDS.length);
+  });
+
   test("a backend started after the panel opened does not need it reopened", async () => {
-    // The form list loads once, on open. When that failed, the picker stayed
-    // empty and every Map posted a "" form id for a 404 until the panel was
-    // closed and opened again — which nobody would ever guess.
+    // The form list loads once, on open. When that failed the bank stayed
+    // empty for the whole session, so every later claim lost its instructions
+    // until the panel was closed and opened again — which nobody would guess.
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
@@ -180,25 +229,32 @@ describe("when the backend is not running", () => {
 
     expect($("form-id").options).toHaveLength(FORMS.length);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/map"),
+      expect.stringContaining("/map-live"),
       expect.anything()
     );
   });
 
-  test("Map never posts an empty form id", async () => {
-    routes["/forms"] = () => respond([]);
+  test("a page with no questions on it says so, instead of posting nothing", async () => {
+    // Replaces the old "never posts an empty form id" guard. There is no form
+    // id to post any more, but the same class of mistake is available: sending
+    // a mapping call for a page the panel could not read. The likeliest cause
+    // is the doctor clicking the icon on the wrong tab, so the message says
+    // that rather than blaming the backend.
+    page.survey = { ...page.survey, liveFields: [] };
     const panel = loadPanel();
     await settle();
 
     $("paste").value = "Patient: Chua Beng Huat";
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
     await panel.onMap();
 
-    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map"));
+    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map-live"));
     expect(mapped).toBe(false);
-    // ...and a backend that answered is not reported as unreachable. Sending
-    // someone to check a URL that just responded wastes the debugging.
+    expect($("map-status").textContent).toMatch(/no fillable questions/i);
     expect($("map-status").textContent).not.toContain("Could not reach");
-    expect($("map-status").textContent).toContain("no forms loaded");
   });
 
   test("a failed parse does not overwrite the Map status line", async () => {
@@ -316,16 +372,20 @@ describe("identifying the form", () => {
 
   test("two schemas fitting equally well is not a winner", async () => {
     // Same insurer, several forms, overlapping questions. Guessing between
-    // them would put a value under a question from the wrong form.
+    // them would attach the wrong instruction to a question — worse than
+    // attaching none, because the model would then confidently answer a
+    // different question than the one on screen.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
       { formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 },
     ]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").hidden).toBe(false);
-    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
+    expect(panel.state.schema).toBeNull();
+    // ...and it is not reported as a failure, because nothing failed: the
+    // page's questions are still what gets answered.
+    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("a thin match still counts, because a wizard shows one step at a time", async () => {
@@ -341,10 +401,11 @@ describe("identifying the form", () => {
 
   test("a match too thin to mean anything does not count", async () => {
     scored([{ formId: "aia_ghs_claim", matched: 2, intended: 24, matchRate: 0.08 }]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
+    expect(panel.state.schema).toBeNull();
+    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("the host registered for a form wins when nothing scores", async () => {
@@ -388,19 +449,13 @@ describe("identifying the form", () => {
 // The form nobody has a schema for
 // ---------------------------------------------------------------------------
 
-describe("the schema-free fallback", () => {
-  const CONTROLS = [
-    { ref: "c1", label: "Diagnosis of all conditions treated", type: "text" },
-    { ref: "c2", label: "Date of admission", type: "date" },
-    { ref: "c3", label: "", type: "text" },
-  ];
+// The bank stopped being a gate on 2026-08-05. The doctor has to submit the
+// form on their screen whatever the bank knows about it, so what a schema
+// match changes is how well each question is put to the model — never whether
+// the questions are attempted.
 
-  async function unrecognisedPanel() {
-    page.survey = {
-      ...page.survey,
-      candidates: [],
-      report: { ...EMPTY_REPORT, unknownControls: CONTROLS },
-    };
+describe("mapping the page in front of the doctor", () => {
+  async function readyPanel() {
     const panel = loadPanel();
     await settle();
     $("paste").value = "Patient: Chua Beng Huat";
@@ -410,37 +465,77 @@ describe("the schema-free fallback", () => {
     return panel;
   }
 
-  test("it is offered only when nothing in the bank fits", async () => {
-    page.survey = { ...page.survey, candidates: [{ formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 }] };
-    loadPanel();
-    await settle();
-    expect($("use-live-wrap").hidden).toBe(true);
-  });
-
-  test("mapping posts the page's own labels, not a form id", async () => {
-    const panel = await unrecognisedPanel();
+  test("the page's questions are posted, with no form id", async () => {
+    const panel = await readyPanel();
     await panel.onMap();
 
     const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
     expect(call).toBeTruthy();
     const sent = JSON.parse(call[1].body);
-    // The unlabelled control is dropped here rather than posted as "": a
-    // field with no question cannot be answered, and asking wastes a call.
     expect(sent.fields).toEqual([
-      { label: "Diagnosis of all conditions treated", type: "text" },
-      { label: "Date of admission", type: "date" },
+      { label: "Diagnosis of all conditions treated", type: "text", options: [], description: null },
+      { label: "Date of admission", type: "date", options: [], description: null },
     ]);
     expect(sent.form_id).toBeUndefined();
   });
 
-  test("picking a schema turns the fallback off", async () => {
-    await unrecognisedPanel();
-    expect($("use-live").checked).toBe(true);
+  test("a recognised page maps the same way, and still posts no form id", async () => {
+    // The behaviour change that matters. A schema match used to switch routes
+    // entirely; now it only decides what instructions ride along.
+    page.survey = {
+      ...page.survey,
+      candidates: [{ formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 }],
+    };
+    const panel = await readyPanel();
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
+
+    await panel.onMap();
+
+    const called = globalThis.fetch.mock.calls.map((c) => String(c[0]));
+    expect(called.some((u) => u.endsWith("/map-live"))).toBe(true);
+    expect(called.some((u) => u.endsWith("/map"))).toBe(false);
+  });
+
+  test("the matched schema's instructions are sent to the page to join", async () => {
+    // The join happens in the page, so the schema's descriptions reach the
+    // controls without page structure being sent anywhere to arrange it.
+    page.survey = {
+      ...page.survey,
+      candidates: [{ formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 }],
+    };
+    const panel = await readyPanel();
+    await panel.onMap();
+
+    const [, message] = globalThis.chrome.tabs.sendMessage.mock.calls
+      .filter(([, m]) => m.action === "survey")
+      .pop();
+    expect(message.enrichWith).toEqual([
+      { fieldId: "diagnosis", label: "Diagnosis of all conditions treated", description: null, options: [] },
+      { fieldId: "icd", label: "ICD-10 Code", description: null, options: [] },
+      { fieldId: "admitted", label: "Date of admission", description: null, options: [] },
+    ]);
+  });
+
+  test("an unrecognised page sends nothing to join against", async () => {
+    const panel = await readyPanel();
+    await panel.onMap();
+
+    const [, message] = globalThis.chrome.tabs.sendMessage.mock.calls
+      .filter(([, m]) => m.action === "survey")
+      .pop();
+    expect(message.enrichWith).toEqual([]);
+  });
+
+  test("picking a schema by hand names the instructions to use", async () => {
+    const panel = await readyPanel();
+    expect(panel.state.schema).toBeNull();
 
     $("form-id").value = "aia_ghs_claim";
     $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
 
-    expect($("use-live").checked).toBe(false);
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
+    // ...and detection stops overruling it from here on.
+    expect(panel.state.formChosenByHand).toBe(true);
   });
 });
 
@@ -561,15 +656,22 @@ describe("a form the bank does not have, end to end", () => {
         { formId: "aia_ghs_claim", matched: 1, intended: 3, matchRate: 0.33 },
       ],
       report: { ...EMPTY_REPORT, unknownControls: CONTROLS },
+      liveFields: CONTROLS.map((c) => ({
+        label: c.label,
+        type: c.type,
+        options: [],
+        description: null,
+      })),
     };
     routes["/map-live"] = () => respond({ form_id: "__live__", fields: ROWS });
 
     const panel = loadPanel();
     await settle();
 
-    // 1. The bank was consulted and had nothing that fits.
-    expect($("form-detected").textContent).toMatch(/nothing in the bank/i);
-    expect($("use-live-wrap").hidden).toBe(false);
+    // 1. The bank was consulted and had nothing that fits — which is not a
+    //    stopping point, only the absence of sharper instructions.
+    expect(panel.state.schema).toBeNull();
+    expect($("form-detected").textContent).toMatch(/reading the questions/i);
 
     // 2. The details go in as one paste.
     $("paste").value = "Patient: Chua Beng Huat · S7211043C · 04/11/1972\n14/03/2026. RIF pain, appendicitis.";
@@ -614,19 +716,20 @@ describe("a form the bank does not have, end to end", () => {
     expect(draft.fields.map((f) => f.id)).toContain("icd_10_code");
   });
 
-  test("a form the bank DOES have never reaches the fallback", async () => {
+  test("a form the bank already describes is not drafted again", async () => {
     page.survey = {
       ok: true,
       host: "roboform.com",
       controlCount: 39,
       candidates: [{ formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 }],
       report: EMPTY_REPORT,
+      liveFields: LIVE_FIELDS,
     };
     const panel = loadPanel();
     await settle();
 
     expect($("form-id").value).toBe("roboform_test_v1");
-    expect($("use-live-wrap").hidden).toBe(true);
+    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
 
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
@@ -634,11 +737,15 @@ describe("a form the bank does not have, end to end", () => {
     $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
     await panel.onMap();
 
+    page.fill = { ok: true, refused: false, filled: 2, applied: [], report: EMPTY_REPORT };
+    await panel.onFill();
+
+    // A recognised page is mapped the same way as any other — what the match
+    // bought was the instructions, not a different route.
     const paths = globalThis.fetch.mock.calls.map((c) => String(c[0]));
-    expect(paths.some((p) => p.endsWith("/map"))).toBe(true);
-    expect(paths.some((p) => p.endsWith("/map-live"))).toBe(false);
-    // No draft either: the bank already describes this form, and a second
-    // schema for it is how two descriptions of one form start disagreeing.
+    expect(paths.some((p) => p.endsWith("/map-live"))).toBe(true);
+    // No draft: the bank already describes this form, and a second schema for
+    // it is how two descriptions of one form start disagreeing.
     expect($("step-draft").hidden).toBe(true);
   });
 });
@@ -890,7 +997,8 @@ const WARD_ROW = {
 };
 
 async function mapWith(fields) {
-  routes["/map"] = () => respond({ form_id: "aia_ghs_claim", fields });
+  // One route now, whether or not the bank recognised the page.
+  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
   const panel = loadPanel();
   await settle();
   $("paste").value = "Admitted to B1.";
@@ -898,11 +1006,6 @@ async function mapWith(fields) {
   $("nric").value = "S7211043C";
   $("dob").value = "1972-11-04";
   $("insurer").value = "AIA";
-  // Picked the way a doctor picks it. Setting `.value` alone leaves the panel
-  // in schema-free mode — the default page here matches nothing in the bank,
-  // so it has offered /map-live — and the mapping would go to the wrong route.
-  $("form-id").value = "aia_ghs_claim";
-  $("form-id").dispatchEvent(new Event("change"));
   await panel.onMap();
   return panel;
 }

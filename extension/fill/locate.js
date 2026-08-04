@@ -383,6 +383,18 @@
       claimed.add(best.field.fieldId);
       return {
         ...control,
+        // The schema's wording replaces the page's, and this is a privacy
+        // property rather than a cosmetic one: a described control now
+        // contributes NO page text to the mapping request. On a page the bank
+        // fully describes, what leaves the browser is exactly what the old
+        // schema path sent. Only the questions nothing describes carry their
+        // own labels out, which is the irreducible cost of answering them at
+        // all.
+        //
+        // Safe for locating, too: the two labels scored at least MIN_SCORE
+        // against each other to get here, and the filler matches with the same
+        // scoring, so the row still finds this control on the page.
+        label: best.field.label || control.label,
         // The schema's instruction, not the page's wording.
         description: best.field.description || best.field.label,
         // Only ever reported, never used to locate: the control is already
