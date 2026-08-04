@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -73,7 +74,10 @@ explicitly named diagnosis). If two reasonable clinicians might answer \
 differently, it is "missing".
 - Do not stretch a value to fit a field. If the notes answer a neighbouring \
 question but not this one, this field is "missing".
-- Dates must be DD/MM/YYYY. Never assume a year that is not in the notes.
+- Dates are DD/MM/YYYY unless the field's own description states a different \
+format. The field wins: its format is the shape of the box on the printed \
+form, so a field asking for DD/MM/YY wants exactly two year digits. Never \
+assume a year that is not in the notes.
 - Use [TOKENS] exactly as they appear if a token belongs in a field.
 - For status "missing", set value to an empty string.
 - When a field lists "options", the answer must be one of them, copied \
@@ -374,6 +378,35 @@ def _match_option(value: str, options: list[str]) -> str | None:
     return None
 
 
+# A description asking for a two-digit year: "DD/MM/YY" but not "DD/MM/YYYY".
+_WANTS_SHORT_YEAR = re.compile(r"DD/MM/YY(?!Y)", re.IGNORECASE)
+_FULL_DATE = re.compile(r"^(\d{2}/\d{2}/)(\d{2})(\d{2})$")
+
+
+def _apply_date_format(field: FormField, value: str) -> str:
+    """A date answer rendered in the format the field's own boxes expect.
+
+    The prompt asks for this, and asking is not enough: on the one form that
+    wants DD/MM/YY, a real run produced two fields in DD/MM/YY and two in
+    DD/MM/YYYY — the same date written two ways on one signed claim. So the
+    format is enforced here rather than hoped for.
+
+    Only the century is dropped, and only when the field asked for a short
+    year. That direction is lossless: 14/03/2026 -> 14/03/26 is the same date.
+
+    The reverse is NOT done. Expanding 14/03/26 would mean choosing a century
+    for it, and a claim form carries dates of birth as readily as dates of
+    admission — "26" is 2026 or 1926 depending on which box it sits in, and
+    that is not a guess worth making silently on a document a doctor signs.
+    A field wanting a full year that receives a short one keeps what the model
+    returned, and the doctor sees it in review.
+    """
+    if not _WANTS_SHORT_YEAR.search(field.description or ""):
+        return value
+    match = _FULL_DATE.match(value.strip())
+    return f"{match.group(1)}{match.group(3)}" if match else value
+
+
 def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
     """One parsed array entry -> FieldAnswer. Anything malformed, empty, or
     marked missing collapses to a clean status="missing" answer — never a
@@ -400,6 +433,8 @@ def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
         if canonical is None:
             return missing
         parsed = canonical
+    elif field.type == "date":
+        parsed = _apply_date_format(field, value)
     source = item.get("source")
     return FieldAnswer(
         value=parsed,
