@@ -8,6 +8,21 @@ __pycache__/
 .pytest_cache/
 public/
 
+# pytest configuration, and nothing else — see the file. It has to be kept out
+# of the upload entirely rather than merely out of the function bundle, because
+# it breaks the build before bundling is reached: Vercel's Python runtime is
+# uv-based, and uv treats any pyproject.toml as a project manifest. This one
+# has no [project] table, so `uv lock` fails and the deploy dies with
+# "No `project` table found in: /vercel/path0/pyproject.toml".
+#
+# Excluding it is what makes the runtime fall back to requirements.txt, which
+# is the file this project actually declares its dependencies in. Adding a
+# [project] table instead would work too and is the worse fix — it would give
+# the repo a second, competing dependency list for uv to resolve, and
+# tests/test_requirements_sync.py exists precisely because one duplicate list
+# is already one too many.
+pyproject.toml
+
 # Scanned insurer PDFs the overlay schemas point at ARE needed at runtime, so
 # forms/ is deliberately absent from this list. Same for extension/, which the
 # download endpoint zips on request.
