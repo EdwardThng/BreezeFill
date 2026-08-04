@@ -15,13 +15,13 @@ FormFill turns a pasted clinical note into a filled insurance claim PDF in minut
    - **LLM sweep (optional):** a small, cheap model is asked whether any names, ID numbers, phone numbers, or addresses survived the first two passes; anything it finds is tokenized too.
 3. **Map** — One structured-output LLM call receives the form's field definitions and the redacted note. For every field it must return a value, a status — `extracted` (stated in the note), `inferred` (reasonable clinical inference), or `missing` — and the verbatim source snippet that supports the value. The model cannot invent facts silently: malformed or omitted answers are downgraded to `missing`.
 4. **Review** — The doctor sees every field with its status pill (green/amber/red) and source snippet. Values can be edited inline. Any field that was not directly extracted **requires an explicit accept click** before the form can be generated.
-5. **Fill & download** — Approved values are written into the insurer's fillable PDF (AcroForm) and streamed back as a download. The claim and all patient data are deleted from the server the moment the download completes.
+5. **Fill** — For a web form the extension writes the approved values into the insurer's own page, in the browser; the doctor submits it. For a PDF form the values are posted back, written into the AcroForm (or stamped onto a flat scan), and streamed back as a download. Either way the server keeps nothing.
 
 ### Privacy model
 
 - **Demographics never reach the LLM.** They are copied onto the form deterministically and double as the redaction dictionary. This extends to *finding* them: the paste is split by pattern, because a model asked to do it would have read the patient's name before the dictionary that redacts the name existed.
 - **The LLM only ever sees de-identified text.** The token→value mapping lives in server memory for the duration of the request flow and is never sent to any model or written to logs.
-- **Zero retention.** Claims exist only in an in-memory store, are deleted on download or discard, and are purged automatically after one hour. No database holds patient data.
+- **Zero retention, literally.** Every endpoint is stateless: the server holds nothing between requests, so patient data exists only for the duration of the request that carried it in. There is no claim store, no session, no id, and no database.
 - **No silent guesses.** Every AI-proposed value carries its supporting quote or a `missing` flag, and nothing reaches a PDF without doctor approval. A redaction token can never leak into a generated PDF — it is blocked at three independent layers.
 - **No auto-submission.** The output is always a PDF that the doctor reviews, signs, and submits themselves.
 
@@ -56,10 +56,7 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | `POST` | `/parse` | Split one pasted block into demographic fields. Patterns only — no model, nothing stored |
 | `POST` | `/map` | Redact + extract for the browser extension. Stateless: no `claim_id`, nothing retained |
 | `POST` | `/map-live` | Same, against a page's own field labels, for a form no schema describes. A successful fill then drafts that schema |
-| `POST` | `/claims` | Redact + extract; returns review rows and a `claim_id` |
-| `GET` | `/claims/{id}` | Re-fetch review rows |
-| `POST` | `/claims/{id}/approve` | Fill the PDF with final values; returns the PDF and deletes the claim |
-| `DELETE` | `/claims/{id}` | Discard a claim |
+| `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call |
 | `GET` | `/health` | Liveness + loaded form count |
 | `GET` | `/download/claimfill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
 
@@ -166,6 +163,6 @@ and a description is what tells the model what a question *means*.
   fillable PDF's own fields, `overlay` stamps text at coordinates onto a flat
   scan, and `web` fills an insurer's own web form in place through the browser
   extension. A `web` schema has no PDF, so there is nothing to download.
-- **In-memory claim store.** Run a single backend process; claims do not survive a restart (by design — this is a privacy feature as much as a limitation).
+- **Nothing survives a request.** Losing the browser tab mid-review means starting the claim again, because the server has no copy to resume from. That is the retention model working, not a gap in it.
 - **Data residency is your responsibility.** If regulations require in-region inference, point the model configuration at a regional endpoint before processing real patient data, and verify redaction tests pass in your environment.
 - FormFill assists with form completion; the reviewing doctor remains responsible for the accuracy of every submitted form.
