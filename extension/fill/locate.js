@@ -242,6 +242,18 @@
       unknownControls: controls
         .filter((c) => !taken.has(c.ref) && isFillable(c))
         .map((c) => ({ ref: c.ref, label: c.label, type: c.type })),
+      // Every fillable control, matched or not, with what the page can say
+      // about it. This is what gets mapped now: the doctor has to submit the
+      // form in front of them whatever the bank knows, so the question is
+      // never "is this page ours" but "how well can each question be
+      // answered". `options` comes straight off the control, so it cannot be
+      // stale the way an authored list can.
+      liveControls: controls.filter(isFillable).map((c) => ({
+        ref: c.ref,
+        label: c.label,
+        type: c.type,
+        options: c.options && !c.options.withheld ? c.options.values : [],
+      })),
     };
   }
 
@@ -329,10 +341,68 @@
     };
   }
 
+  /**
+   * The page's questions, each carrying the best instruction available for it.
+   *
+   * This is the join that makes the bank invisible. Every fillable control on
+   * the page becomes a field to answer — because the doctor has to submit this
+   * form whatever the bank knows about it — and any control a schema field
+   * describes inherits that field's `description`, which is the instruction a
+   * colleague would be given rather than the question as the page happens to
+   * word it.
+   *
+   * Two properties worth keeping:
+   *
+   *   - A control with no schema match is still filled, from its own label.
+   *     Weaker, and reported as such, but a blank the product could have
+   *     answered is a worse outcome than a weaker instruction.
+   *   - The match must clear MIN_SCORE and must not be a tie, exactly as
+   *     filling does. Attaching the wrong description is worse than attaching
+   *     none: it would tell the model confidently to answer a different
+   *     question than the one on screen.
+   */
+  function enrich(controls, schemaFields) {
+    const fields = Array.isArray(schemaFields) ? schemaFields : [];
+    const claimed = new Set();
+
+    return (controls || []).map((control) => {
+      const ranked = fields
+        .filter((f) => !claimed.has(f.fieldId))
+        .map((f) => ({ field: f, score: score(f.label, control.label) }))
+        .sort((a, b) => b.score - a.score);
+
+      const [best, runnerUp] = ranked;
+      const confident =
+        best &&
+        best.score >= MIN_SCORE &&
+        !(runnerUp && best.score - runnerUp.score < TIE_MARGIN);
+
+      if (!confident) {
+        return { ...control, description: null, describedBy: null };
+      }
+      claimed.add(best.field.fieldId);
+      return {
+        ...control,
+        // The schema's instruction, not the page's wording.
+        description: best.field.description || best.field.label,
+        // Only ever reported, never used to locate: the control is already
+        // in hand, and its own label is what the filler matches on.
+        describedBy: best.field.fieldId,
+        // A schema's options describe the form; the control's describe what it
+        // will actually accept today. Prefer the control, fall back to the
+        // schema for a control that carries none of its own.
+        options: control.options && control.options.length
+          ? control.options
+          : best.field.options || [],
+      };
+    });
+  }
+
   const api = {
     locate,
     locateSteps,
     locateOne,
+    enrich,
     groupBySteps,
     score,
     normalise,
