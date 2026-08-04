@@ -348,21 +348,24 @@ describe("identifying the form", () => {
     await settle();
 
     const [, message] = globalThis.chrome.tabs.sendMessage.mock.calls[0];
+    // `step` rides along so a wizard schema can be scored against the step on
+    // screen instead of against fields that are not in the DOM. Empty for a
+    // form that shows everything at once, which is all of them today.
     expect(message.candidates).toEqual([
       {
         formId: "roboform_test_v1",
         fields: [
-          { fieldId: "full_name", label: "Full Name" },
-          { fieldId: "nric", label: "Social Security Number" },
-          { fieldId: "phone", label: "Home Phone" },
+          { fieldId: "full_name", label: "Full Name", step: "" },
+          { fieldId: "nric", label: "Social Security Number", step: "" },
+          { fieldId: "phone", label: "Home Phone", step: "" },
         ],
       },
       {
         formId: "aia_ghs_claim",
         fields: [
-          { fieldId: "diagnosis", label: "Diagnosis of all conditions treated" },
-          { fieldId: "icd", label: "ICD-10 Code" },
-          { fieldId: "admitted", label: "Date of admission" },
+          { fieldId: "diagnosis", label: "Diagnosis of all conditions treated", step: "" },
+          { fieldId: "icd", label: "ICD-10 Code", step: "" },
+          { fieldId: "admitted", label: "Date of admission", step: "" },
         ],
       },
     ]);

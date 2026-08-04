@@ -90,6 +90,15 @@ const state = {
   parseTimer: null,
   /** Whether the details drawer has already opened itself for this paste. */
   openedForMissing: false,
+  /**
+   * Whether the doctor picked the form themselves.
+   *
+   * Detection re-runs when a wizard step renders, and it must never overrule
+   * a human. Someone who reached for the picker did so because the automatic
+   * choice was wrong, and silently changing it back on the next step is the
+   * kind of thing that gets noticed after the form is submitted.
+   */
+  formChosenByHand: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -143,7 +152,15 @@ function readyRows() {
  * many blanks does not read as a redesigned portal.
  */
 function fillPlan() {
-  return readyRows().map((row) => ({ fieldId: row.field_id, label: row.label }));
+  // `step` travels with the field so the matcher can evaluate its guard
+  // against the step on screen rather than against a whole wizard that is
+  // never in the DOM at once. Absent for every stepless schema, which is the
+  // case that behaves exactly as it always has.
+  return readyRows().map((row) => ({
+    fieldId: row.field_id,
+    label: row.label,
+    step: row.step || "",
+  }));
 }
 
 function fillValues() {
@@ -200,8 +217,27 @@ const IDENTIFY_MARGIN = 0.15;
 function candidatesFor(forms) {
   return forms.map((form) => ({
     formId: form.form_id,
-    fields: (form.fields || []).map((f) => ({ fieldId: f.id, label: f.label })),
+    fields: (form.fields || []).map((f) => ({
+      fieldId: f.id,
+      label: f.label,
+      step: f.step || "",
+    })),
   }));
+}
+
+/**
+ * How well a schema explains this page.
+ *
+ * For a wizard, that is its best-fitting single step, not its whole field
+ * list: a four-step schema scored whole against one rendered step reads as
+ * mostly absent, and would lose to a small unrelated schema that happens to
+ * share three labels. What identifies a form here is "this page is one of my
+ * steps".
+ */
+function fitOf(score) {
+  return score.bestStepRate == null
+    ? { rate: score.matchRate, matched: score.matched }
+    : { rate: score.bestStepRate, matched: score.bestStepMatched };
 }
 
 /**
@@ -209,12 +245,13 @@ function candidatesFor(forms) {
  */
 function bestCandidate(scores) {
   const ranked = scores
-    .filter((s) => s.matched >= IDENTIFY_MIN_MATCHED && s.matchRate >= IDENTIFY_MIN_RATE)
-    .sort((a, b) => b.matchRate - a.matchRate);
+    .map((s) => ({ ...s, fit: fitOf(s) }))
+    .filter((s) => s.fit.matched >= IDENTIFY_MIN_MATCHED && s.fit.rate >= IDENTIFY_MIN_RATE)
+    .sort((a, b) => b.fit.rate - a.fit.rate);
 
   if (!ranked.length) return null;
   const [best, runnerUp] = ranked;
-  if (runnerUp && best.matchRate - runnerUp.matchRate < IDENTIFY_MARGIN) return null;
+  if (runnerUp && best.fit.rate - runnerUp.fit.rate < IDENTIFY_MARGIN) return null;
   return best;
 }
 
@@ -246,6 +283,10 @@ function selectForm(form) {
  */
 async function detectForm() {
   if (!state.forms.length) return;
+  // A human already answered this question. Detection re-runs on every wizard
+  // step, and quietly overturning a doctor's choice between steps would change
+  // which form is being filled without anyone being told.
+  if (state.formChosenByHand) return;
 
   let response;
   try {
@@ -596,6 +637,26 @@ function renderRow(row) {
     input = document.createElement("input");
     input.type = "checkbox";
     input.checked = valueOf(row) === true;
+  } else if (row.options && row.options.length) {
+    // The form's own choices, so a doctor correcting this picks something the
+    // control will actually accept. Retyping it as free text is how the value
+    // gets refused again at fill time, which is the failure this whole path
+    // exists to remove.
+    input = document.createElement("select");
+    const blank = document.createElement("option");
+    blank.value = "";
+    // A model that found no answer leaves this field blank, and blank has to
+    // stay reachable: "none of these" is a legitimate answer to a dropdown,
+    // and the doctor filling it by hand afterwards is the designed outcome.
+    blank.textContent = "— leave blank —";
+    input.append(blank);
+    for (const option of row.options) {
+      const el = document.createElement("option");
+      el.value = option;
+      el.textContent = option;
+      input.append(el);
+    }
+    input.value = row.options.includes(valueOf(row)) ? valueOf(row) : "";
   } else {
     input = document.createElement("textarea");
     input.rows = String(Math.min(4, Math.max(1, String(valueOf(row) ?? "").length / 44 + 1)) | 0);
@@ -694,10 +755,26 @@ function renderReport(response) {
     const name = row ? row.label : result.fieldId;
     const applied = (response.applied || []).find((a) => a.fieldId === result.fieldId);
     const outcome = applied ? applied.status : result.status;
-    item.textContent = `${name} — ${outcome}`;
+    // The reason, not just the verdict. "skipped" alone is what a dropdown
+    // answer the control does not offer looks like — a field the doctor
+    // reviewed and approved, reported as skipped with no way to tell whether
+    // that meant "already correct", "not on this page" or "the value would
+    // not go in". Each of those needs a different response from them.
+    const why = applied && applied.reason ? ` (${applied.reason})` : "";
+    item.textContent = `${name} — ${outcome}${why}`;
     list.append(item);
   }
   container.append(list);
+
+  // Fields belonging to a step that is not rendered. Said plainly, because
+  // otherwise they are indistinguishable from fields that failed — and the
+  // action is simply to advance the wizard and press Fill again.
+  if (response.report.deferred) {
+    const later = document.createElement("p");
+    later.className = "note";
+    later.textContent = `${response.report.deferred} field${response.report.deferred === 1 ? "" : "s"} belong to a later step. Move to that step and press Fill again.`;
+    container.append(later);
+  }
 
   // Live controls no schema field claimed. Surfaced rather than hidden: this
   // is how a portal that grew a question becomes visible, and it is the input
@@ -717,6 +794,30 @@ function renderReport(response) {
     }
     container.append(unknown);
   }
+}
+
+/**
+ * A wizard step rendered on the tab the doctor granted us.
+ *
+ * Two things happen, and neither of them is filling. Identification re-runs,
+ * because the step that was on screen when the panel opened may have carried
+ * none of the right schema's fields. And if there are values waiting, the
+ * doctor is told the page moved — with the button they already know, not a
+ * new one.
+ *
+ * Filling here would be wrong on its own terms: advancing a step is the doctor
+ * interacting with the insurer's form, not asking BreezeFill for anything. The
+ * guarantee is that values are written when a doctor clicks Fill, and an
+ * observer that wrote on render would quietly move the review step to after
+ * the writing.
+ */
+async function onPageChanged() {
+  await detectForm();
+  if (!state.rows.length) return;
+  setStatus(
+    $("fill-status"),
+    "This page changed — press Fill again to write the fields on this step."
+  );
 }
 
 async function onCheck() {
@@ -871,11 +972,27 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing a schema from the picker is choosing not to map against the page.
 $("form-id").addEventListener("change", () => {
   $("use-live").checked = false;
+  state.formChosenByHand = true;
 });
 $("form-override").addEventListener("click", () => {
   $("form-id").hidden = false;
   $("form-override").hidden = true;
+  // Reaching for the override is saying the automatic answer was wrong. From
+  // here on detection stops re-deciding, including on the next wizard step.
+  state.formChosenByHand = true;
 });
+
+// The injected script reports that the page changed shape — a wizard step
+// rendered. Registered unconditionally: a panel with no granted tab simply
+// never hears from anyone.
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!message || message.target !== "breezefill-panel") return undefined;
+    if (message.action === "page-changed") onPageChanged();
+    // Nothing is sent back, so the channel must not be held open.
+    return undefined;
+  });
+}
 
 updateFound();
 loadForms().then(detectForm);
@@ -892,7 +1009,9 @@ globalThis.breezefillPanel = {
   updateFound,
   patientRecord,
   detectForm,
+  onPageChanged,
   bestCandidate,
+  fillPlan,
   draftSchema,
   state,
 };
