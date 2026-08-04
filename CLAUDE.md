@@ -29,7 +29,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**363 tests pass**: 182 backend (1 skipped), 146 extension, 35 website.
+**383 tests pass**: 188 backend (1 skipped), 159 extension, 35 website.
 
 | Piece | State |
 |---|---|
@@ -38,6 +38,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
+| One path: always map the page | **Built and green (2026-08-05).** The bank stopped gating: every fillable control becomes a question, a matching schema lends its `description` to the controls it describes, and a miss costs sharpness rather than the fill. `POST /map` is no longer used by the extension — `/map-live` carries both kinds of field. See "the bank is no longer a gate" |
 | Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
@@ -601,6 +602,45 @@ notes must not reach disk. This is also why `background.js` is nearly empty —
 a service worker acting as a message broker is evicted after ~30s idle, so it
 would have to persist the note to survive. State lives in the panel.
 
+**Superseded 2026-08-05 — the bank is no longer a gate.** The owner's call,
+after seeing the real ClaimEZ form: *"there's no need to check if the current
+form being filled is already in the bank, because the doctors will have to
+submit a filled form online regardless."* That reframes what identification was
+ever for. The doctor must submit the form on their screen whatever this
+repository knows about it, so the answer to "is this in the bank" can only
+change **how well each question is answered**, never whether they are
+attempted.
+
+So there is now **one path**: every fillable control on the page becomes a
+question to map. A schema that fits lends its `description` to the controls it
+describes; a schema that does not fit costs sharpness and nothing else. No
+picker to get past, no fallback to opt into, and no state in which the panel
+looks at a form it declines to fill. `mappingLive()` survives as a *report* —
+"did the bank describe any of this" — and gates only the draft-schema offer.
+
+**The privacy property was kept, not traded.** A described control travels
+under the *schema's* wording rather than the page's, so a page the bank fully
+describes sends exactly what the old schema route sent. Only questions nothing
+describes carry their own labels out, which is the irreducible cost of
+answering them at all. The join runs in the page (`locate.enrich`), so schema
+instructions reach controls without page structure being sent anywhere to
+arrange it.
+
+**The limit, found by a test that expected to pass.** Enrichment matches by the
+same label scorer filling uses, and it compares words rather than meaning:
+"7. When did the patient first consult you" and "Date of first consultation"
+are the same question, share one content token, score 0.22, and do not match.
+It fails safely — the control is still filled from its own label, just without
+the sharper instruction — but it means **a web schema wants labels authored
+from the page's own wording**, which is what the draft-schema flow produces,
+rather than from the labels of the equivalent PDF form. Do not assume
+`aia_ghs_claim`'s labels will enrich the ClaimEZ page; they were written for a
+PDF.
+
+Below is the superseded three-step design, kept because steps 2 and 3 are still
+exactly what happens — what changed is that step 1 stopped being able to stop
+anything:
+
 **The bank, then the page. And filling an unknown form produces the schema
 that replaces it.** The owner's design (2026-08-03). Three steps:
 
@@ -835,6 +875,14 @@ omission to "fix".
   behind any endpoint. Do not add one — a shared store would be a database
   holding patient data, which this product says publicly it does not have, and
   it would restore the two-machine trap that `--ha=false` used to guard.
+- **Every question on the page gets attempted.** The bank may not gate a fill:
+  the doctor has to submit that form regardless, so a schema miss must cost
+  sharpness and never coverage. Do not reintroduce a state where the panel
+  looks at a form and declines to map it.
+- **A described control travels under the schema's wording, not the page's.**
+  This is what keeps a fully-described page from sending page text to the
+  model, and it is easy to undo by "simplifying" `locate.enrich` to keep the
+  live label. Only questions nothing describes may carry their own labels out.
 - **A drafted schema is a proposal, never an installation.** `/map-live`
   returns rows; the panel renders JSON; a human commits it. Do not add a route
   that writes a schema to disk from a running claim — the schema then governs
