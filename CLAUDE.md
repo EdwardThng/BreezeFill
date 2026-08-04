@@ -18,9 +18,11 @@ submits. The website exists to hand out the extension and demonstrate it.
 **Three names, and only one of them is dead.** The product was FormFill, then
 ClaimFill, now **BreezeFill** (renamed 2026-08-04). The sweep covered display
 names, JS globals, the message target and the download filename. Two things
-deliberately still say `claimfill`, and both are correct: the Fly app is named
-`claimfill` and `DEFAULT_API_BASE` points at `claimfill.fly.dev` — infrastructure
-named before the product was, which would break if renamed. `FORMFILL_*`
+said `claimfill` — the Fly app and the `DEFAULT_API_BASE` that pointed at it.
+Both are gone as of 2026-08-05: Fly is destroyed and the default backend is
+`https://breezefill-livid.vercel.app`. Nothing user-facing carries an old name
+any more, and a check for one is cheap: `git ls-files | xargs grep -il
+claimfill`. `FORMFILL_*`
 environment variables also survive from the first name and have **not** been
 swept; renaming them means touching every command in these docs plus anything
 set on a host, so it is a deliberate not-yet rather than an oversight.
@@ -43,26 +45,24 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
 | Vercel **production** | **Live at `https://breezefill-livid.vercel.app` (2026-08-05)**, region `sin1`. Publicly reachable — unlike a preview, production carries no SSO wall: landing page, `/health` (7 forms), `/forms` and the extension download all answer to plain `curl`. **`POST /map` returns 503**, because `ANTHROPIC_API_KEY` is Preview-scoped; it needs `vercel env add ANTHROPIC_API_KEY production` **and then a redeploy**, since an env change does not reach an already-deployed function |
-| Vercel migration | **Preview deployed and verified end to end (2026-08-05)**, project `breeze-fill/breezefill`, region `sin1`. `/health` reports 7 forms, `/forms` and the extension download answer, and `POST /map` returns real review rows from a live model call — demographics copied deterministically, an `extracted` value with its source quote, and `missing` where the note was silent. `ANTHROPIC_API_KEY` is set **Preview-scoped only**. Two things still true: **Deployment Protection is on**, so the extension cannot reach a preview URL (its `fetch` 401s and reads as "Could not reach the backend"), and `DEFAULT_API_BASE` still points at Fly. Fly is deliberately left running as the fallback |
+| Vercel migration | **Done (2026-08-05).** Preview and production both verified end to end: `/health` reports 7 forms, `/forms` and the extension download answer, and `POST /map` returns real review rows from a live model call. Production is public; **previews are behind Deployment Protection**, so only `vercel curl` reaches them and the extension cannot. `DEFAULT_API_BASE` points at production |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
 | `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
-| Fly deploy | **Live at `https://claimfill.fly.dev`**, redeployed 2026-08-03 with today's build. One machine, region `sin`, health passing. The app was never gone — the NXDOMAIN was `formfill-backend.fly.dev`, a name this project does not use; `fly.toml` says `claimfill` and always did. It **scales to zero now** (see fly.toml): first request after an idle spell is a second or two slow, not an error |
-| `ANTHROPIC_API_KEY` | **Set as a Fly secret** and confirmed working — a live `POST /map` returns 200, which exercises the sweep. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1` |
-| **Demoable?** | **Yes — no terminal, no key.** `DEFAULT_API_BASE` is `https://claimfill.fly.dev`, which is live and holds the key. Load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
+| `ANTHROPIC_API_KEY` | **Set as a Vercel environment variable**, Preview and Production, and confirmed working — a live `POST /map` returns real review rows, which exercises the sweep too. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1`. Changing it does not reach an already-deployed function; redeploy after |
+| **Demoable?** | **Yes — no terminal, no key.** `DEFAULT_API_BASE` is `https://breezefill-livid.vercel.app`, which is live and holds the key. Load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
 
-Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
-static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
-Verify deploy state with `flyctl`, not commit titles.
+Note: a commit title is not evidence of a deploy — `ec7c09c` is named "full
+deployment on fly.io" and only adds a static mount. Verify deploy state with
+`vercel`, not commit titles.
 
-**`fly deploy --ha=false` — now a cost preference, not a correctness rule.**
-It used to be load-bearing: Fly's default adds a second machine, and a claim
-created on machine A 404'd when approve landed on machine B. With the claim
-store gone (2026-08-04) any number of machines is correct. Keep passing it
-while this is a pilot because one machine is cheaper and easier to reason
-about — but a second one no longer breaks anything, so this is not the first
-thing to suspect when something goes wrong.
+**Hosting is Vercel, and only Vercel, as of 2026-08-05.** The Fly app was
+destroyed and `fly.toml`, the `Dockerfile` and `.dockerignore` went with it.
+The one thing worth carrying forward from that era is why the two-machine
+problem stopped mattering: the claim store is gone, so no request depends on
+reaching the same instance as the last one. That is what made serverless
+possible at all, and it is a property to preserve rather than a Fly detail.
 
 ### Where things live
 
@@ -339,7 +339,8 @@ the product; it is not any more, so the website (static: landing, demo,
 pricing) and the API (Python, needs the key, needs a region) no longer have to
 share a host. Two options are open, both now viable:
 
-- **Website on Vercel, API on Fly.** Lowest risk, and the wiring already
+- **Website on Vercel, API on Fly.** *(Not taken; Fly is gone.)* Lowest risk at
+  the time, and the wiring already
   exists — `VITE_API_URL` and `FORMFILL_ALLOWED_ORIGINS` were deliberately
   left in place. Buys: no cold start on the marketing site, and the download
   page stays up when the API is down (it went down with it for ten minutes on
@@ -348,7 +349,9 @@ share a host. Two options are open, both now viable:
   serverless gives no sticky instance, so the old claim store would have 404'd
   every approve.
 
-**Chosen 2026-08-04: everything on Vercel, Fly kept as a fallback.** Prepared
+**Chosen 2026-08-04: everything on Vercel.** (Fly was kept as a fallback for a
+day and destroyed on 2026-08-05 — a backend nobody redeploys is a stale build
+with a health check, not a safety net.) Prepared
 and committed, not yet deployed — it needs `vercel link`, `vercel env add
 ANTHROPIC_API_KEY` and a preview deploy, all of which the owner must run.
 
@@ -367,7 +370,8 @@ Two things to carry forward:
 - **The 4.5 MB response cap is the one with the least headroom.** The PDF fill
   returns the file through the function. `prudential_accident_hosp.pdf` is
   2.82 MB before filling. A future insurer form that is a longer scan would
-  413 on Vercel and be fine on Fly. Check the size when adding an overlay form.
+  413 on Vercel. There is no second host to fall back to any more, so check
+  the size when adding an overlay form.
 - **Hobby forbids commercial use**, and Vercel counts "advertising the sale of
   a product or service" as commercial — donations too. **The pricing page the
   owner plans puts this over the line**, and it does so on any hosting shape,
@@ -480,7 +484,7 @@ a leak.
 deferred.** Recommendation stands: paste-and-parse (extract NRIC/DOB/phone
 from one pasted block using the regexes already in `redaction.py`) before any
 CMS integration. If integration happens, it must run *inside* the clinic — a
-local agent or browser extension — never the Fly server holding standing
+local agent or browser extension — never a hosted server holding standing
 credentials to a patient database. See conversation history for the full
 comparison (ClinicAssist / Assurance Technology, NEHR via Synapxe GPConnect).
 
@@ -917,7 +921,8 @@ omission to "fix".
   **Amazon Bedrock `ap-southeast-1`**, where the region comes from the endpoint
   rather than a parameter — that means the `AnthropicBedrockMantle` client and
   `anthropic.`-prefixed model ids. Synthetic or anonymised notes until then.
-- The API key belongs in a Fly secret, never in a repo file, and never pasted
+- The API key belongs in a Vercel environment variable, never in a repo file,
+  and never pasted
   into a chat transcript (including via the `!` prefix, which is logged).
 - Repo fixtures are synthetic only.
 - A learn-mode dump is an LLM input. It may be shared only after it has been
@@ -972,8 +977,8 @@ cd frontend && npm run build          # backend then serves it at /
 ./.venv/Scripts/python.exe backend/pdf_fill.py forms/your_form.pdf
 
 # Vercel. Login and `env add` need a real terminal; everything else runs from
-# here once ~/.vercel auth and .vercel/project.json exist — same shape as
-# flyctl. `vercel env ls` prints names and "Encrypted", never values.
+# here once ~/.vercel auth and .vercel/project.json exist. `vercel env ls`
+# prints names and "Encrypted", never values.
 vercel deploy --yes                 # preview
 vercel deploy --prod --yes          # production
 vercel env ls
@@ -986,25 +991,6 @@ vercel curl https://<deployment>/map -s -i -X POST \
   -H "Content-Type: application/json" --data-binary @probe.json
 ```
 
-**`flyctl` is installed at `~/.fly/bin/flyctl.exe`** (reinstalled 2026-08-03
-with `iwr https://fly.io/install.ps1 -useb | iex`, after being found missing —
-its absence fit the app having been destroyed rather than stopped). `~\.fly\bin`
-is on the persistent user PATH, so a **new** terminal finds it; one opened
-before the install will not.
-
-**The command is `flyctl`, not `fly`.** The Windows installer ships
-`flyctl.exe` and no `fly.exe`, so every `fly ...` line in Fly's own docs is a
-command-not-found here, and it reads exactly like a PATH problem that reopening
-the terminal should fix. It is not.
-
-**`flyctl auth login` cannot be run through Claude Code.** It needs an
-interactive terminal, and both the PowerShell tool and the `!` prefix run
-non-interactively with stdin on the null device — it exits 1 with "requires an
-interactive terminal" rather than hanging. It must be a real terminal window
-the owner opens themselves. This is one-time: the token lands in
-`~/.fly/config.yml`, and every later command (`apps list`, `secrets list`,
-`deploy`) is non-interactive and can be run from here. Quote the path when
-invoking it directly — the profile directory has a space in it.
 
 The `!` prefix in Claude Code runs **Bash**, not PowerShell.
 
@@ -1050,8 +1036,10 @@ things nobody would have predicted, now in Traps. What is left:
   ANTHROPIC_API_KEY production`). It is Preview-scoped today, so production
   `/map` 503s until this lands *and* a deploy follows — an env change does not
   reach a function that is already deployed.
-- **Point `DEFAULT_API_BASE` at the new domain, and leave Fly running a week.**
-  Only after the extension has actually filled something against Vercel.
+- ~~**Point `DEFAULT_API_BASE` at the new domain.**~~ Done 2026-08-05, and it
+  turned out to be urgent rather than a formality: it still aimed at Fly, Fly
+  had not been redeployed since 2026-08-03, and a tester therefore installed a
+  pre-rename extension talking to a pre-rename backend. See the traps.
 
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
