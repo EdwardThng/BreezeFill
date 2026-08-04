@@ -199,5 +199,101 @@
     return undefined;
   });
 
-  globalThis.breezefillContent = { survey, fill, labelOf, serialise, score };
+  // ------------------------------------------------------------------
+  // Telling the panel a wizard step rendered
+  // ------------------------------------------------------------------
+  //
+  // The panel identifies the form once, when it opens — which on a wizard is
+  // step 1. A schema describing steps 2 and 3 has none of its fields in the
+  // DOM at that moment, so it cannot be recognised however loose the
+  // thresholds are: no threshold saves you when the count is zero.
+  //
+  // A ClaimEZ step change is not a navigation (the URL does not change until
+  // the final step), so nothing else fires. This watches the page's *shape*
+  // instead and tells the panel when it changes, so identification can be a
+  // thing that happens whenever there is something new to identify.
+  //
+  // What this deliberately does NOT do is fill. Advancing a step is not a
+  // doctor asking for anything; the panel re-surveys and offers, and the
+  // doctor still clicks. An observer that filled on render would turn the
+  // review step into something that happens after the writing.
+
+  const STEP_SETTLE_MS = 400;
+
+  /**
+   * A cheap description of what questions are currently on the page.
+   *
+   * Type, label and visibility — never a value, and this never leaves the
+   * page. Visibility is in it because a wizard that keeps every step in the
+   * DOM and toggles `display` would otherwise look unchanged forever; one that
+   * mounts and unmounts steps is caught by the labels alone.
+   */
+  function shapeOf() {
+    const { controls } = learn.collectControls(document);
+    return controls.map((c) => `${c.type}:${c.visible ? 1 : 0}:${c.label}`).join("|");
+  }
+
+  let lastShape = null;
+  let settleTimer = null;
+
+  function announceIfChanged() {
+    let shape;
+    try {
+      shape = shapeOf();
+    } catch {
+      return;
+    }
+    if (shape === lastShape) return;
+    lastShape = shape;
+
+    // Fire and forget. The panel is often closed — the doctor granted access
+    // to this tab and then went back to reading the form — and a message with
+    // no receiver rejects. Nothing here depends on it arriving, and an
+    // unhandled rejection in the page's console is noise on someone else's
+    // site.
+    try {
+      const sent = chrome.runtime.sendMessage({
+        target: "breezefill-panel",
+        action: "page-changed",
+        host: location.host,
+      });
+      if (sent && typeof sent.catch === "function") sent.catch(() => {});
+    } catch {
+      /* the extension context can be gone after a reload; nothing to do */
+    }
+  }
+
+  function watchForSteps() {
+    if (typeof MutationObserver !== "function" || !document.documentElement) return null;
+    // The baseline is taken now, so the first thing reported is a real change
+    // rather than the page's existence.
+    lastShape = shapeOf();
+    const observer = new MutationObserver(() => {
+      // Frameworks mutate in bursts — one step render is hundreds of
+      // callbacks. Only the settled state is worth measuring.
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(announceIfChanged, STEP_SETTLE_MS);
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      // A step toggled with `hidden` or a class changes no nodes at all.
+      attributes: true,
+      attributeFilter: ["hidden", "class", "style"],
+    });
+    return observer;
+  }
+
+  const observer = watchForSteps();
+
+  globalThis.breezefillContent = {
+    survey,
+    fill,
+    labelOf,
+    serialise,
+    score,
+    shapeOf,
+    announceIfChanged,
+    observer,
+  };
 })();
