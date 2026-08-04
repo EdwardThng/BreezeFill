@@ -11,9 +11,14 @@ So this directory holds the third fill target, alongside `acroform` and
 also **the product's main surface** — the doctor pastes the note into this
 extension's side panel rather than into a separate website.
 
-**Current state: loads and runs in Chrome 150; no browser fill confirmed yet.**
-101 tests pass against jsdom and a synthetic fixture. Running it in a browser
-has already found four things the suite could not — see the table in
+**Current state: loads and runs in Chrome 150, and has filled a real form in a
+real browser** — RoboForm's 39-field test page on 2026-08-03, the whole path
+from one pasted block to values in the page. No insurer portal yet, and
+RoboForm is plain HTML, so nothing there says anything about a
+framework-rendered field.
+
+121 tests pass against jsdom and a synthetic fixture. Running it in a browser
+has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
 
