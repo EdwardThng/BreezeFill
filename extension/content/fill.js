@@ -149,7 +149,19 @@
     });
   }
 
-  function survey(plan, candidates) {
+  /**
+   * Read the page, and say what each question on it is.
+   *
+   * `enrichWith` is the field list of whichever schema best fits this page, or
+   * nothing. Every fillable control comes back either way — the doctor has to
+   * submit the form in front of them regardless of what the bank knows — and
+   * the ones a schema field describes come back carrying that description.
+   *
+   * Note what still does not cross this boundary: the enrichment happens
+   * *here*, in the page, so the schema's instructions are joined to controls
+   * without the page's structure being sent anywhere to do it.
+   */
+  function survey(plan, candidates, enrichWith) {
     const { controls, skippedPassword } = learn.collectControls(document);
     const report = locate.locateSteps(plan || [], controls);
     return {
@@ -159,6 +171,18 @@
       skippedPassword,
       report: serialise(report),
       candidates: score(candidates, controls),
+      // Labels here have been through the dumper's scrubber, same as the
+      // report's. The backend runs the same patterns again on the way in.
+      liveFields: locate
+        .enrich(report.liveControls || [], enrichWith)
+        .filter((c) => c.label)
+        .map((c) => ({
+          label: c.label,
+          type: c.type,
+          options: c.options || [],
+          description: c.description,
+          describedBy: c.describedBy,
+        })),
     };
   }
 
@@ -182,7 +206,7 @@
 
     try {
       if (message.action === "survey") {
-        sendResponse(survey(message.plan, message.candidates));
+        sendResponse(survey(message.plan, message.candidates, message.enrichWith));
       } else if (message.action === "fill") {
         sendResponse(fill(message.plan, message.values));
       } else {
