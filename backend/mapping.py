@@ -76,6 +76,11 @@ question but not this one, this field is "missing".
 - Dates must be DD/MM/YYYY. Never assume a year that is not in the notes.
 - Use [TOKENS] exactly as they appear if a token belongs in a field.
 - For status "missing", set value to an empty string.
+- When a field lists "options", the answer must be one of them, copied \
+character for character. Do not paraphrase, reorder or abbreviate an option, \
+and do not answer with wording the form does not offer. If none of the options \
+is right, the field is "missing" — a near-miss is rejected, not rounded to the \
+closest one.
 """
 
 
@@ -96,6 +101,34 @@ class FormField(BaseModel):
     # Human wording for the review screen. Falls back to a prettified id so a
     # half-written schema still renders something readable.
     label: str | None = None
+    # The answers this field actually accepts, verbatim as the form words them
+    # ("B1 (4-bedded)", not "Ward B1"). Empty means free text.
+    #
+    # Declaring them does two things, and the second is the one that matters.
+    # The model is shown the list, so it chooses wording instead of guessing at
+    # it. And an answer that is not on the list is downgraded to "missing"
+    # rather than carried forward — see _coerce_answer. Without that, a
+    # near-miss survives all the way to the browser, where applySelect finds no
+    # matching option and skips the field silently: the doctor reviewed a value,
+    # approved it, and nothing was written.
+    #
+    # Validated after parsing rather than constrained in the output grammar.
+    # A per-field enum would mean per-field properties, which is the shape that
+    # blows the structured-output grammar limits on a real 24-field form (see
+    # build_output_schema). This gets the same guarantee with no grammar risk.
+    options: list[str] = []
+    # Which step of a multi-step form this field appears on. Empty for a form
+    # that shows everything at once.
+    #
+    # A wizard renders one step at a time, so a plan spanning two of them finds
+    # about half its fields in the DOM on either — under MIN_MATCH_RATE, so the
+    # filler writes nothing and the guard systematically answers "wrong page"
+    # about the right page. Grouping by this lets the guard be evaluated per
+    # step, which is the fix that does not involve loosening it.
+    #
+    # The value is free text and only ever compared for equality, so it can be
+    # whatever `<legend>` the learn-mode dumper recorded for that step.
+    step: str | None = None
 
     @property
     def display_label(self) -> str:
@@ -230,10 +263,18 @@ def build_output_schema(fields: list[FormField]) -> dict[str, Any]:
 
 
 def _build_user_prompt(schema: FormSchema, redacted_text: str) -> str:
-    field_lines = [
-        {"id": f.id, "type": f.type, "description": f.description or ""}
-        for f in schema.llm_fields
-    ]
+    field_lines = []
+    for f in schema.llm_fields:
+        line: dict[str, Any] = {
+            "id": f.id,
+            "type": f.type,
+            "description": f.description or "",
+        }
+        # Only when the field has them: an empty "options": [] reads as "this
+        # field accepts nothing" to a model skimming a 24-entry list.
+        if f.options:
+            line["options"] = f.options
+        field_lines.append(line)
     return (
         "Form fields to fill:\n"
         f"{json.dumps(field_lines, indent=2)}\n\n"
@@ -300,6 +341,30 @@ def map_fields(
     return {field.id: _coerce_answer(field, by_id.get(field.id)) for field in llm_fields}
 
 
+def _match_option(value: str, options: list[str]) -> str | None:
+    """An answer mapped onto one of the field's declared options, or None.
+
+    Case and surrounding whitespace are forgiven because they carry no meaning
+    on a dropdown; nothing else is. In particular this does NOT try to find the
+    closest option — "Ward B1" against "B1 (4-bedded)" returns None, and the
+    field ends up missing.
+
+    That is the whole point rather than a limitation to fix later. The options
+    come off the form itself, so an answer that does not appear in them is one
+    the model composed. Snapping it to whichever option looks nearest is a
+    guess at what the doctor is about to sign, made by string distance, and it
+    would be indistinguishable in review from an answer the notes supported.
+    """
+    wanted = " ".join(value.split()).casefold()
+    for option in options:
+        if " ".join(option.split()).casefold() == wanted:
+            # The form's own wording, not the model's rendering of it. What
+            # gets written must be a string the control actually offers, and
+            # applySelect matches option text exactly.
+            return option
+    return None
+
+
 def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
     """One parsed array entry -> FieldAnswer. Anything malformed, empty, or
     marked missing collapses to a clean status="missing" answer — never a
@@ -317,6 +382,15 @@ def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
         if flag not in ("true", "false"):
             return missing
         parsed = flag == "true"
+    elif field.options:
+        # An off-list answer is treated exactly like a malformed one, which is
+        # the same thing it is: the model was given the permitted set and
+        # returned something outside it, so what it returned is not an answer
+        # to this question.
+        canonical = _match_option(value, field.options)
+        if canonical is None:
+            return missing
+        parsed = canonical
     source = item.get("source")
     return FieldAnswer(
         value=parsed,
