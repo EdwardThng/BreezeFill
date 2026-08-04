@@ -203,3 +203,125 @@ describe("refusals", () => {
     expect(report.matched).toBeGreaterThanOrEqual(locate.MIN_MATCHED);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wizards
+// ---------------------------------------------------------------------------
+//
+// The failure being fixed: a plan spanning two steps finds about half its
+// fields on either, lands under MIN_MATCH_RATE, and nothing is written. The
+// guard answers "wrong page" about the right page.
+
+const STEP_ADMISSION = `
+  <fieldset><legend>Admission details</legend>
+    <label for="a1">Date of admission</label><input id="a1" />
+    <label for="a2">Ward class</label><input id="a2" />
+    <label for="a3">Hospital name</label><input id="a3" />
+  </fieldset>`;
+
+const STEP_DIAGNOSIS = `
+  <fieldset><legend>Patient diagnosis</legend>
+    <label for="d1">Diagnosis of all conditions treated</label><input id="d1" />
+    <label for="d2">ICD-10 Code</label><input id="d2" />
+    <label for="d3">Date of onset and duration of complaints</label><input id="d3" />
+  </fieldset>`;
+
+const WIZARD_PLAN = [
+  { fieldId: "admitted", label: "Date of admission", step: "Admission details" },
+  { fieldId: "ward", label: "Ward class", step: "Admission details" },
+  { fieldId: "hospital", label: "Hospital name", step: "Admission details" },
+  { fieldId: "diagnosis", label: "Diagnosis of all conditions treated", step: "Patient diagnosis" },
+  { fieldId: "icd", label: "ICD-10 Code", step: "Patient diagnosis" },
+  { fieldId: "onset", label: "Date of onset and duration of complaints", step: "Patient diagnosis" },
+];
+
+function render(...steps) {
+  document.documentElement.innerHTML = `<body><form>${steps.join("")}</form></body>`;
+}
+
+describe("one step at a time", () => {
+  test("the whole plan against one rendered step is exactly the old refusal", () => {
+    // Pins the bug rather than the fix. Half the plan is present, so the rate
+    // is 0.5 and the filler writes nothing — on the correct form.
+    render(STEP_ADMISSION);
+    const report = locate.locate(WIZARD_PLAN, liveControls());
+
+    expect(report.matched).toBe(3);
+    expect(report.intended).toBe(6);
+    expect(report.matchRate).toBe(0.5);
+    expect(report.safeToFill).toBe(false);
+  });
+
+  test("scored per step, the rendered step fills and the other waits", () => {
+    render(STEP_ADMISSION);
+    const report = locate.locateSteps(WIZARD_PLAN, liveControls());
+
+    expect(report.safeToFill).toBe(true);
+    expect(report.matched).toBe(3);
+    // The denominator is the step on screen, not the form.
+    expect(report.intended).toBe(3);
+    expect(report.deferred).toBe(3);
+    expect(report.results.map((r) => r.fieldId).sort()).toEqual(["admitted", "hospital", "ward"]);
+  });
+
+  test("the step that is not rendered is reported absent, not failed", () => {
+    render(STEP_ADMISSION);
+    const { steps } = locate.locateSteps(WIZARD_PLAN, liveControls());
+    const byStep = Object.fromEntries(steps.map((s) => [s.step, s]));
+
+    expect(byStep["Admission details"].present).toBe(true);
+    expect(byStep["Patient diagnosis"].present).toBe(false);
+    expect(byStep["Patient diagnosis"].matched).toBe(0);
+  });
+
+  test("two steps on screen at once both fill, and no control is claimed twice", () => {
+    render(STEP_ADMISSION, STEP_DIAGNOSIS);
+    const report = locate.locateSteps(WIZARD_PLAN, liveControls());
+
+    expect(report.safeToFill).toBe(true);
+    expect(report.matched).toBe(6);
+    expect(report.deferred).toBe(0);
+    const refs = report.results.filter((r) => r.status === "matched").map((r) => r.control.ref);
+    expect(new Set(refs).size).toBe(refs.length);
+  });
+
+  test("a page belonging to no step still refuses", () => {
+    render(`<form><label for="x">Favourite colour</label><input id="x" /></form>`);
+    const report = locate.locateSteps(WIZARD_PLAN, liveControls());
+
+    expect(report.safeToFill).toBe(false);
+    // The breakdown still travels, so the panel can say what it was expecting.
+    expect(report.steps.every((s) => s.present === false)).toBe(true);
+  });
+
+  test("MIN_MATCH_RATE is not softened — a half-present step is not filled", () => {
+    // The fix must not become "lower the threshold". This step has four
+    // fields and two of them are here: 0.5, the same number that refuses on a
+    // single-step form, and it refuses here too.
+    render(`
+      <fieldset><legend>Admission details</legend>
+        <label for="a1">Date of admission</label><input id="a1" />
+        <label for="a2">Ward class</label><input id="a2" />
+      </fieldset>`);
+    const plan = [
+      ...WIZARD_PLAN.slice(0, 3),
+      { fieldId: "referrer", label: "Referring doctor", step: "Admission details" },
+    ];
+    const report = locate.locateSteps(plan, liveControls());
+
+    expect(report.safeToFill).toBe(false);
+  });
+
+  test("a plan with no steps takes the path it always did", () => {
+    document.documentElement.innerHTML = readFileSync(FIXTURE, "utf8");
+    const controls = liveControls();
+    const stepless = locate.locate(PLAN, controls);
+    const through = locate.locateSteps(PLAN, controls);
+
+    expect(through.matched).toBe(stepless.matched);
+    expect(through.matchRate).toBe(stepless.matchRate);
+    expect(through.safeToFill).toBe(stepless.safeToFill);
+    expect(through.steps).toEqual([]);
+    expect(through.deferred).toBe(0);
+  });
+});
