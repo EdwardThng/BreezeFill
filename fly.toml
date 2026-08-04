@@ -4,28 +4,26 @@
 # Singapore region: clinical text must not leave SG-adjacent infrastructure
 # unnecessarily, and latency to the clinic matters.
 #
-# Exactly ONE machine. Claims live in an in-memory store (a privacy feature —
-# nothing persists), so a SECOND machine splits them: a claim created on
-# machine A 404s when the approve request lands on machine B.
+# The app is STATELESS as of 2026-08-04 — no claim store, no session, nothing
+# held between requests. Everything below that used to be a correctness
+# constraint is now only a cost and latency choice.
 #
-# ALWAYS DEPLOY WITH:  fly deploy --ha=false
-# The count settings below do NOT stop this. Fly's default is to add a second
-# machine for high availability. The first deploy did exactly that and needed
-# `fly scale count 1` to undo. Check `fly status` after every deploy.
+# What that retired, so nobody reinstates it out of caution:
+#   - `--ha=false` is no longer load-bearing. It used to be: a claim created on
+#     machine A 404'd when approve landed on machine B. Any number of machines
+#     is now correct. Keep --ha=false anyway while this is a pilot, because one
+#     machine is cheaper and easier to reason about, not because two would
+#     break it.
+#   - Scaling to zero can no longer lose a claim, because there is no claim to
+#     lose. "suspend" is kept over "stop" purely because restoring from a
+#     memory snapshot is faster.
 #
-# It DOES now scale to zero, which it deliberately did not before (2026-08-03).
-# The old rule — auto_stop off, min_machines_running 1 — protected a claim
-# sitting in memory between the doctor reviewing it and approving it, which is
-# the website's flow. The extension is the product surface now and holds no
-# server-side state at all: /map, /map-live and /parse store nothing, so there
-# is nothing for a sleeping machine to lose. What it costs is a cold start on
-# the first request after an idle period.
+# Region is still a real constraint: clinical text should not leave SG-adjacent
+# infrastructure unnecessarily, so primary_region stays "sin".
 #
-# "suspend" rather than "stop" because it restores from a memory snapshot,
-# which is both faster and the variant that could still hold a live claim.
-# The residual risk is the website path only: a claim created via POST /claims
-# and left unapproved across a sleep may be gone. Claims already expire after
-# an hour by design; this makes that window shorter and less predictable.
+# Cold start after an idle period is a second or two — measured at 5.7s on
+# 2026-08-03, which is fine for the extension's API calls and poor for a
+# landing page. Set min_machines_running = 1 when the site goes public.
 #
 # Required secret (fly secrets set NAME=value):
 #   ANTHROPIC_API_KEY   - LLM calls. Already set on this app; secrets survive
