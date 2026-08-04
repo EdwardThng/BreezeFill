@@ -195,6 +195,92 @@ def test_map_fields_checkbox_string_coercion():
 
 
 # ---------------------------------------------------------------------------
+# Fields that declare their permitted answers
+# ---------------------------------------------------------------------------
+#
+# The failure being guarded is a wizard dropdown: the model answers with
+# wording the control does not offer, the value passes review, and the browser
+# then finds no matching option and writes nothing. The doctor approved a value
+# that was never written and sees a blank they did not choose.
+
+OPTION_SCHEMA = FormSchema.model_validate(
+    {
+        "form_id": "options_v1",
+        "fill_mode": "web",
+        "fields": [
+            {
+                "id": "ward_class",
+                "type": "text",
+                "source": "llm",
+                "description": "Ward class the patient was admitted to",
+                "options": ["A1 (single)", "B1 (4-bedded)", "C (open)"],
+            },
+            {
+                "id": "diagnosis",
+                "type": "text",
+                "source": "llm",
+                "description": "Primary diagnosis",
+            },
+        ],
+    }
+)
+
+
+def option_answers(value: str, field_id: str = "ward_class"):
+    reply = {"fields": [{"id": field_id, "value": value, "status": "extracted", "source": "s"}]}
+    return map_fields(OPTION_SCHEMA, "notes", client=FakeClient(json.dumps(reply)))
+
+
+def test_declared_options_reach_the_model():
+    client = FakeClient(json.dumps({"fields": []}))
+    map_fields(OPTION_SCHEMA, "notes", client=client)
+    prompt = client.last_kwargs["messages"][0]["content"]
+    assert "B1 (4-bedded)" in prompt
+    # A field with no options must not advertise an empty list: "options": []
+    # reads as "accepts nothing" rather than "accepts free text".
+    field_lines = json.loads(prompt.split("Form fields to fill:\n")[1].split("\n\n")[0])
+    by_id = {f["id"]: f for f in field_lines}
+    assert by_id["ward_class"]["options"] == ["A1 (single)", "B1 (4-bedded)", "C (open)"]
+    assert "options" not in by_id["diagnosis"]
+
+
+def test_an_answer_on_the_list_survives():
+    assert option_answers("B1 (4-bedded)").get("ward_class").value == "B1 (4-bedded)"
+
+
+def test_case_and_spacing_are_forgiven_and_the_form_wording_wins():
+    # What gets written must be a string the control actually offers, because
+    # the browser matches option text exactly. So the form's rendering of the
+    # option replaces the model's.
+    answer = option_answers("b1  (4-BEDDED)").get("ward_class")
+    assert answer.value == "B1 (4-bedded)"
+    assert answer.status == "extracted"
+
+
+def test_an_answer_off_the_list_is_missing_not_the_nearest_option():
+    # "Ward B1" is obviously meant to be "B1 (4-bedded)" and is still refused.
+    # Snapping it across would be a guess at what the doctor is about to sign,
+    # made by string distance, and review cannot see it happen.
+    answer = option_answers("Ward B1").get("ward_class")
+    assert answer.status == "missing"
+    assert answer.value is None
+
+
+def test_options_do_not_constrain_the_fields_without_them():
+    reply = {"fields": [{"id": "diagnosis", "value": "Dengue fever", "status": "extracted", "source": "s"}]}
+    answers = map_fields(OPTION_SCHEMA, "notes", client=FakeClient(json.dumps(reply)))
+    assert answers["diagnosis"].value == "Dengue fever"
+
+
+def test_options_never_reach_the_output_grammar():
+    # The guarantee is enforced after parsing, deliberately. A per-field enum
+    # means per-field properties, which is the shape that blows the grammar
+    # limits on a real 24-field form.
+    schema = build_output_schema(OPTION_SCHEMA.llm_fields)
+    assert "B1 (4-bedded)" not in json.dumps(schema)
+
+
+# ---------------------------------------------------------------------------
 # map_fields
 # ---------------------------------------------------------------------------
 
