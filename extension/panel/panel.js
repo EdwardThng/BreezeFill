@@ -334,6 +334,23 @@ function labelOf(id) {
   return (span ? span.textContent : id).toLowerCase();
 }
 
+/**
+ * Everything the doctor pasted, as one body of text.
+ *
+ * The second box exists because a claim form asks for things a consultation
+ * note does not hold, but it must not become a second pipeline: identifiers
+ * can appear in either box, and redaction works on one corpus with one
+ * dictionary. So both the demographics parse and the mapping call see this,
+ * never `#paste` alone. A path that redacted one box and not the other would
+ * be a leak with a plausible-looking cause.
+ */
+function pastedText() {
+  return [$("paste").value, $("other-notes").value]
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function patientRecord() {
   const value = (id) => $(id).value.trim();
   const record = {
@@ -344,10 +361,10 @@ function patientRecord() {
     address: value("address") || null,
     policy_number: value("policy-number") || null,
     insurer: value("insurer"),
-    // One box now: the whole paste is the note. Redaction runs over all of it
+    // The whole paste is the note, both boxes. Redaction runs over all of it
     // with the demographics above as its dictionary, so the header lines come
     // back as [PATIENT] and [NRIC] like anything else.
-    clinical_text: $("paste").value,
+    clinical_text: pastedText(),
   };
 
   if (!record.clinical_text.trim()) throw new Error("Paste the consultation first.");
@@ -378,7 +395,7 @@ const PARSE_DEBOUNCE_MS = 400;
 
 function scheduleParse() {
   clearTimeout(state.parseTimer);
-  if (!$("paste").value.trim()) {
+  if (!pastedText()) {
     state.openedForMissing = false;
     return;
   }
@@ -391,7 +408,7 @@ async function parsePaste() {
     const response = await fetch(`${apiBase()}/parse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: $("paste").value }),
+      body: JSON.stringify({ text: pastedText() }),
     });
     if (!response.ok) throw new Error(String(response.status));
     parsed = await response.json();
@@ -836,7 +853,9 @@ async function onFill() {
 
 $("api-base").value = DEFAULT_API_BASE;
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
+// Both boxes feed one corpus, so either one changing re-reads the identifiers.
 $("paste").addEventListener("input", scheduleParse);
+$("other-notes").addEventListener("input", scheduleParse);
 for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   // A hand-typed value outranks the parser from here on: re-parsing on the
   // next keystroke in the paste box must not undo a correction.
@@ -869,6 +888,7 @@ globalThis.breezefillPanel = {
   onMap,
   onFill,
   parsePaste,
+  pastedText,
   updateFound,
   patientRecord,
   detectForm,
