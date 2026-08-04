@@ -1,8 +1,8 @@
-# FormFill
+# BreezeFill
 
 **LLM-assisted insurance form filling for medical clinics — with privacy-first redaction and mandatory doctor review.**
 
-FormFill turns a pasted clinical note into a filled insurance claim PDF in minutes. A doctor pastes the patient's clinical notes, an LLM maps the clinical information onto the insurer's form fields, the doctor reviews and corrects every proposed value, and a filled PDF is downloaded. The server retains nothing afterwards.
+BreezeFill turns a pasted clinical note into a filled insurance claim in minutes. A doctor pastes the consultation into a browser side panel sitting beside the insurer's own form, an LLM maps the clinical information onto that form's fields, the doctor reviews and corrects every proposed value, and the accepted ones are written into the page — or, for an insurer that still sends a PDF, into a filled PDF to download. It never submits, and the server retains nothing afterwards.
 
 ---
 
@@ -165,4 +165,4 @@ and a description is what tells the model what a question *means*.
   extension. A `web` schema has no PDF, so there is nothing to download.
 - **Nothing survives a request.** Losing the browser tab mid-review means starting the claim again, because the server has no copy to resume from. That is the retention model working, not a gap in it.
 - **Data residency is your responsibility.** If regulations require in-region inference, point the model configuration at a regional endpoint before processing real patient data, and verify redaction tests pass in your environment.
-- FormFill assists with form completion; the reviewing doctor remains responsible for the accuracy of every submitted form.
+- BreezeFill assists with form completion; the reviewing doctor remains responsible for the accuracy of every submitted form.
