@@ -218,6 +218,15 @@ class MappedField(BaseModel):
     # Guardrail 3: anything not directly extracted (or containing an
     # unresolved token) requires an explicit click to accept.
     needs_review: bool
+    # Copied from the schema so the review screen can offer the real choices
+    # instead of a free-text box, and so a doctor correcting a value picks
+    # something the control will accept rather than retyping the near-miss the
+    # model was just refused for.
+    options: list[str] = []
+    # Which wizard step this field lives on. The panel groups the fill plan by
+    # it so the match guard is evaluated against the step on screen rather than
+    # against a whole form that is never in the DOM at once.
+    step: str | None = None
 
 
 def load_form_schema(path: str | Path) -> FormSchema:
@@ -464,6 +473,11 @@ def assemble_claim(
                     status="demographic",
                     source=None,
                     needs_review=False,
+                    options=field.options,
+                    # Demographics carry a step too: on a wizard they are
+                    # usually the verification step, and a plan grouped by step
+                    # has to account for them or that step looks empty.
+                    step=field.step,
                 )
             )
             continue
@@ -490,6 +504,8 @@ def assemble_claim(
                 status=status,
                 source=answer.source,
                 needs_review=needs_review,
+                options=field.options,
+                step=field.step,
             )
         )
     return rows
