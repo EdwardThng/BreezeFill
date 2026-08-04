@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build && rm -rf public && cp -r frontend/dist public",
+  "regions": ["sin1"],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 120,
+      "excludeFiles": "{frontend/**,public/**,node_modules/**,.venv/**,tests/**,docs/**,scripts/**,**/__pycache__/**,**/*.test.js,**/*.pyc}"
+    }
+  }
+}
