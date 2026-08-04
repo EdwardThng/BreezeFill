@@ -1,24 +1,46 @@
-# FormFill — working notes for Claude
+# BreezeFill — working notes for Claude
 
 Product docs live in `README.md` (what it does, privacy model, how to add an
 insurer form). **Read that first.** This file records decisions, current
 state, and the traps — the things not derivable from the code.
 
-Stack: FastAPI + pypdf backend, React/Vite frontend, Anthropic structured
-output. Repo `EdwardThng/BreezeFill` (private). Pilot user is the owner's
-father, a Singapore GP.
+Stack: FastAPI + pypdf backend, React/Vite website, a Chrome extension, and
+Anthropic structured output. Repo `EdwardThng/BreezeFill` (private). Pilot user
+is the owner's father, a Singapore GP.
+
+**In one paragraph:** a doctor opens an insurer's claim form, clicks the
+BreezeFill icon, and pastes the consultation into a side panel. The panel
+identifies which form the page is, asks the backend to map the note onto that
+form's fields, shows every proposed answer with its source for the doctor to
+confirm, and writes the accepted ones into the insurer's own page. It never
+submits. The website exists to hand out the extension and demonstrate it.
+
+**Three names, and only one of them is dead.** The product was FormFill, then
+ClaimFill, now **BreezeFill** (renamed 2026-08-04). The sweep covered display
+names, JS globals, the message target and the download filename. Two things
+deliberately still say `claimfill`, and both are correct: the Fly app is named
+`claimfill` and `DEFAULT_API_BASE` points at `claimfill.fly.dev` — infrastructure
+named before the product was, which would break if renamed. `FORMFILL_*`
+environment variables also survive from the first name and have **not** been
+swept; renaming them means touching every command in these docs plus anything
+set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-03 (HEAD `65e1253`)
+## Status as of 2026-08-04 (HEAD `f31242e`)
+
+**332 tests pass**: 176 backend (1 skipped), 121 extension, 35 website.
 
 | Piece | State |
 |---|---|
-| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 172 backend tests pass (1 skipped). **Stateless as of 2026-08-04** — `POST /map` then `POST /forms/{id}/pdf`, no claim id, nothing held between them |
-| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150, and has now filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
+| Pipeline: redact → LLM map → doctor review → PDF fill | Working. **Stateless as of 2026-08-04** — `POST /map` then `POST /forms/{id}/pdf`, no claim id, nothing held between them |
+| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 121 tests. **Runs in Chrome 150, and has filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
+| Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
-| Bank → fallback → draft schema | Working, 114 extension tests + 13 backend. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. **Not yet run in a browser** — RoboForm is in the bank, so exercising the fallback needs a page that is not |
+| Bank → fallback → draft schema | Working in tests, **and known to be wrong for a wizard** — see "The AIA form" below. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
+| Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
+| Vercel migration | **Prepared, not deployed.** `api/index.py`, `vercel.json` (region `sin1`, maxDuration 120), root `requirements.txt` with a drift test. Needs `vercel link` + a preview deploy by the owner. Fly is deliberately left running as the fallback |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
 | `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
@@ -39,12 +61,32 @@ while this is a pilot because one machine is cheaper and easier to reason
 about — but a second one no longer breaks anything, so this is not the first
 thing to suspect when something goes wrong.
 
+### Where things live
+
+| Path | What it is |
+|---|---|
+| `backend/main.py` | Every route. All stateless. `_review_rows` is the shared redact→map→assemble middle |
+| `backend/redaction.py` | Three passes. Pass 1 is dictionary-based and needs the demographics **first** — this ordering is the privacy model |
+| `backend/demographics.py` | One pasted block → demographic fields, **patterns only, never a model** |
+| `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly |
+| `backend/schemas/*.json` | The form bank. `fill_mode` is `acroform`, `overlay` or `web` |
+| `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists |
+| `extension/learn/dump.js` | Label resolution + the scrubber. Used by both learn mode and the filler |
+| `extension/fill/locate.js` | Joins schema fields to live controls by label. Also what identifies a form |
+| `extension/fill/apply.js` | Writes values. Idempotent. Never submits |
+| `extension/content/fill.js` | The only code that touches the insurer's page |
+| `frontend/src/` | `Landing.tsx`, `Demo.tsx` (talks to nothing), `ClaimApp.tsx` at `#/app` |
+| `api/index.py`, `vercel.json` | Vercel migration, prepared but not deployed |
+
+Three test suites, three runners: `pytest`, `npm test` (extension, from the
+root), `cd frontend && npm test`. See Commands.
+
 ---
 
 ## What running it actually broke, and what fixed it
 
 Everything below was found by loading the extension in Chrome and clicking
-things. None of it was findable from the 85 + 112 tests, and that is the point
+things. None of it was findable from the test suites, and that is the point
 worth internalising: the test suites cover logic the extension owns, and every
 single failure so far has been at a **boundary the tests stub out** — Chrome's
 permission model, Chrome's side-panel lifecycle, DNS, and the CORS envelope
@@ -128,6 +170,95 @@ thing that exercises host auto-detection at all.
 
 ---
 
+## The AIA form, and the three things it breaks
+
+Described to the owner in a walkthrough on 2026-08-04. **Not yet seen by any
+tool** — this is a verbal account of the real ClaimEZ form, and it is the best
+information the project has about its actual target. Everything below follows
+from it, so treat the facts as reliable and the *fixes* as unbuilt and
+unverified.
+
+**The form:** five steps — verification, admission details, patient diagnosis,
+requested fees, review. Questions are a mix of dropdowns, yes/no options and
+free text. Autofill concerns **admission details and patient diagnosis**;
+verification is done by the doctor first, and requested fees is billing.
+
+**The URL does not change** as the doctor moves between steps. It changes only
+on the final step, review.
+
+### What that buys
+
+`activeTab` and the injected content script are torn down by *navigation*, and
+there is none until review. So one icon click covers steps 1 → 4. The
+`optional_host_permissions` declared in `manifest.json` "for access that
+survives a wizard step" turns out to be **unnecessary** — do not request it
+without a new reason.
+
+### What that breaks — problem 1: identification runs too early
+
+`detectForm()` fingerprints the page when the panel opens. That is step 1,
+verification. The AIA schema describes admission and diagnosis fields, **none
+of which are in the DOM yet**, so the match rate is ~0, the bank check fails,
+and the panel offers the schema-free fallback for a form it has a schema for.
+
+*Possible fix:* re-run identification when a step renders, not once on open.
+Cheapest correct version is a `MutationObserver` in `content/fill.js` that
+tells the panel the page changed shape; the panel re-surveys. Note the
+thresholds were already loosened for this (`IDENTIFY_MIN_RATE = 0.4`) — but no
+threshold saves you when the count is zero.
+
+### What that breaks — problem 2: the fill guard refuses a partial step
+
+`MIN_MATCH_RATE = 0.7` asks "does this page carry the fields this schema
+describes". A plan spanning admission details *and* diagnosis has, on either
+step, about half its fields present — 0.5, under the threshold — so
+`safeToFill` is false and the filler writes **nothing**. On a wizard this guard
+systematically answers "wrong page" about the right page.
+
+*Possible fix:* evaluate the guard per step rather than per plan. That needs
+the schema to say which step a field belongs to, which is available: the
+learn-mode dumper already records `stepHint` from `<legend>`, and `mergeDumps`
+already carries a `step` per control. So: add `step` to `FormField`, filter the
+plan to the current step before scoring, and fill incrementally as steps
+advance. `applyPlan` is **already idempotent**, which was designed for exactly
+this — re-running it as the wizard advances is safe by construction.
+
+Do not "fix" this by lowering `MIN_MATCH_RATE`. The guard's whole purpose is
+that a partial fill is indistinguishable from a complete one to someone
+reviewing quickly; making it lenient globally reintroduces that everywhere to
+solve it in one place.
+
+### What that breaks — problem 3: dropdowns and yes/no answers
+
+`applySelect` matches the model's answer against option text, then option
+value, and **skips when neither matches** — safe, but silent. A model answering
+"Ward B1" against an option reading "B1 (4-bedded)" fills nothing. A yes/no
+radio group gets the same treatment when the model returns `true` rather than
+`Yes`.
+
+*Possible fix, and it improves correctness rather than just fill rate:* carry
+the allowed options in the schema so the model chooses from a list instead of
+guessing at wording. Two ways, and the second is safer:
+
+- Constrain the structured output with a per-field enum. **Careful:** this is
+  the shape that blew the grammar limits (see Traps) — per-field properties are
+  what `mapping.py` deliberately avoids.
+- Keep the flat array shape and validate after parsing: if a field declares
+  options and the answer is not one of them, downgrade it to `missing`. No
+  grammar risk, same guarantee, and consistent with how every other malformed
+  answer is handled.
+
+### All three are gated on the same thing
+
+**A learn-mode dump from a live ClaimEZ page, one per step.** It would give the
+real field labels, the real dropdown option text, and the `<legend>` text that
+names each step — which is simultaneously the input to writing the AIA schema,
+the evidence for the step-detection design, and the only way to know whether
+the controls are native `<select>`s or custom widgets. Everything above is
+otherwise being designed against a verbal description.
+
+---
+
 ## Decisions and why
 
 **Hosting is being revisited (2026-08-04), and the statelessness above is what
@@ -143,10 +274,42 @@ share a host. Two options are open, both now viable:
   2026-08-03).
 - **Everything on Vercel.** Possible only because the API is stateless now —
   serverless gives no sticky instance, so the old claim store would have 404'd
-  every approve. Two things to check before committing, neither yet done:
-  whether the plan's function timeout survives a 10–30s Opus call with
-  adaptive thinking, and whether the function region can be pinned to
-  Singapore.
+  every approve.
+
+**Chosen 2026-08-04: everything on Vercel, Fly kept as a fallback.** Prepared
+and committed, not yet deployed — it needs `vercel link`, `vercel env add
+ANTHROPIC_API_KEY` and a preview deploy, all of which the owner must run.
+
+The limits were checked against the live docs on the owner's **Hobby** plan,
+and both earlier worries were out of date:
+
+| | Hobby | Needed |
+|---|---|---|
+| Function max duration | **300s** default and max | 10–30s Opus call |
+| Region | one, **and you choose it** | `sin1` |
+| Python bundle | 500 MB | ~50 MB |
+| Response body | **4.5 MB** | largest filled PDF 2.82 MB |
+
+Two things to carry forward:
+
+- **The 4.5 MB response cap is the one with the least headroom.** The PDF fill
+  returns the file through the function. `prudential_accident_hosp.pdf` is
+  2.82 MB before filling. A future insurer form that is a longer scan would
+  413 on Vercel and be fine on Fly. Check the size when adding an overlay form.
+- **Hobby forbids commercial use**, and Vercel counts "advertising the sale of
+  a product or service" as commercial — donations too. **The pricing page the
+  owner plans puts this over the line**, and it does so on any hosting shape,
+  because the marketing site is what carries it. Pro is $20/month. Today, as a
+  free pilot with no pricing page, Hobby is legitimate.
+
+Favourable detail worth knowing: Vercel bills *active CPU*, and "waiting for
+I/O (e.g. calling AI models) does not count". This app spends nearly all its
+wall-clock time blocked on Anthropic, so it consumes very little billable CPU.
+
+A FastAPI app on Vercel becomes **one function receiving every path**, so there
+are no rewrites in `vercel.json` and the routes work unchanged. Static comes
+from `public/`, filled by the build command; hash routing is what makes that
+enough, since only `/` has to resolve statically.
 
 Below is the original reasoning, kept because it explains what single-origin
 was protecting:
@@ -689,108 +852,99 @@ node stage.
 
 ## Next steps
 
-1. ~~**Redeploy the backend.**~~ **Done 2026-08-03.** `claimfill.fly.dev` runs
-   the current build, the key is a Fly secret and verified live, one machine in
-   `sin`, and `DEFAULT_API_BASE` points at it. The demo needs neither a
-   terminal nor a key now.
+Ordered by what unblocks the most. Items 1 and 2 are the only ones that are
+not waiting on something.
 
-   Two things to watch, neither yet observed:
-   - **Does it actually sleep?** The app scales to zero for the first time. If
-     `fly status` shows it `started` after a long idle period, the 30s health
-     check in `fly.toml` is the first suspect.
-   - **Does waking it feel broken?** A cold start adds a second or two to the
-     first request. If that reads as a hang in the panel, the fix is a status
-     line, not a config change — do not reflexively turn scale-to-zero off.
+**1. Get a learn-mode dump from a live ClaimEZ page — one per step.**
+Everything about the real target is currently a verbal description. A dump
+gives the field labels, the dropdown option text, the `<legend>` that names
+each step, and whether the controls are native or custom widgets. It is
+read-only, does not consume the `?pid=` token, and unblocks items 3, 4 and 5
+at once. Paste `extension/learn/dump.js` into the console on the form page,
+run `breezefillLearn.dump()` per step, then `mergeDumps([...])`. Read it before
+sharing it — see `extension/README.md` for the residual risks.
 
-2. ~~**Make the panel survivable when the backend is down.**~~ **Done
-   2026-08-03**, with `panel.test.js` to hold it: network `TypeError` → fixed
-   sentence, `onMap` retries `loadForms` instead of posting a `""` form id, Map
-   refuses with no form selected, a failed parse stays out of the Map status
-   line, and an empty form list is no longer reported as an unreachable
-   backend.
-3. ~~**Run the RoboForm route in a real browser.**~~ **Done 2026-08-03, and it
-   filled.** The recipe, for repeating it: `FORMFILL_SHOW_INTERNAL=1
-   FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, the BreezeFill icon **on the
-   RoboForm tab**, paste case 1 from `docs/test_notes.md`, Map, Fill. Five
-   filled, Date Of Birth ambiguous. What this does *not* answer: anything about
-   a framework-rendered field (item 5), or whether an insurer portal will let
-   the extension near its form at all (item 4).
-4. **Extension: loaded and working in Chrome 150 as of 2026-08-03.** Verified
-   on RoboForm's test page — panel opens, `activeTab` granted, injection works,
-   39 controls collected, `POST /map` round-trips against a local backend, the
-   review screen renders. What has *not* happened: a successful fill in a real
-   browser, anywhere. Remaining assumptions, each of which fails in a way the
-   tests cannot see:
-   - ~~Whether an action click that opens the side panel grants `activeTab`.~~
-     **Answered 2026-08-03, on Chrome 150: it does not.**
-     `setPanelBehavior({openPanelOnActionClick: true})` makes Chrome handle the
-     click itself, so `action.onClicked` never fires and the click does not
-     count as invoking the extension — the panel opens and then cannot touch
-     the tab beside it. Fixed by taking `action.onClicked` and calling
-     `sidePanel.open({tabId})` from inside it, which is the canonical
-     `activeTab` trigger. Do not "simplify" this back to the one-liner.
-     `openPanelOnActionClick` persists per-extension, which is why it is now
-     set to `false` explicitly rather than left unset.
-   - Whether a content script's write defeats React's `_valueTracker` at all.
-     In an isolated world the content script gets its own DOM wrappers, so the
-     instance-level tracker React installed in the main world may not even be
-     visible — meaning the prototype-setter trick is either belt-and-braces or
-     load-bearing, and only a real portal says which.
-   - Whether the form is inside an **iframe**. Injection is not `allFrames`, so
-     it would read as a page with no controls and refuse. Safe direction to
-     fail, but it needs `allFrames` plus a decision on how per-frame reports
-     merge and which frame the match rate is computed over.
-   - Whether the controls are in a **shadow root**. `collectControls` uses
-     `document.querySelectorAll`, which does not pierce one, so a portal built
-     from web components reads as a page with no controls — identical symptom
-     to the iframe case, different fix (walk `shadowRoot` on every element;
-     a *closed* root cannot be reached at all).
-   - Whether the controls are **real controls**. The query is `input, select,
-     textarea, [contenteditable]`. A `<div role="combobox">` or a rich date
-     picker is invisible to it, and the ones that do render an `<input>` often
-     ignore a value written into it — they want a click on an option. This is
-     the likeliest shape of "the portal looks filled but submits nothing".
+**2. Finish the Vercel migration.** Everything is committed; it needs
+`vercel link`, `vercel env add ANTHROPIC_API_KEY` (owner's terminal only — a
+key pasted into a transcript is a key to rotate), then `vercel` for a preview
+and `vercel --prod` once the preview checks out. Validate `/health`, the
+download, and one `/map` on the preview URL. The parts most likely to need
+adjusting are the build command (whether Node is on the path in a Python
+build) and whether `public/` is picked up. Then point `DEFAULT_API_BASE` at
+the new domain and leave Fly running for a week.
 
-   Note what is **not** on this list: the portal's own CSP. A content script
-   runs in an isolated world and is not governed by the page's CSP, so a site
-   cannot refuse the extension that way. The risks are structural, not
-   permission-based — which is why one learn-mode dump from a live page answers
-   nearly all of them at once.
-5. **Prove a write actually lands in a *framework-rendered* field.** RoboForm
-   is plain HTML, so a successful fill there answers "does the panel drive a
-   real page" and says nothing about `_valueTracker` — which is the one that
-   fails *looking correct*: right value on screen, stale value submitted.
-   `tests/fixtures/portal_like.html` is static too. Either add a small React
-   page with a controlled input, or get onto a real portal.
-6. **Proof mode** — outline each filled control and stamp its field id, the
-   port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
-   adjacent controls are usually different questions, and a misplaced value is
-   obvious in a render and invisible in a report. Then the `MutationObserver`
-   re-run as wizard steps render (this is what `optional_host_permissions` is
-   declared for).
-7. **Exercise the fallback in a browser.** The bank→fallback→draft loop is
-   tested but has never run against a real unknown page: RoboForm is *in* the
-   bank now, so it proves the wrong branch. Any public form with labelled
-   fields that no schema describes will do. Watch for two things the tests
-   cannot see — how many of a real page's controls come back unlabelled, and
-   whether `MAX_LIVE_FIELDS` is anywhere near right.
-8. **The AIA schema — still blocked on a learn-mode dump from a live ClaimEZ
-   page.** The pivot did not move this. An expired link renders an error page
-   with no fields, `submit-offline` is post-submission only, and the portal is
-   a JS-rendered SPA so no fetch-based tool can see its DOM. It has to be a
-   real page in a real browser. Run the dump before filling the claim; it is
-   read-only and does not consume the token. `roboform_test_v1` is now the only
-   schema declaring `hosts`, so auto-detection succeeds there and nowhere else
-   — on any insurer page the picker is still the expected outcome, not a bug.
-9. ~~**Paste-and-parse demographics.**~~ **Done 2026-08-03** — one box,
-   `POST /parse`, patterns only. What is left is narrower and worth doing after
-   the pilot has pasted a few real CMS exports: the label synonyms in
-   `demographics.py` are a guess at what ClinicAssist emits, and the parser
-   cannot find an insurer that is only implied by a policy prefix (`GHS-`,
-   `GE-`, `PRU-`). Deriving it from the selected schema's `insurer` would be
-   deterministic and is probably right.
-10. **SG-region inference** before any real patient note.
-11. Deferred: coordinate-overlay fill for the three scanned forms.
+**3. Wizard support, for the AIA form.** Three problems, all described in
+"The AIA form" above with proposed fixes: identification runs on step 1 before
+any of the schema's fields exist; `MIN_MATCH_RATE` refuses a partial step; and
+dropdown/yes-no answers are matched by wording and skipped silently when they
+miss. Wants the dump first — otherwise it is designed against a description.
+
+**4. The AIA schema itself.** Blocked on the same dump. An expired link renders
+an error page with no fields, `submit-offline` is post-submission only, and the
+portal is a JS-rendered SPA so no fetch-based tool can see its DOM.
+`roboform_test_v1` is still the only schema declaring `hosts`, so on any
+insurer page the picker is the expected outcome rather than a bug.
+
+**5. Prove a write lands in a *framework-rendered* field.** RoboForm is plain
+HTML, so filling it says nothing about React's `_valueTracker` — the failure
+that looks correct: right value on screen, stale value submitted.
+`tests/fixtures/portal_like.html` is static too. Either add a small React page
+with a controlled input, or get onto a real portal.
+
+**6. Exercise the schema-free fallback in a browser.** Tested but never run
+against a real unknown page — RoboForm is in the bank now, so it proves the
+wrong branch. Any public form with labelled fields that no schema describes
+will do. Watch two things tests cannot see: how many of a real page's controls
+come back unlabelled, and whether `MAX_LIVE_FIELDS = 50` is anywhere near
+right.
+
+**7. Proof mode.** Outline each filled control and stamp its field id — the
+port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
+adjacent controls are usually different questions, and a misplaced value is
+obvious in a render and invisible in a report.
+
+**8. SG-region inference, before any real patient note.** Both calls run
+`claude-opus-5` on the first-party API, which is not SG-region. Needs Bedrock
+`ap-southeast-1`. Until then: synthetic notes only.
+
+**9. Smaller, worth doing once the pilot has pasted real CMS exports.** The
+label synonyms in `demographics.py` are a guess at what ClinicAssist emits, and
+the parser cannot find an insurer implied only by a policy prefix (`GHS-`,
+`GE-`, `PRU-`) — deriving it from the selected schema's `insurer` would be
+deterministic and is probably right.
+
+**10. Deferred.** Sweeping the `FORMFILL_*` environment variables to
+`BREEZEFILL_*`; the naming note at the top of this file explains why it has not
+happened. Coordinate-overlay fill for the three scanned forms.
+
+### Answered, so nobody re-opens them
+
+- **Does an action click that opens the side panel grant `activeTab`?** No.
+  `setPanelBehavior({openPanelOnActionClick: true})` makes Chrome handle the
+  click, so `action.onClicked` never fires. Fixed by taking `action.onClicked`
+  and calling `sidePanel.open({tabId})` inside it. Do not simplify it back.
+- **Does the portal's CSP block the extension?** No. A content script runs in
+  an isolated world and is not governed by the page's CSP. A site cannot refuse
+  the extension that way.
+- **Does the wizard need `optional_host_permissions`?** No — the URL does not
+  change between steps, so `activeTab` survives all four.
+- **Is the extension loadable and does it fill?** Yes, Chrome 150, 2026-08-03,
+  RoboForm's test page. Five fields filled, Date Of Birth correctly refused as
+  ambiguous.
+
+### Still unknown, and each fails in a way tests cannot see
+
+- Whether an isolated-world write defeats React's `_valueTracker`.
+- Whether the form is inside an **iframe** — injection is not `allFrames`, so
+  it would read as a page with no controls.
+- Whether controls sit in a **shadow root** — `querySelectorAll` does not
+  pierce one; a *closed* root cannot be reached at all.
+- Whether the controls are **real controls**. A `<div role="combobox">` or a
+  rich date picker is invisible to the query, and ones that do render an
+  `<input>` often ignore a written value — they want a click on an option.
+  This is the likeliest shape of "the portal looks filled but submits nothing".
+
+The first is answered by item 5; the other three by one dump.
 
 ---
 
