@@ -526,6 +526,24 @@ describe("mapping the page in front of the doctor", () => {
     expect(message.enrichWith).toEqual([]);
   });
 
+  test("a refusal the backend explained is not shown as a bare status code", async () => {
+    // What a tester actually saw: "Request failed (422)", from a backend that
+    // knew precisely what was wrong. Both refusals are now keyed on the status
+    // — never the body, because FastAPI's own 422 quotes the input, and the
+    // input here carries the clinical note.
+    for (const [status, expected] of [
+      [413, /more questions than BreezeFill can map/i],
+      [422, /could not read any questions/i],
+    ]) {
+      routes["/map-live"] = () => respond({ detail: "..." }, false, status);
+      const panel = await readyPanel();
+      await panel.onMap();
+
+      expect($("map-status").textContent).toMatch(expected);
+      expect($("map-status").textContent).not.toMatch(/request failed/i);
+    }
+  });
+
   test("picking a schema by hand names the instructions to use", async () => {
     const panel = await readyPanel();
     expect(panel.state.schema).toBeNull();

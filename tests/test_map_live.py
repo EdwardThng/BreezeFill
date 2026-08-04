@@ -126,8 +126,15 @@ class TestRefusals:
         # field is indistinguishable from one the model had nothing to say
         # about, which is the worst way to lose it.
         response = post([{"label": f"Question {n}"} for n in range(main.MAX_LIVE_FIELDS + 1)])
-        assert response.status_code == 422
+        # 413, not 422, and the distinction is what the panel reads. Both
+        # refusals used to arrive as a bare "Request failed (422)" — a real
+        # tester hit one and had nothing to act on. The panel keys its wording
+        # on the status because it must not read the body: FastAPI's own
+        # validation failures are 422 too, and they quote the input, which
+        # here contains the clinical note.
+        assert response.status_code == 413
         assert "too many fields" in response.json()["detail"]
+        assert "schema" not in stub_llm
 
     def test_the_cap_itself_is_allowed(self, stub_llm) -> None:
         assert post([{"label": f"Question {n}"} for n in range(main.MAX_LIVE_FIELDS)]).status_code == 200

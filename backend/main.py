@@ -383,8 +383,13 @@ def map_live(request: MapLiveRequest) -> MapResponse:
     if not schema.fields:
         raise HTTPException(status_code=422, detail="no labelled fields on this page")
     if len(schema.fields) > MAX_LIVE_FIELDS:
+        # 413 rather than another 422, so the panel can tell these two apart
+        # without reading the body. It must not read the body: FastAPI's own
+        # validation failures are also 422 and quote the offending input, and
+        # the input here includes the clinical text. A status code carries no
+        # payload, which is the whole point of keying messages on one.
         raise HTTPException(
-            status_code=422,
+            status_code=413,
             detail=f"too many fields to map in one call ({len(schema.fields)} > {MAX_LIVE_FIELDS})",
         )
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))

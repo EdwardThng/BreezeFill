@@ -646,6 +646,14 @@ async function onMap() {
           502: "The model call failed.",
           503: "The backend has no API key. Set ANTHROPIC_API_KEY in the terminal running it, then restart it.",
           404: "The backend does not know this form. Restart it if you have just added one.",
+          // Both of these used to arrive as a bare "Request failed (422)",
+          // which is what a tester saw and could do nothing with. The backend
+          // knew exactly what was wrong in each case; the panel was throwing
+          // it away. Still keyed on the status and not the body — a 422 from
+          // FastAPI's own validation quotes the input that failed, and the
+          // input here carries the clinical text.
+          413: "This page has more questions than BreezeFill can map in one go. Try a page with fewer fields, or one step of the form at a time.",
+          422: "BreezeFill could not read any questions on this page. Its fields may have no labels, or the form may be inside a frame BreezeFill cannot see.",
         }[response.status] || `Request failed (${response.status}).`
       );
     }
