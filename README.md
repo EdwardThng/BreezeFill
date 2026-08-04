@@ -12,7 +12,7 @@ BreezeFill turns a pasted clinical note into a filled insurance claim in minutes
 2. **Redact** — Every identifier is stripped from the clinical text *before* it reaches the LLM, in three passes:
    - **Dictionary pass:** the entered demographics are removed from the note (name in any ordering or partial form, NRIC even with stray spaces, phone in any separator format, DOB in common renderings, address, policy number), each replaced with a token like `[PATIENT]` or `[NRIC]`.
    - **Pattern pass:** NRIC/FIN, Singapore phone number, and email regexes catch identifiers that were *not* entered — family members, other patients mentioned in the note.
-   - **LLM sweep (optional):** a small, cheap model is asked whether any names, ID numbers, phone numbers, or addresses survived the first two passes; anything it finds is tokenized too.
+   - **LLM sweep (optional):** a model is asked whether any names, ID numbers, phone numbers, or addresses survived the first two passes; anything it finds is tokenized too. It runs on a top-tier model rather than a cheap one — it is the last line of defence before text reaches the mapping call, so it is worth the rate.
 3. **Map** — One structured-output LLM call receives the form's field definitions and the redacted note. For every field it must return a value, a status — `extracted` (stated in the note), `inferred` (reasonable clinical inference), or `missing` — and the verbatim source snippet that supports the value. The model cannot invent facts silently: malformed or omitted answers are downgraded to `missing`.
 4. **Review** — The doctor sees every field with its status pill (green/amber/red) and source snippet. Values can be edited inline. Any field that was not directly extracted **requires an explicit accept click** before the form can be generated.
 5. **Fill** — For a web form the extension writes the approved values into the insurer's own page, in the browser; the doctor submits it. For a PDF form the values are posted back, written into the AcroForm (or stamped onto a flat scan), and streamed back as a download. Either way the server keeps nothing.
@@ -114,8 +114,9 @@ VITE_API_URL=https://your-backend.example.com npm run build
 | Environment variable | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Required for the mapping call and LLM sweep |
-| `FORMFILL_MAPPING_MODEL` | `claude-opus-4-8` | Model for form-field extraction |
-| `FORMFILL_SWEEP_MODEL` | `claude-haiku-4-5` | Model for the redaction safety sweep |
+| `FORMFILL_MAPPING_MODEL` | `claude-opus-5` | Model for form-field extraction |
+| `FORMFILL_SWEEP_MODEL` | `claude-opus-5` | Model for the redaction safety sweep. Top-tier on purpose — drop it to a cheaper model here if cost bites |
+| `FORMFILL_INFERENCE_GEO` | unset | Where inference runs. The API accepts only `us` and `global`; there is no Singapore value, so in-region SG inference needs Bedrock `ap-southeast-1` instead |
 | `FORMFILL_DISABLE_SWEEP` | unset | Set to `1` to skip the LLM redaction sweep |
 | `FORMFILL_SHOW_INTERNAL` | unset | Set to `1` to offer internal test schemas in `GET /forms`. Never set this where a doctor works |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL baked into the frontend |
