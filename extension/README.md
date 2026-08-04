@@ -17,7 +17,7 @@ from one pasted block to values in the page. No insurer portal yet, and
 RoboForm is plain HTML, so nothing there says anything about a
 framework-rendered field.
 
-121 tests pass against jsdom and a synthetic fixture. Running it in a browser
+146 tests pass against jsdom and a synthetic fixture. Running it in a browser
 has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
@@ -127,6 +127,47 @@ keep.
 last two labels of `claimez.aia.com.sg` are `com.sg`, and host matching covers
 subdomains, so that draft would have claimed every commercial site in
 Singapore. Widen it by hand if you want the whole domain.
+
+### Wizards: one step in the DOM at a time
+
+Built 2026-08-04, and **never yet run on a wizard** — no schema declares a step,
+so every form in the bank takes the single-step path below unchanged.
+
+A schema field can carry a `step`. When one does, three things change:
+
+- **The fill guard is evaluated per step, not per plan.** A plan spanning
+  admission details and diagnosis finds about half its fields on either step,
+  which is under `MIN_MATCH_RATE` — so the old behaviour was to write nothing,
+  on the correct form. Each step is now scored on its own, and every step that
+  clears the guard *by itself* is taken to be on screen. Their fields are then
+  located in one pass, so two steps cannot both claim the same control.
+- **Identification is scored per step too.** A four-step schema judged on its
+  whole field list looks mostly absent on any one step, and would lose to a
+  small unrelated schema sharing three labels.
+- **The page is watched for a step rendering.** A ClaimEZ step change is not a
+  navigation — the URL is fixed until the final step — so a `MutationObserver`
+  in `content/fill.js` reports when the page's shape settles into something
+  different, and the panel re-identifies.
+
+`MIN_MATCH_RATE` and `MIN_MATCHED` are **unchanged**, and a step must clear both
+alone. The fix is asking the guard a better question, not a softer one.
+
+Two things it will not do, both deliberate: it never fills on its own (the
+observer re-identifies and offers; the doctor still clicks), and it never
+overrules a form the doctor picked by hand.
+
+### A field that declares its options
+
+`options` on a schema field lists the answers the control accepts, worded
+exactly as the form words them. The model is shown the list, and an answer that
+is not on it is downgraded to `missing` on the server rather than carried
+forward — which is what stops "Ward B1" against an option reading
+"B1 (4-bedded)" from passing review and then silently filling nothing.
+
+Matching forgives case and surrounding whitespace and nothing else. It does not
+snap to the nearest option, and that is not a gap to close: the value is a
+clinical statement the doctor signs, and a near-miss corrected by string
+distance looks exactly like an answer the notes supported.
 
 ### Two refusals worth knowing before you debug
 
@@ -262,10 +303,9 @@ only as good as that list.
   port of `scripts/calibrate_overlay.py --proof`. Adjacent controls are
   usually different questions, so a value under the wrong heading is obvious
   in a render and invisible in a report.
-- **A `MutationObserver` re-run** as wizard steps render. This is what the
-  declared-but-unrequested `optional_host_permissions` is for: access that
-  survives a step change.
 - **An AIA ClaimEZ schema**, blocked on a learn-mode dump from a live page.
+  This is also what would switch wizard support on: `step` and `options` are
+  schema fields, and no schema sets either today.
 - **A run of the schema-free fallback against a real unknown page.** It is
   tested, but RoboForm is in the bank now, so it exercises the wrong branch.
 
