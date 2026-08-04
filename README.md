@@ -41,7 +41,8 @@ backend/    FastAPI service
   ├── redaction.py   identifier stripping + re-merge (no LLM required)
   ├── mapping.py     LLM field extraction + validation + claim assembly
   ├── pdf_fill.py    AcroForm filling (pypdf) + form field dump tool
-  ├── main.py        HTTP API and in-memory claim store
+  ├── main.py        HTTP API. Every route stateless — nothing is held
+  │                  between requests, so there is nothing to purge
   └── schemas/       one JSON schema per insurer form
 forms/      source fillable PDFs (one per schema)
 scripts/    dev utilities (synthetic sample form generator)
