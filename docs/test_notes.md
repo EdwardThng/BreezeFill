@@ -1,6 +1,17 @@
 # Test notes for the pilot
 
-Six synthetic cases for trying BreezeFill at **https://claimfill.fly.dev**.
+Six synthetic cases for trying BreezeFill at
+**https://breezefill-livid.vercel.app**.
+
+**Install the extension from that URL, not from anywhere else.** The old Fly
+address serves a build from 2026-08-03 that still calls itself ClaimFill, and
+an extension from there talks to that same old backend — which surfaces as
+unrelated-looking failures rather than as "you have the wrong version".
+
+**If the panel says it has no access to the tab**, remove the extension from
+`chrome://extensions` completely and load it again. A plain reload is not
+enough: Chrome persists the side-panel behaviour flag per extension, and an
+install that ever set it keeps swallowing the toolbar click.
 
 **Every patient here is invented.** The names, NRICs, phone numbers, addresses
 and dates are all made up, and no case is drawn from a real consultation. Use
