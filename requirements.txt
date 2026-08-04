@@ -1,0 +1,18 @@
+# Runtime dependencies, at the repo root because that is where Vercel looks —
+# it detects the framework by reading this file, so `-r backend/requirements.txt`
+# would hide FastAPI from detection.
+#
+# This duplicates the runtime half of backend/requirements.txt, and duplication
+# drifts. tests/test_requirements_sync.py fails if it ever does.
+#
+# Test-only packages (pytest, httpx) are deliberately NOT here: they would be
+# bundled into the deployed function, which has a size limit and no use for
+# them.
+anthropic>=0.116
+fastapi>=0.115
+pydantic>=2.7
+pypdf>=5.0
+reportlab>=4.0
+
+# No uvicorn: Vercel provides the ASGI server. It stays in
+# backend/requirements.txt because local development runs `uvicorn main:app`.
