@@ -29,19 +29,25 @@
 // Overridable in the Advanced section, in memory only. A wrong value here
 // costs a failed request, not a leak: the panel only ever posts to it.
 //
-// The deployed backend (2026-08-03, region sin). A doctor will not be running
-// uvicorn, so this has to be a URL that answers on its own. The machine scales
-// to zero when idle, which shows up as a second or two of delay on the first
-// request after a quiet period, not as an error.
+// The deployed backend (Vercel production, region sin1). A doctor will not be
+// running uvicorn, so this has to be a URL that answers on its own.
+//
+// Moved off Fly on 2026-08-05, and the reason is worth keeping: Fly was last
+// deployed on 2026-08-03 and had become a *stale* backend rather than an idle
+// one. A tester who installed the extension pointed at it got the 2026-08-03
+// product — pre-rename, so the panel called itself ClaimFill, and without the
+// options, steps, date-format and enrichment work that followed. Nothing about
+// that failure named the real cause.
+//
+// The lesson for whoever moves this next: a default backend URL is a version
+// pin. Pointing it at a deployment nobody redeploys means shipping that day's
+// build forever, and the symptoms surface as unrelated bugs in the extension.
 //
 // Point this at http://localhost:8000 under Advanced for the RoboForm test
 // route: `roboform_test_v1` is `internal: true` and FORMFILL_SHOW_INTERNAL is
 // deliberately unset in production, so the deployed backend does not offer it
 // — a doctor must never be shown a form that is not a real insurer's.
-// Still `claimfill` — the Fly app is infrastructure named before the product
-// rename to BreezeFill, and renaming it would point deploys at an app that
-// does not exist. It moves when hosting moves, not when the product does.
-const DEFAULT_API_BASE = "https://claimfill.fly.dev";
+const DEFAULT_API_BASE = "https://breezefill-livid.vercel.app";
 
 // Order matters: the orchestrator expects the other three to have registered
 // themselves on globalThis by the time it runs.
