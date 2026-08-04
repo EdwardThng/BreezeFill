@@ -29,7 +29,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**332 tests pass**: 176 backend (1 skipped), 121 extension, 35 website.
+**363 tests pass**: 182 backend (1 skipped), 146 extension, 35 website.
 
 | Piece | State |
 |---|---|
@@ -38,7 +38,8 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
-| Bank → fallback → draft schema | Working in tests, **and known to be wrong for a wizard** — see "The AIA form" below. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
+| Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
+| Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
 | Vercel migration | **Prepared, not deployed.** `api/index.py`, `vercel.json` (region `sin1`, maxDuration 120), root `requirements.txt` with a drift test. Needs `vercel link` + a preview deploy by the owner. Fly is deliberately left running as the fallback |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
@@ -174,9 +175,17 @@ thing that exercises host auto-detection at all.
 
 Described to the owner in a walkthrough on 2026-08-04. **Not yet seen by any
 tool** — this is a verbal account of the real ClaimEZ form, and it is the best
-information the project has about its actual target. Everything below follows
-from it, so treat the facts as reliable and the *fixes* as unbuilt and
-unverified.
+information the project has about its actual target.
+
+**All three fixes are now built and tested (2026-08-04), and none of them has
+met the form they were written for.** They are mechanism, not configuration:
+each one degrades to exactly the old behaviour when a schema declares no steps
+and no options, which is every schema in the bank today. So the risk is not
+that they break what works — the suites cover that — it is that the mechanism
+answers a differently-shaped problem than the real ClaimEZ turns out to pose.
+Read the fixes below as *implemented*, and the facts they rest on as still
+verbal. **The dump remains next steps item 1 and is what would confirm any of
+this.**
 
 **The form:** five steps — verification, admission details, patient diagnosis,
 requested fees, review. Questions are a mix of dropdowns, yes/no options and
@@ -201,11 +210,24 @@ verification. The AIA schema describes admission and diagnosis fields, **none
 of which are in the DOM yet**, so the match rate is ~0, the bank check fails,
 and the panel offers the schema-free fallback for a form it has a schema for.
 
-*Possible fix:* re-run identification when a step renders, not once on open.
-Cheapest correct version is a `MutationObserver` in `content/fill.js` that
-tells the panel the page changed shape; the panel re-surveys. Note the
-thresholds were already loosened for this (`IDENTIFY_MIN_RATE = 0.4`) — but no
-threshold saves you when the count is zero.
+**Built (2026-08-04), two parts.** A `MutationObserver` in `content/fill.js`
+watches the page's *shape* — control types, labels and visibility, never a
+value — and messages the panel when it settles into something different; the
+panel re-runs `detectForm`. Visibility is in the fingerprint so both wizard
+shapes are caught: one that mounts and unmounts steps, and one that keeps them
+all in the DOM behind `display`. And identification now scores each schema **by
+its best-fitting single step** rather than by its whole field list, which is
+what lets a four-step schema be recognised from one rendered step at all.
+
+Two things it deliberately does not do. It never fills — advancing a step is
+the doctor using the insurer's form, not asking BreezeFill for anything, and an
+observer that wrote on render would move the review step to after the writing.
+And it never overrules a form the doctor picked by hand, because re-detection
+now runs repeatedly and silently changing that between steps would change which
+form is being filled with nobody being told.
+
+`optional_host_permissions` is still **not** requested and still not needed —
+the URL does not change between steps, so `activeTab` survives.
 
 ### What that breaks — problem 2: the fill guard refuses a partial step
 
@@ -215,18 +237,32 @@ step, about half its fields present — 0.5, under the threshold — so
 `safeToFill` is false and the filler writes **nothing**. On a wizard this guard
 systematically answers "wrong page" about the right page.
 
-*Possible fix:* evaluate the guard per step rather than per plan. That needs
-the schema to say which step a field belongs to, which is available: the
-learn-mode dumper already records `stepHint` from `<legend>`, and `mergeDumps`
-already carries a `step` per control. So: add `step` to `FormField`, filter the
-plan to the current step before scoring, and fill incrementally as steps
-advance. `applyPlan` is **already idempotent**, which was designed for exactly
-this — re-running it as the wizard advances is safe by construction.
+**Built (2026-08-04): `locateSteps` in `fill/locate.js`.** `FormField.step`
+carries which step a field belongs to, travels through `MappedField` and the
+fill plan, and the matcher scores each step on its own. **Every** step that
+clears the guard by itself is taken to be on screen, and their fields are then
+located together in one pass — the per-step scoring decides which fields to
+try, the single pass decides where each goes, so two steps cannot both claim
+the same control.
 
-Do not "fix" this by lowering `MIN_MATCH_RATE`. The guard's whole purpose is
-that a partial fill is indistinguishable from a complete one to someone
-reviewing quickly; making it lenient globally reintroduces that everywhere to
-solve it in one place.
+Filling every qualifying step rather than only the best-scoring one matters for
+a form that reveals two sections at once, and "best rate" is a bad winner
+anyway: a one-field step that happens to match scores 1.0 and would beat a
+twelve-field step with eleven matches.
+
+`MIN_MATCH_RATE` and `MIN_MATCHED` are **unchanged**, and each step must clear
+both alone. Do not "fix" anything here by lowering them. The guard's whole
+purpose is that a partial fill is indistinguishable from a complete one to
+someone reviewing quickly; making it lenient globally reintroduces that
+everywhere to solve it in one place. `locate.test.js` pins this from both
+sides: the whole-plan refusal that motivated the work, and a half-present step
+that still refuses.
+
+A schema declaring no steps is one group, which is `locate` called exactly as
+before — asserted, not assumed.
+
+Filling incrementally as the doctor advances is safe because `applyPlan` is
+**already idempotent**, which was designed for exactly this.
 
 ### What that breaks — problem 3: dropdowns and yes/no answers
 
@@ -236,26 +272,60 @@ value, and **skips when neither matches** — safe, but silent. A model answerin
 radio group gets the same treatment when the model returns `true` rather than
 `Yes`.
 
-*Possible fix, and it improves correctness rather than just fill rate:* carry
-the allowed options in the schema so the model chooses from a list instead of
-guessing at wording. Two ways, and the second is safer:
+**Built (2026-08-04), via the second of the two routes below.**
+`FormField.options` carries the permitted answers verbatim as the form words
+them. The model is shown the list; `_coerce_answer` then downgrades an off-list
+answer to `missing` exactly as it already handles a malformed one, and the
+value that survives is **the form's own string**, so the browser's exact-match
+lookup is guaranteed to find it. The review screen renders those options as a
+dropdown, so a doctor correcting one picks something the control accepts rather
+than retyping the wording that was just refused.
+
+Matching forgives case and surrounding whitespace and **nothing else** — "Ward
+B1" against "B1 (4-bedded)" is `missing`, not the nearest option. That will
+read as a defect to whoever meets it; it is asserted with the reason attached.
+Snapping a near-miss to the closest option is a guess at what the doctor is
+about to sign, made by string distance, and it is invisible in review.
+
+The route not taken, and why:
 
 - Constrain the structured output with a per-field enum. **Careful:** this is
   the shape that blew the grammar limits (see Traps) — per-field properties are
-  what `mapping.py` deliberately avoids.
-- Keep the flat array shape and validate after parsing: if a field declares
-  options and the answer is not one of them, downgrade it to `missing`. No
-  grammar risk, same guarantee, and consistent with how every other malformed
-  answer is handled.
+  what `mapping.py` deliberately avoids. `test_options_never_reach_the_output_grammar`
+  keeps it that way.
+- ✅ Keep the flat array shape and validate after parsing. No grammar risk,
+  same guarantee, consistent with how every other malformed answer is handled.
 
-### All three are gated on the same thing
+Separately: a skip is no longer silent anywhere. The fill report now carries
+the *reason*, because "skipped" alone covered three situations needing three
+different responses from the doctor — already correct, not on this page, and
+the value would not go in. The last of those is a field they reviewed and
+approved.
+
+### All three are still gated on the same thing
+
+The mechanisms exist; the **data they run on does not**. `step` and `options`
+are schema fields nobody has filled in, because no schema describes the AIA
+form and nothing has read one.
 
 **A learn-mode dump from a live ClaimEZ page, one per step.** It would give the
 real field labels, the real dropdown option text, and the `<legend>` text that
 names each step — which is simultaneously the input to writing the AIA schema,
 the evidence for the step-detection design, and the only way to know whether
 the controls are native `<select>`s or custom widgets. Everything above is
-otherwise being designed against a verbal description.
+otherwise designed against a verbal description.
+
+**One design question was deliberately left open rather than guessed.**
+`isFillable` in `locate.js` checks `disabled` and `readOnly` but **not
+visibility**, so on a wizard that keeps every step in the DOM behind `display`,
+every step scores as present and the filler would write into steps the doctor
+cannot see. Whether that is wrong depends on a fact nobody has: whether ClaimEZ
+mounts steps or hides them. It was left alone because the obvious fix — refuse
+invisible controls — breaks the common `visibility: hidden` custom-checkbox
+pattern, and choosing between two unverified failure modes from a verbal
+description is how the wrong one gets locked in. The dump answers it in one
+look. (The step *watcher* already handles both shapes; this is only about
+whether a hidden step should be filled.)
 
 ---
 
@@ -747,6 +817,17 @@ omission to "fix".
   worker — a worker that has to survive eviction has to persist.
 - **The extension never submits.** It fills in place; the doctor clicks submit
   and signs. `apply.test.js` and `content/fill.test.js` both assert it.
+- **Nothing fills without a click, including when the page changes by itself.**
+  The `MutationObserver` added for wizard steps re-identifies the form and says
+  the page moved; it must never call fill. Advancing a step is the doctor using
+  the insurer's form, not asking BreezeFill for anything, and an observer that
+  wrote on render would quietly put the review step after the writing.
+  `panel.test.js` asserts no fill message is sent.
+- **An off-list answer is `missing`, never the nearest option.** When a field
+  declares `options`, case and whitespace are forgiven and nothing else. Do not
+  add fuzzy matching to raise the fill rate — the value is a clinical statement
+  the doctor signs, and a near-miss snapped across by string distance is
+  indistinguishable in review from an answer the notes supported.
 - No patient data in logs or error messages. LLM failures return a generic
   `"LLM call failed"`.
 - **No real patient data until inference is confirmed in-region.** Both calls
@@ -873,13 +954,18 @@ adjusting are the build command (whether Node is on the path in a Python
 build) and whether `public/` is picked up. Then point `DEFAULT_API_BASE` at
 the new domain and leave Fly running for a week.
 
-**3. Wizard support, for the AIA form.** Three problems, all described in
-"The AIA form" above with proposed fixes: identification runs on step 1 before
-any of the schema's fields exist; `MIN_MATCH_RATE` refuses a partial step; and
-dropdown/yes-no answers are matched by wording and skipped silently when they
-miss. Wants the dump first — otherwise it is designed against a description.
+**3. ~~Wizard support~~ — built 2026-08-04, now waiting on the dump to be
+verified.** All three problems are addressed in code and covered by tests; see
+"The AIA form" above for what each fix does and what it deliberately does not
+do. What remains is not implementation: it is that no schema declares a `step`
+or an `options` list, so **none of it runs on anything today**. The first
+ClaimEZ schema is what turns it on, and one open question (should a step hidden
+rather than unmounted be filled?) is recorded there for the dump to answer.
 
-**4. The AIA schema itself.** Blocked on the same dump. An expired link renders
+**4. The AIA schema itself — now the thing that switches item 3 on.** Blocked
+on the same dump. Write `step` on every field (from the `<legend>` the dumper
+records) and `options` on every dropdown and yes/no group; both are inert
+elsewhere and load-bearing here. An expired link renders
 an error page with no fields, `submit-offline` is post-submission only, and the
 portal is a JS-rendered SPA so no fetch-based tool can see its DOM.
 `roboform_test_v1` is still the only schema declaring `hosts`, so on any
