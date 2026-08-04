@@ -35,9 +35,9 @@
 // Moved off Fly on 2026-08-05, and the reason is worth keeping: Fly was last
 // deployed on 2026-08-03 and had become a *stale* backend rather than an idle
 // one. A tester who installed the extension pointed at it got the 2026-08-03
-// product — pre-rename, so the panel called itself ClaimFill, and without the
-// options, steps, date-format and enrichment work that followed. Nothing about
-// that failure named the real cause.
+// product — old enough to still carry the product's previous name in its UI,
+// and without the options, steps, date-format and enrichment work that
+// followed. Nothing about that failure named the real cause.
 //
 // The lesson for whoever moves this next: a default backend URL is a version
 // pin. Pointing it at a deployment nobody redeploys means shipping that day's
