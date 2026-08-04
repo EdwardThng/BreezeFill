@@ -184,6 +184,13 @@ def list_forms() -> list[dict]:
                     "source": f.source,
                     "label": f.display_label,
                     "description": f.description,
+                    # Identification is scored per step, because a wizard only
+                    # ever has one step in the DOM: a schema whose fields are
+                    # spread over four of them would otherwise score against a
+                    # page carrying a quarter of them and be dismissed as the
+                    # wrong form. Absent for a form that shows everything at
+                    # once, which then scores as one group — today's behaviour.
+                    "step": f.step,
                 }
                 for f in s.fields
             ],
