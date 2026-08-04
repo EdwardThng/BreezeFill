@@ -325,3 +325,150 @@ describe("one step at a time", () => {
     expect(through.deferred).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Joining the page's questions to the bank's instructions
+// ---------------------------------------------------------------------------
+//
+// The bank stopped being a gate on 2026-08-05. Every question on the page gets
+// answered; a schema match only decides how well each one is put to the model.
+
+const SCHEMA_FIELDS = [
+  {
+    fieldId: "first_consult",
+    label: "Date of first consultation",
+    description: "Date the patient FIRST consulted this doctor for this condition, not the latest visit",
+    options: [],
+  },
+  {
+    fieldId: "ward",
+    label: "Ward class",
+    description: "Ward class the patient was admitted to",
+    options: ["A1 (single)", "B1 (4-bedded)"],
+  },
+];
+
+describe("enriching live controls", () => {
+  test("a described control gets the instruction, not the page's wording", () => {
+    // Numbering and case differ, which is what a real page does to a label a
+    // schema was authored from.
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "7. Date of First Consultation", type: "text", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.description).toMatch(/FIRST consulted this doctor/);
+    expect(field.describedBy).toBe("first_consult");
+  });
+
+  test("a described control travels under the schema's label, not the page's", () => {
+    // A privacy property, not a cosmetic one: on a page the bank fully
+    // describes, nothing of the page's own text leaves the browser.
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "7. Date of First Consultation", type: "text", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.label).toBe("Date of first consultation");
+  });
+
+  test("the same question worded differently is NOT matched, and that is the limit", () => {
+    // "7. When did the patient first consult you" and "Date of first
+    // consultation" are the same question and share one content token, so they
+    // score 0.22 — well under MIN_SCORE. Enrichment is only as good as the
+    // label scorer, and the scorer compares words rather than meaning.
+    //
+    // Failing this way is the safe direction: the control is still filled from
+    // its own label, just without the schema's sharper instruction. But it is
+    // why a web schema should be authored from the page's own wording — which
+    // is exactly what the draft-schema flow produces — rather than from the
+    // labels of the equivalent PDF form.
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "7. When did the patient first consult you", type: "text", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.describedBy).toBeNull();
+    expect(field.label).toBe("7. When did the patient first consult you");
+  });
+
+  test("an undescribed control is still a question, answered from its own label", () => {
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "Referring doctor's MCR number", type: "text", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.description).toBeNull();
+    expect(field.describedBy).toBeNull();
+    // The point of the whole change: it is not dropped.
+    expect(field.label).toBe("Referring doctor's MCR number");
+  });
+
+  test("a weak match attaches nothing rather than the wrong instruction", () => {
+    // Worse than no instruction: it would confidently tell the model to answer
+    // a different question than the one on screen, and unlike a mislocated
+    // value there is nothing on the page to make that visible in review.
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "Favourite colour", type: "text", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.describedBy).toBeNull();
+  });
+
+  test("one schema field cannot describe two controls", () => {
+    const fields = locate.enrich(
+      [
+        { ref: "c1", label: "Ward class", type: "text", options: [] },
+        { ref: "c2", label: "Ward class", type: "text", options: [] },
+      ],
+      SCHEMA_FIELDS
+    );
+
+    expect(fields.filter((f) => f.describedBy === "ward")).toHaveLength(1);
+  });
+
+  test("the control's own options win over the schema's", () => {
+    // A schema's list describes the form as authored; the control's describes
+    // what it will accept today.
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "Ward class", type: "select", options: ["B2 (6-bedded)", "C (open)"] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.options).toEqual(["B2 (6-bedded)", "C (open)"]);
+  });
+
+  test("a control with no options of its own inherits the schema's", () => {
+    const [field] = locate.enrich(
+      [{ ref: "c1", label: "Ward class", type: "select", options: [] }],
+      SCHEMA_FIELDS
+    );
+
+    expect(field.options).toEqual(["A1 (single)", "B1 (4-bedded)"]);
+  });
+
+  test("no schema at all still yields every question", () => {
+    const controls = [
+      { ref: "c1", label: "Ward class", type: "text", options: [] },
+      { ref: "c2", label: "Date of admission", type: "date", options: [] },
+    ];
+
+    const fields = locate.enrich(controls, []);
+    expect(fields).toHaveLength(2);
+    expect(fields.every((f) => f.describedBy === null)).toBe(true);
+  });
+
+  test("withheld option lists arrive empty, never as claim data", () => {
+    // collectControls withholds a list whose scrubbing changed anything — a
+    // policy picker reading "80123456 — Tan Wei Ming — GHS" is claim data, not
+    // choices. liveControls carries that decision through as an empty list.
+    render(`<form><label for="p">Policy under claim</label>
+      <select id="p"><option>80123456 - patient - GHS</option></select></form>`);
+    const report = locate.locate([], liveControls());
+    const policy = report.liveControls.find((c) => c.label.includes("Policy"));
+
+    expect(policy).toBeTruthy();
+    expect(policy.options).toEqual([]);
+  });
+});
