@@ -1,5 +1,5 @@
 /**
- * ClaimFill service worker.
+ * BreezeFill service worker.
  *
  * ---------------------------------------------------------------------------
  * Why this file is nearly empty, and should stay that way
@@ -62,6 +62,6 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
     // No patient data can reach here — this fires before any claim exists —
     // but keep it terse regardless, out of habit rather than necessity.
-    console.error("ClaimFill: could not open the side panel", error);
+    console.error("BreezeFill: could not open the side panel", error);
   });
 });

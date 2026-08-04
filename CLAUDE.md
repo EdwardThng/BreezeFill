@@ -5,7 +5,7 @@ insurer form). **Read that first.** This file records decisions, current
 state, and the traps — the things not derivable from the code.
 
 Stack: FastAPI + pypdf backend, React/Vite frontend, Anthropic structured
-output. Repo `EdwardThng/ClaimFill` (private). Pilot user is the owner's
+output. Repo `EdwardThng/BreezeFill` (private). Pilot user is the owner's
 father, a Singapore GP.
 
 ---
@@ -21,7 +21,7 @@ father, a Singapore GP.
 | Bank → fallback → draft schema | Working, 114 extension tests + 13 backend. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. **Not yet run in a browser** — RoboForm is in the bank, so exercising the fallback needs a page that is not |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
-| `GET /download/claimfill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
+| `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | Fly deploy | **Live at `https://claimfill.fly.dev`**, redeployed 2026-08-03 with today's build. One machine, region `sin`, health passing. The app was never gone — the NXDOMAIN was `formfill-backend.fly.dev`, a name this project does not use; `fly.toml` says `claimfill` and always did. It **scales to zero now** (see fly.toml): first request after an idle spell is a second or two slow, not an error |
 | `ANTHROPIC_API_KEY` | **Set as a Fly secret** and confirmed working — a live `POST /map` returns 200, which exercises the sweep. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1` |
@@ -54,7 +54,7 @@ a green suite as readiness.
 | Symptom the doctor sees | Real cause | Fix |
 |---|---|---|
 | Extension absent from `chrome://extensions` | Nothing wrong with the code — manifest was valid, all 8 referenced files present, OneDrive files were real and not cloud placeholders, Chrome 150 was past the 114 floor. It was the load step | Developer mode → Load unpacked → select `extension/` |
-| "ClaimFill has no access to this tab", on a page plainly in view | `setPanelBehavior({openPanelOnActionClick: true})` opens the panel but grants **no `activeTab`** — Chrome handles the click itself, so `action.onClicked` never fires, and a click that never reaches the extension is not an invocation | Take `action.onClicked` and call `sidePanel.open({tabId})` from inside it. That *is* the canonical `activeTab` trigger |
+| "BreezeFill has no access to this tab", on a page plainly in view | `setPanelBehavior({openPanelOnActionClick: true})` opens the panel but grants **no `activeTab`** — Chrome handles the click itself, so `action.onClicked` never fires, and a click that never reaches the extension is not an invocation | Take `action.onClicked` and call `sidePanel.open({tabId})` from inside it. That *is* the canonical `activeTab` trigger |
 | `Error: No SW` in the worker console, every start | `chrome.sidePanel.setPanelBehavior()` throws from the worker's top level **and** from `onInstalled`. Moving it to another lifecycle event was tried and failed | Delete the call. `false` is already the default, so it could never have helped a clean install — it was pure liability |
 | "Could not reach the backend" | `formfill-backend.fly.dev` returns NXDOMAIN — destroyed or renamed, not stopped. Confirmed against `example.com` returning 200 from the same shell | `DEFAULT_API_BASE` → `http://localhost:8000` until a deploy exists |
 | "Failed to fetch" with no status code, on Map fields | A missing `ANTHROPIC_API_KEY` makes the SDK raise a plain **`TypeError`** ("Could not resolve authentication method"), not an `anthropic.APIError`, so it escaped both `except` clauses. Starlette's `ServerErrorMiddleware` sits **outside** `CORSMiddleware`, so the resulting 500 carried zero `Access-Control-*` headers and the browser could not even report the status | Broad `except Exception` in `_review_rows` → 503 when the key is absent, 502 otherwise. Log the exception **type only**; a message or traceback can quote clinical text |
@@ -263,7 +263,7 @@ Routes considered and closed (2026-08-01), so they are not re-opened:
   call, and the stronger argument: the link is what the insurer handed the
   doctor, and moving them off it adds friction rather than removing it. **The
   submission channel is fixed. Fill the channel the doctor was given.**
-- *Iframe the portal inside ClaimFill, or have the server open the link* — CSP
+- *Iframe the portal inside BreezeFill, or have the server open the link* — CSP
   blocks the first; the second makes the server hold a bearer credential to a
   patient's claim.
 
@@ -636,7 +636,7 @@ export ANTHROPIC_API_KEY=...    # never via Claude Code's `!` prefix: it is logg
 # the picker, which is the only way the panel can name it.
 export FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1
 ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
-# then: https://www.roboform.com/filling-test-all-fields, click the ClaimFill
+# then: https://www.roboform.com/filling-test-all-fields, click the BreezeFill
 # icon ON THAT TAB, paste a case from docs/test_notes.md, Map, Fill.
 
 # frontend dev (expects backend on :8000)
@@ -710,7 +710,7 @@ node stage.
    backend.
 3. ~~**Run the RoboForm route in a real browser.**~~ **Done 2026-08-03, and it
    filled.** The recipe, for repeating it: `FORMFILL_SHOW_INTERNAL=1
-   FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, the ClaimFill icon **on the
+   FORMFILL_DISABLE_SWEEP=1`, uvicorn on :8000, the BreezeFill icon **on the
    RoboForm tab**, paste case 1 from `docs/test_notes.md`, Map, Fill. Five
    filled, Date Of Birth ambiguous. What this does *not* answer: anything about
    a framework-rendered field (item 5), or whether an insurer portal will let

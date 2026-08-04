@@ -39,7 +39,7 @@ describe("routing", () => {
     // Deleting it would have taken the five PDF forms with it.
     window.location.hash = "#/app";
     render(<App />);
-    expect(screen.getByRole("heading", { level: 1, name: /claimfill/i })).toBeDefined();
+    expect(screen.getByRole("heading", { level: 1, name: /breezefill/i })).toBeDefined();
     window.location.hash = "";
   });
 });

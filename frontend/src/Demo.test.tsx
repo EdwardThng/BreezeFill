@@ -19,7 +19,7 @@ import Demo from "./Demo";
 
 const next = () => screen.getByRole("button", { name: "Next" });
 const stage = () => screen.getByLabelText("The insurer's form");
-const panel = () => screen.getByLabelText("ClaimFill side panel");
+const panel = () => screen.getByLabelText("BreezeFill side panel");
 
 /** Walk to a step by clicking, confirming on the way if the demo asks. */
 async function advanceTo(stepNumber: number) {
@@ -54,7 +54,7 @@ describe("it is obviously a demo", () => {
 describe("the walkthrough", () => {
   test("starts with a panel that has no access to anything", () => {
     expect(screen.getByText(/Step 1 of 6/)).toBeDefined();
-    expect(within(panel()).getByText(/click the claimfill icon/i)).toBeDefined();
+    expect(within(panel()).getByText(/click the breezefill icon/i)).toBeDefined();
     // Nothing pasted, nothing proposed, nothing filled.
     expect(within(panel()).queryByText(/patient details/i)).toBeNull();
   });
@@ -123,7 +123,7 @@ describe("what the demo refuses to skip", () => {
     await advanceTo(6);
     const submit = within(stage()).getByRole("button", { name: /submit claim/i });
     expect(submit).toHaveProperty("disabled", true);
-    expect(submit.textContent).toMatch(/you do this, not claimfill/i);
+    expect(submit.textContent).toMatch(/you do this, not breezefill/i);
   });
 });
 
@@ -153,7 +153,7 @@ describe("getting around", () => {
 
   test("there is a way to the download and back to the landing page", () => {
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
-    expect(links).toContain("/download/claimfill-extension.zip");
+    expect(links).toContain("/download/breezefill-extension.zip");
     expect(links).toContain("#/");
   });
 });

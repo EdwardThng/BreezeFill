@@ -1,4 +1,4 @@
-"""The extension download (GET /download/claimfill-extension.zip).
+"""The extension download (GET /download/breezefill-extension.zip).
 
 The site's whole purpose now is handing this file out, so the thing worth
 testing is that what arrives is installable: the manifest at the top of one
@@ -23,7 +23,7 @@ import main
 
 client = TestClient(main.app)
 
-URL = "/download/claimfill-extension.zip"
+URL = "/download/breezefill-extension.zip"
 
 
 @pytest.fixture
@@ -38,17 +38,17 @@ def test_it_is_served_as_a_download(archive: zipfile.ZipFile) -> None:
     assert response.headers["content-type"] == "application/zip"
     # Without this the browser navigates to the zip instead of saving it.
     assert "attachment" in response.headers["content-disposition"]
-    assert "claimfill-extension.zip" in response.headers["content-disposition"]
+    assert "breezefill-extension.zip" in response.headers["content-disposition"]
 
 
 def test_everything_sits_under_one_folder(archive: zipfile.ZipFile) -> None:
     # So unzipping produces exactly the directory "Load unpacked" wants
     # selected, rather than scattering files into the Downloads folder.
-    assert all(name.startswith("claimfill-extension/") for name in archive.namelist())
+    assert all(name.startswith("breezefill-extension/") for name in archive.namelist())
 
 
 def test_the_manifest_is_where_chrome_looks_for_it(archive: zipfile.ZipFile) -> None:
-    manifest = json.loads(archive.read("claimfill-extension/manifest.json"))
+    manifest = json.loads(archive.read("breezefill-extension/manifest.json"))
     assert manifest["manifest_version"] == 3
 
 
@@ -56,7 +56,7 @@ def test_every_file_the_manifest_references_is_present(archive: zipfile.ZipFile)
     """The failure this catches is the worst kind: Chrome refuses the whole
     extension for one missing file, and the error names the file rather than
     the packaging step that dropped it."""
-    manifest = json.loads(archive.read("claimfill-extension/manifest.json"))
+    manifest = json.loads(archive.read("breezefill-extension/manifest.json"))
     names = set(archive.namelist())
 
     referenced: list[str] = []
@@ -74,14 +74,14 @@ def test_every_file_the_manifest_references_is_present(archive: zipfile.ZipFile)
 
     assert referenced, "manifest referenced no files; this test would pass vacuously"
     for path in referenced:
-        assert f"claimfill-extension/{path}" in names, path
+        assert f"breezefill-extension/{path}" in names, path
 
 
 def test_the_files_the_panel_injects_are_all_there(archive: zipfile.ZipFile) -> None:
     # panel.js injects these four by name at fill time. A missing one fails in
     # the browser, on a doctor's machine, mid-claim.
     for path in ("learn/dump.js", "fill/locate.js", "fill/apply.js", "content/fill.js"):
-        assert f"claimfill-extension/{path}" in archive.namelist(), path
+        assert f"breezefill-extension/{path}" in archive.namelist(), path
 
 
 def test_tests_are_not_shipped(archive: zipfile.ZipFile) -> None:
@@ -99,4 +99,4 @@ def test_it_is_the_running_source_not_a_stale_build(archive: zipfile.ZipFile) ->
     """Zipped per request from the source tree, so a download can never be
     older than the server answering it."""
     live = (main.EXTENSION_DIR / "panel" / "panel.js").read_bytes()
-    assert archive.read("claimfill-extension/panel/panel.js") == live
+    assert archive.read("breezefill-extension/panel/panel.js") == live

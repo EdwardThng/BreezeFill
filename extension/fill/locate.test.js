@@ -17,8 +17,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 import "../learn/dump.js";
 import "./locate.js";
 
-const learn = globalThis.claimfillLearn;
-const locate = globalThis.claimfillLocate;
+const learn = globalThis.breezefillLearn;
+const locate = globalThis.breezefillLocate;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "../../tests/fixtures/portal_like.html");

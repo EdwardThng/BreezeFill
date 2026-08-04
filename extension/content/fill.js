@@ -1,5 +1,5 @@
 /**
- * ClaimFill content orchestrator — the only code that touches the insurer's page.
+ * BreezeFill content orchestrator — the only code that touches the insurer's page.
  *
  * Injected on an explicit doctor gesture, together with learn/dump.js,
  * fill/locate.js and fill/apply.js. Answers two messages from the side panel:
@@ -52,12 +52,12 @@
   // Injecting twice into the same tab would register a second listener and
   // every message would be handled twice — the second run writing over the
   // first. The panel re-injects freely, so this has to be idempotent.
-  if (globalThis.__claimfillContentReady) return;
-  globalThis.__claimfillContentReady = true;
+  if (globalThis.__breezefillContentReady) return;
+  globalThis.__breezefillContentReady = true;
 
-  const learn = globalThis.claimfillLearn;
-  const locate = globalThis.claimfillLocate;
-  const apply = globalThis.claimfillApply;
+  const learn = globalThis.breezefillLearn;
+  const locate = globalThis.breezefillLocate;
+  const apply = globalThis.breezefillApply;
 
   /**
    * The visible text of a radio's own label, used to decide which member of a
@@ -159,7 +159,7 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.target !== "claimfill-content") return undefined;
+    if (!message || message.target !== "breezefill-content") return undefined;
 
     try {
       if (message.action === "survey") {
@@ -180,5 +180,5 @@
     return undefined;
   });
 
-  globalThis.claimfillContent = { survey, fill, labelOf, serialise, score };
+  globalThis.breezefillContent = { survey, fill, labelOf, serialise, score };
 })();

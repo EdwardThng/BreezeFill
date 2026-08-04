@@ -1,5 +1,5 @@
 /**
- * ClaimFill filler — writing values into a framework-controlled form.
+ * BreezeFill filler — writing values into a framework-controlled form.
  *
  * ---------------------------------------------------------------------------
  * THE TRAP: `el.value = x` does not work on a React or Angular portal.
@@ -243,7 +243,7 @@
     setNativeChecked,
   };
 
-  root.claimfillApply = api;
+  root.breezefillApply = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }

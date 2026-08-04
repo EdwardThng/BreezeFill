@@ -1,5 +1,5 @@
 /**
- * ClaimFill learn mode — sanitised field inventory for an insurer web form.
+ * BreezeFill learn mode — sanitised field inventory for an insurer web form.
  *
  * This is the web-portal analogue of `python backend/pdf_fill.py <form.pdf>`:
  * it reports what fields a form HAS so a schema can be written against them.
@@ -33,13 +33,13 @@
  *
  * Paste into the DevTools console on the form page:
  *
- *     claimfillLearn.dump()            // -> inventory object
- *     copy(JSON.stringify(claimfillLearn.dump(), null, 2))
+ *     breezefillLearn.dump()            // -> inventory object
+ *     copy(JSON.stringify(breezefillLearn.dump(), null, 2))
  *
  * Wizard forms only have the current step in the DOM, so run it once per step
  * and combine:
  *
- *     claimfillLearn.mergeDumps([step1, step2, step3])
+ *     breezefillLearn.mergeDumps([step1, step2, step3])
  *
  * The same functions become the extension's learn mode later; nothing here
  * depends on the extension APIs.
@@ -595,7 +595,7 @@
     selectorFor,
   };
 
-  root.claimfillLearn = api;
+  root.breezefillLearn = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }

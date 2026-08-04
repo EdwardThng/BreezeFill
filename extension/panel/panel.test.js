@@ -97,7 +97,7 @@ function loadPanel() {
   };
   // eslint-disable-next-line no-eval
   (0, eval)(PANEL_JS);
-  return globalThis.claimfillPanel;
+  return globalThis.breezefillPanel;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -127,7 +127,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  delete globalThis.claimfillPanel;
+  delete globalThis.breezefillPanel;
 });
 
 // ---------------------------------------------------------------------------

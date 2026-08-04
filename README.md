@@ -58,7 +58,7 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | `POST` | `/map-live` | Same, against a page's own field labels, for a form no schema describes. A successful fill then drafts that schema |
 | `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call |
 | `GET` | `/health` | Liveness + loaded form count |
-| `GET` | `/download/claimfill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
+| `GET` | `/download/breezefill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
 
 ---
 

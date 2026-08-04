@@ -1,5 +1,5 @@
 /**
- * ClaimFill side panel.
+ * BreezeFill side panel.
  *
  * Holds the whole claim in memory for as long as the doctor has the panel
  * open, and nowhere else. There is no `chrome.storage` call in this file and
@@ -12,7 +12,7 @@
  * How this gets access to the insurer's page
  * ---------------------------------------------------------------------------
  *
- * It does not have any, until the doctor clicks the ClaimFill toolbar icon on
+ * It does not have any, until the doctor clicks the BreezeFill toolbar icon on
  * the tab they want filled. That click grants `activeTab` for that tab and
  * that visit, and nothing else: no host permission is held between sessions,
  * no URL is read, and the "tabs" permission — which would expose every tab's
@@ -38,6 +38,9 @@
 // route: `roboform_test_v1` is `internal: true` and FORMFILL_SHOW_INTERNAL is
 // deliberately unset in production, so the deployed backend does not offer it
 // — a doctor must never be shown a form that is not a real insurer's.
+// Still `claimfill` — the Fly app is infrastructure named before the product
+// rename to BreezeFill, and renaming it would point deploys at an app that
+// does not exist. It moves when hosting moves, not when the product does.
 const DEFAULT_API_BASE = "https://claimfill.fly.dev";
 
 // Order matters: the orchestrator expects the other three to have registered
@@ -229,7 +232,7 @@ function selectForm(form) {
  * Work out which schema this page needs, instead of asking.
  *
  * Runs when the panel opens, which is immediately after the doctor clicked the
- * ClaimFill icon on this tab — so the survey is inside the access they just
+ * BreezeFill icon on this tab — so the survey is inside the access they just
  * granted, and it only reads: `survey` writes nothing.
  *
  * Two signals, in order. The host is the strong one and costs nothing, but
@@ -252,7 +255,7 @@ async function detectForm() {
       candidates: candidatesFor(state.forms),
     });
   } catch {
-    showPicker("Could not read this page — pick the form yourself, or click the ClaimFill icon on the tab you want to fill.");
+    showPicker("Could not read this page — pick the form yourself, or click the BreezeFill icon on the tab you want to fill.");
     return;
   }
 
@@ -653,10 +656,10 @@ async function ask(message) {
     await chrome.scripting.executeScript({ target: { tabId }, files: INJECT_FILES });
   } catch {
     throw new Error(
-      "ClaimFill has no access to this tab. Click the ClaimFill icon in the toolbar while this page is open, then try again."
+      "BreezeFill has no access to this tab. Click the BreezeFill icon in the toolbar while this page is open, then try again."
     );
   }
-  const response = await chrome.tabs.sendMessage(tabId, { target: "claimfill-content", ...message });
+  const response = await chrome.tabs.sendMessage(tabId, { target: "breezefill-content", ...message });
   if (!response || !response.ok) throw new Error("The page did not respond.");
   return response;
 }
@@ -685,7 +688,7 @@ function renderReport(response) {
   if (response.report.unknownControls.length) {
     const heading = document.createElement("p");
     heading.className = "note";
-    heading.textContent = "Fields on this page ClaimFill does not know about — fill these yourself:";
+    heading.textContent = "Fields on this page BreezeFill does not know about — fill these yourself:";
     container.append(heading);
 
     const unknown = document.createElement("ul");
@@ -723,7 +726,7 @@ async function onCheck() {
       status,
       safeToFill
         ? `Matched ${matched} of ${intended} fields on ${response.host}.`
-        : `Only matched ${matched} of ${intended} fields on ${response.host}. ClaimFill will not fill a page it does not recognise.`,
+        : `Only matched ${matched} of ${intended} fields on ${response.host}. BreezeFill will not fill a page it does not recognise.`,
       safeToFill ? null : "error"
     );
     renderReport({ ...response, applied: [] });
@@ -862,7 +865,7 @@ loadForms().then(detectForm);
 // than reimplementing it. Nothing else reads it, and it holds no patient data
 // — the claim lives in `state`, in this document, and is gone when the panel
 // closes.
-globalThis.claimfillPanel = {
+globalThis.breezefillPanel = {
   onMap,
   onFill,
   parsePaste,

@@ -111,7 +111,7 @@ const STEPS: Step[] = [
   {
     title: "Open the panel beside the form",
     caption:
-      "The insurer's form is open on the right. ClaimFill has no access to it — or to any page — until you click its icon on that tab. Nothing is running in the background.",
+      "The insurer's form is open on the right. BreezeFill has no access to it — or to any page — until you click its icon on that tab. Nothing is running in the background.",
     panel: "empty",
   },
   {
@@ -129,7 +129,7 @@ const STEPS: Step[] = [
   {
     title: "Is this form one we already know?",
     caption:
-      "The page is scored against every form ClaimFill has a description for. This one matches the AIA Group H&S claim, so the model gets told what each question means. When nothing matches, it reads the questions off the page instead — and afterwards offers you a description of that new form.",
+      "The page is scored against every form BreezeFill has a description for. This one matches the AIA Group H&S claim, so the model gets told what each question means. When nothing matches, it reads the questions off the page instead — and afterwards offers you a description of that new form.",
     panel: "bank",
   },
   {
@@ -141,7 +141,7 @@ const STEPS: Step[] = [
   {
     title: "It fills the form. You submit it.",
     caption:
-      "The values you accepted are written into the insurer's own form, in your browser. The referring doctor field is untouched, because nothing in the note answered it. ClaimFill does not press submit — you read it, sign it and send it yourself.",
+      "The values you accepted are written into the insurer's own form, in your browser. The referring doctor field is untouched, because nothing in the note answered it. BreezeFill does not press submit — you read it, sign it and send it yourself.",
     panel: "filled",
   },
 ];
@@ -184,10 +184,10 @@ export default function Demo() {
       </div>
 
       <div className="demo-stage">
-        <section className="demo-panel" aria-label="ClaimFill side panel">
+        <section className="demo-panel" aria-label="BreezeFill side panel">
           <div className="demo-panel-head">
             <span className="dot-live" />
-            ClaimFill
+            BreezeFill
           </div>
 
           <Panel step={current} confirmed={confirmed} onConfirm={() => setConfirmed(true)} />
@@ -216,7 +216,7 @@ export default function Demo() {
               );
             })}
             <button className="demo-submit" type="button" disabled>
-              Submit claim — you do this, not ClaimFill
+              Submit claim — you do this, not BreezeFill
             </button>
           </div>
         </section>
@@ -261,7 +261,7 @@ export default function Demo() {
       </div>
 
       <div className="demo-outro">
-        <a className="btn btn-primary btn-large" href="/download/claimfill-extension.zip" download>
+        <a className="btn btn-primary btn-large" href="/download/breezefill-extension.zip" download>
           Download for Chrome
         </a>
         <a className="btn btn-ghost btn-large" href="#/">
@@ -276,7 +276,7 @@ function DemoNav() {
   return (
     <nav className="nav" aria-label="Main">
       <a className="brand" href="#/">
-        <span>← ClaimFill</span>
+        <span>← BreezeFill</span>
       </a>
       <div className="nav-links">
         <span>Interactive demo</span>
@@ -299,7 +299,7 @@ function Panel({
   if (shown === "empty") {
     return (
       <div className="demo-empty">
-        <p>Click the ClaimFill icon on this tab to begin.</p>
+        <p>Click the BreezeFill icon on this tab to begin.</p>
         <p className="demo-hint">
           That click is the only access it ever gets, and it lasts for this page
           only.

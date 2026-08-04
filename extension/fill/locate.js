@@ -1,5 +1,5 @@
 /**
- * ClaimFill filler — locating controls (the hybrid's join).
+ * BreezeFill filler — locating controls (the hybrid's join).
  *
  * The schema says what a field MEANS. The live page says where it IS. This
  * module joins the two by label text.
@@ -153,7 +153,7 @@
    * Join one schema field to a live control.
    *
    * `field` is `{ fieldId, label, selector? }` from the schema. `controls` are
-   * descriptors from `claimfillLearn.collectControls`.
+   * descriptors from `breezefillLearn.collectControls`.
    */
   function locateOne(field, controls) {
     const candidates = controls
@@ -256,7 +256,7 @@
     MIN_MATCHED,
   };
 
-  root.claimfillLocate = api;
+  root.breezefillLocate = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }

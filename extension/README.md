@@ -1,4 +1,4 @@
-# ClaimFill browser extension
+# BreezeFill browser extension
 
 Insurers increasingly do not send a PDF. AIA's ClaimEZ mails the doctor a
 tokenised link (`https://claimez.aia.com.sg/doc/?pid=<uuid>`) to an HTML form
@@ -27,7 +27,7 @@ FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1 \
 ```
 
 Then open <https://www.roboform.com/filling-test-all-fields>, click the
-ClaimFill icon **on that tab**, paste a case from `docs/test_notes.md`, and
+BreezeFill icon **on that tab**, paste a case from `docs/test_notes.md`, and
 Map. Five fields fill; Date Of Birth is reported ambiguous, because three
 `<select>`s there share that one label and picking one of them would be a
 guess.
@@ -61,7 +61,7 @@ requests no storage permission, so there is nowhere to persist it).
 
 ### What it can reach, and when
 
-Nothing, until the doctor clicks the ClaimFill toolbar icon on the tab they
+Nothing, until the doctor clicks the BreezeFill toolbar icon on the tab they
 want filled. That grants `activeTab` for that tab and that visit.
 
 The `tabs` permission is **not** requested, so the panel cannot read any tab's
@@ -142,10 +142,10 @@ it reports what fields a form *has* so a schema can be written against them.
 
 ```js
 // DevTools console, on the form page:
-claimfillLearn.dump()
+breezefillLearn.dump()
 
 // copy it out:
-copy(JSON.stringify(claimfillLearn.dump(), null, 2))
+copy(JSON.stringify(breezefillLearn.dump(), null, 2))
 ```
 
 Paste the contents of `learn/dump.js` into the console first. It attaches
@@ -156,8 +156,8 @@ combine:
 
 ```js
 const steps = [];
-steps.push(claimfillLearn.dump());   // run again after each "Next"
-copy(JSON.stringify(claimfillLearn.mergeDumps(steps), null, 2));
+steps.push(breezefillLearn.dump());   // run again after each "Next"
+copy(JSON.stringify(breezefillLearn.mergeDumps(steps), null, 2));
 ```
 
 ### Reading the output

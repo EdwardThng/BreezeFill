@@ -414,7 +414,7 @@ def health() -> dict:
 # implying a one-click install that does not exist.
 
 EXTENSION_DIR = REPO_ROOT / "extension"
-EXTENSION_ZIP_NAME = "claimfill-extension.zip"
+EXTENSION_ZIP_NAME = "breezefill-extension.zip"
 
 # Tests and editor droppings are not part of an install. `node_modules` is
 # excluded defensively: it is not supposed to exist under extension/, and a
@@ -442,7 +442,7 @@ def download_extension() -> Response:
                 continue
             # Everything lands under one folder, so unzipping produces exactly
             # the directory Chrome's "Load unpacked" wants selected.
-            archive.write(path, Path("claimfill-extension") / path.relative_to(EXTENSION_DIR))
+            archive.write(path, Path("breezefill-extension") / path.relative_to(EXTENSION_DIR))
 
     return Response(
         content=buffer.getvalue(),

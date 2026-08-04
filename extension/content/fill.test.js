@@ -7,7 +7,7 @@
  * write — it runs before the doctor has confirmed anything. Second, what
  * crosses back to the panel must be structure only and must be scrubbed,
  * because this is the one boundary where insurer page text moves into
- * ClaimFill's own UI.
+ * BreezeFill's own UI.
  */
 
 import { readFileSync } from "node:fs";
@@ -29,7 +29,7 @@ await import("../fill/locate.js");
 await import("../fill/apply.js");
 await import("./fill.js");
 
-const content = globalThis.claimfillContent;
+const content = globalThis.breezefillContent;
 
 const PLAN = [
   { fieldId: "diagnosis", label: "Diagnosis of all conditions treated" },
@@ -168,8 +168,8 @@ describe("message handling", () => {
   });
 
   test("routes survey and fill", () => {
-    expect(send({ target: "claimfill-content", action: "survey", plan: PLAN }).report.matched).toBe(3);
-    expect(send({ target: "claimfill-content", action: "fill", plan: PLAN, values: VALUES }).filled).toBe(3);
+    expect(send({ target: "breezefill-content", action: "survey", plan: PLAN }).report.matched).toBe(3);
+    expect(send({ target: "breezefill-content", action: "fill", plan: PLAN, values: VALUES }).filled).toBe(3);
   });
 
   test("ignores messages that are not addressed to it", () => {
@@ -177,7 +177,7 @@ describe("message handling", () => {
   });
 
   test("rejects an unknown action rather than guessing", () => {
-    expect(send({ target: "claimfill-content", action: "submit" })).toEqual({
+    expect(send({ target: "breezefill-content", action: "submit" })).toEqual({
       ok: false,
       error: "unknown action",
     });

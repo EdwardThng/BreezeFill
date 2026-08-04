@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  ClaimFill side panel.
+  BreezeFill side panel.
 
   Three steps, same as the website it replaces: describe the patient, review
   what the model produced, write it into the portal. The middle step is not
@@ -16,12 +16,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ClaimFill</title>
+    <title>BreezeFill</title>
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
     <header class="head">
-      <h1>ClaimFill</h1>
+      <h1>BreezeFill</h1>
       <p class="tagline">Fills the form in place. Never submits it.</p>
     </header>
 
@@ -137,7 +137,7 @@
     <!-- Step 3 ------------------------------------------------------------ -->
     <!--
       Not hidden behind step 2. "Check this page" is useful before any note has
-      been mapped — it answers "can ClaimFill see this form at all", which is a
+      been mapped — it answers "can BreezeFill see this form at all", which is a
       different question from "did the model produce good values" and worth
       being able to ask on its own. Fill stays disabled until there is
       something confirmed to write.
@@ -145,7 +145,7 @@
     <section class="step" id="step-fill" aria-labelledby="h-fill">
       <h2 id="h-fill"><span class="num">3</span> Fill this page</h2>
       <p class="note">
-        ClaimFill has no access to any page until you grant it here, one site
+        BreezeFill has no access to any page until you grant it here, one site
         at a time.
       </p>
       <div class="row-actions">
@@ -166,7 +166,7 @@
       <h2 id="h-draft"><span class="num">+</span> Add this form to the bank</h2>
       <p class="note">
         This page had no schema. Below is a draft of one, built from the
-        fields ClaimFill found and the values you accepted. Read it, then save
+        fields BreezeFill found and the values you accepted. Read it, then save
         it into <code>backend/schemas/</code> — the next claim on this form
         will use it instead of guessing.
       </p>
@@ -184,7 +184,7 @@
         <input id="api-base" type="url" autocomplete="off" />
       </label>
       <p class="note">
-        Held in memory for this session only. ClaimFill requests no storage
+        Held in memory for this session only. BreezeFill requests no storage
         permission, so nothing here — and no part of the note — is written to
         disk.
       </p>

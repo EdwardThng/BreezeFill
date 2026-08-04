@@ -18,9 +18,9 @@ import "../learn/dump.js";
 import "./locate.js";
 import "./apply.js";
 
-const learn = globalThis.claimfillLearn;
-const locate = globalThis.claimfillLocate;
-const apply = globalThis.claimfillApply;
+const learn = globalThis.breezefillLearn;
+const locate = globalThis.breezefillLocate;
+const apply = globalThis.breezefillApply;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "../../tests/fixtures/portal_like.html");

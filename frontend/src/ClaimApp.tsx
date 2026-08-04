@@ -33,7 +33,7 @@ export default function ClaimApp() {
       .then(setForms)
       .catch(() =>
         setError(
-          "Can't reach the ClaimFill server. Check your internet connection, " +
+          "Can't reach the BreezeFill server. Check your internet connection, " +
             "then reload this page.",
         ),
       );
@@ -161,7 +161,7 @@ export default function ClaimApp() {
 function Header() {
   return (
     <header>
-      <h1>ClaimFill</h1>
+      <h1>BreezeFill</h1>
       <p>
         Paste your clinical notes, check what's been filled in, download the
         insurance form ready to sign.

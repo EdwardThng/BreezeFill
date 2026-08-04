@@ -1,4 +1,4 @@
-/* ClaimFill marketing site.
+/* BreezeFill marketing site.
  *
  * Scoped under .landing and .demo so it cannot leak into the claim UI at
  * #/app, which keeps its own styles.css and its own light theme.

@@ -12,7 +12,7 @@
  * that plainly; for a doctor signing the result, it is the selling point.
  */
 
-export const DOWNLOAD_URL = "/download/claimfill-extension.zip";
+export const DOWNLOAD_URL = "/download/breezefill-extension.zip";
 
 const STEPS = [
   {
@@ -28,7 +28,7 @@ const STEPS = [
   {
     n: "03",
     title: "It fills the form in place",
-    body: "Values land in the insurer's own form, in your browser. You read it, sign it and submit it yourself — ClaimFill never presses submit.",
+    body: "Values land in the insurer's own form, in your browser. You read it, sign it and submit it yourself — BreezeFill never presses submit.",
   },
 ];
 
@@ -47,7 +47,7 @@ const GUARANTEES = [
   },
   {
     title: "It cannot read your other tabs",
-    body: "No standing access to any site. It sees one page, once, because you clicked the ClaimFill icon on it — and it asks for no permission to save anything to your computer.",
+    body: "No standing access to any site. It sees one page, once, because you clicked the BreezeFill icon on it — and it asks for no permission to save anything to your computer.",
   },
 ];
 
@@ -92,7 +92,7 @@ function Nav() {
     <nav className="nav" aria-label="Main">
       <a className="brand" href="#/">
         <Logo />
-        <span>ClaimFill</span>
+        <span>BreezeFill</span>
       </a>
       <div className="nav-links">
         <a href="#how">How it works</a>
@@ -116,7 +116,7 @@ function Hero() {
         the notes you already wrote.
       </h1>
       <p className="lede">
-        ClaimFill sits beside the insurer's form in your browser. Paste the
+        BreezeFill sits beside the insurer's form in your browser. Paste the
         consultation once and it proposes each answer with its source, for you
         to check and sign. It fills. You submit.
       </p>
@@ -148,7 +148,7 @@ function HeroVisual() {
     <div className="hero-visual" aria-hidden="true">
       <div className="mock">
         <div className="mock-panel">
-          <div className="mock-panel-head">ClaimFill</div>
+          <div className="mock-panel-head">BreezeFill</div>
           <div className="mock-paste">
             <span className="ln" />
             <span className="ln" />
@@ -222,7 +222,7 @@ function Problem() {
           </p>
         </div>
         <div>
-          <h3>With ClaimFill</h3>
+          <h3>With BreezeFill</h3>
           <p>
             You paste the consultation once. The panel proposes an answer for
             every question the form asks, shows you the sentence each one came
@@ -353,7 +353,7 @@ function Footer() {
     <footer className="footer">
       <div className="brand">
         <Logo />
-        <span>ClaimFill</span>
+        <span>BreezeFill</span>
       </div>
       <p>
         Assists with form completion. The reviewing doctor remains responsible
