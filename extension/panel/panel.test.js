@@ -668,3 +668,83 @@ describe("the record posted to /map", () => {
     expect(() => panel.patientRecord()).toThrow(/paste the consultation/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The second box
+// ---------------------------------------------------------------------------
+
+describe("other notes", () => {
+  // A claim form asks for things a consultation note does not hold. The whole
+  // risk of a second box is that it becomes a second path — one that reaches
+  // the model without passing through redaction, or without contributing the
+  // identifiers redaction needs. These say it does not.
+
+  test("it is part of the text sent for mapping", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("other-notes").value = "Ward class B1. Admission ref MEH-88213.";
+    await panel.parsePaste();
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    const record = panel.patientRecord();
+    expect(record.clinical_text).toContain("Chua Beng Huat");
+    expect(record.clinical_text).toContain("Ward class B1");
+  });
+
+  test("identifiers in the second box are parsed too", async () => {
+    // Otherwise they would never enter the redaction dictionary, and a name
+    // typed only here would reach the model intact.
+    const panel = loadPanel();
+    await settle();
+    $("other-notes").value = "Patient: Chua Beng Huat · S7211043C";
+    await panel.parsePaste();
+
+    const sent = JSON.parse(
+      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
+    );
+    expect(sent.text).toContain("S7211043C");
+  });
+
+  test("typing in it re-reads the identifiers", async () => {
+    loadPanel();
+    await settle();
+    globalThis.fetch.mockClear();
+
+    $("other-notes").value = "Ward class B1";
+    $("other-notes").dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/parse")),
+    ).toHaveLength(1);
+  });
+
+  test("leaving it empty changes nothing", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    // No trailing separator, no blank lines bolted on: the common case is
+    // still one box and the text is exactly what was pasted.
+    expect(panel.patientRecord().clinical_text).toBe("Patient: Chua Beng Huat");
+  });
+
+  test("it alone is enough — the consultation box is not separately required", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("other-notes").value = "Admitted 14/03/2026, ward B1.";
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    for (const id of ["full-name", "nric", "insurer"]) {
+      $(id).dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    expect(() => panel.patientRecord()).not.toThrow();
+  });
+});
