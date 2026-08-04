@@ -64,6 +64,8 @@ const PARSED = {
 let routes;
 /** What the injected script answers, per action. */
 let page;
+/** The panel's chrome.runtime.onMessage handler, once it registers one. */
+let pageListener;
 
 const EMPTY_REPORT = {
   results: [],
@@ -94,6 +96,16 @@ function loadPanel() {
       ),
     },
     scripting: { executeScript: vi.fn().mockResolvedValue([]) },
+    // The injected script reports a wizard step rendering through here. The
+    // listener is captured so a test can deliver a message the way Chrome
+    // would, rather than calling the handler directly.
+    runtime: {
+      onMessage: {
+        addListener: vi.fn((fn) => {
+          pageListener = fn;
+        }),
+      },
+    },
   };
   // eslint-disable-next-line no-eval
   (0, eval)(PANEL_JS);
@@ -749,5 +761,224 @@ describe("other notes", () => {
       $(id).dispatchEvent(new Event("input", { bubbles: true }));
     }
     expect(() => panel.patientRecord()).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wizards
+// ---------------------------------------------------------------------------
+
+/** A survey response in which one named schema fits the step on screen. */
+function fits(formId, host = "portal.example.com") {
+  return {
+    ok: true,
+    host,
+    controlCount: 6,
+    report: EMPTY_REPORT,
+    candidates: [
+      { formId, matched: 3, intended: 3, matchRate: 1, bestStepRate: 1, bestStepMatched: 3 },
+    ],
+  };
+}
+
+describe("when a wizard step renders", () => {
+  test("the form is identified again, because step 1 could not have shown it", () => {
+    // The panel identifies on open, which on a wizard is the verification
+    // step — a page carrying none of the schema's fields. Whatever it decided
+    // there was decided without the evidence.
+    const panel = loadPanel();
+    return settle()
+      .then(() => {
+        expect($("form-id").value).not.toBe("aia_ghs_claim");
+        page.survey = fits("aia_ghs_claim");
+        return panel.onPageChanged();
+      })
+      .then(() => {
+        expect($("form-id").value).toBe("aia_ghs_claim");
+      });
+  });
+
+  test("a form the doctor picked by hand is left alone", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    // Reaching for the picker is saying the automatic answer was wrong.
+    $("form-id").value = "roboform_test_v1";
+    $("form-id").dispatchEvent(new Event("change"));
+
+    page.survey = fits("aia_ghs_claim");
+    await panel.onPageChanged();
+
+    expect($("form-id").value).toBe("roboform_test_v1");
+  });
+
+  test("nothing is filled — the doctor still clicks", async () => {
+    const panel = loadPanel();
+    await settle();
+    globalThis.chrome.tabs.sendMessage.mockClear();
+
+    await panel.onPageChanged();
+
+    const actions = globalThis.chrome.tabs.sendMessage.mock.calls.map(([, m]) => m.action);
+    expect(actions).not.toContain("fill");
+  });
+
+  test("with values waiting, the doctor is told the page moved", async () => {
+    const panel = loadPanel();
+    await settle();
+    panel.state.rows = [
+      { field_id: "icd", label: "ICD-10 Code", value: "K35.80", status: "extracted", needs_review: false },
+    ];
+
+    await panel.onPageChanged();
+
+    expect($("fill-status").textContent).toMatch(/press Fill again/i);
+  });
+
+  test("the message arrives through chrome.runtime, not a direct call", async () => {
+    loadPanel();
+    await settle();
+    expect(pageListener).toBeTypeOf("function");
+
+    // A message for somebody else must not be acted on.
+    expect(pageListener({ target: "something-else", action: "page-changed" })).toBeUndefined();
+  });
+
+  test("a schema is ranked by its best step, not by its whole field list", () => {
+    const panel = loadPanel();
+    // Four steps, one of them on screen: 3 of 12 fields is a 0.25 rate and
+    // would be dismissed, while the step itself matched perfectly.
+    const best = panel.bestCandidate([
+      { formId: "wizard", matched: 3, intended: 12, matchRate: 0.25, bestStepRate: 1, bestStepMatched: 3 },
+    ]);
+    expect(best && best.formId).toBe("wizard");
+  });
+
+  test("a stepless schema is still ranked on its whole field list", () => {
+    const panel = loadPanel();
+    const best = panel.bestCandidate([
+      { formId: "flat", matched: 3, intended: 12, matchRate: 0.25, bestStepRate: null, bestStepMatched: null },
+    ]);
+    expect(best).toBeNull();
+  });
+
+  test("the plan carries each field's step", async () => {
+    const panel = loadPanel();
+    await settle();
+    panel.state.rows = [
+      { field_id: "icd", label: "ICD-10 Code", value: "K35.80", status: "extracted", needs_review: false, step: "Patient diagnosis" },
+    ];
+
+    expect(panel.fillPlan()).toEqual([
+      { fieldId: "icd", label: "ICD-10 Code", step: "Patient diagnosis" },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Answers the control has to accept
+// ---------------------------------------------------------------------------
+
+const WARD_ROW = {
+  field_id: "ward",
+  label: "Ward class",
+  value: "B1 (4-bedded)",
+  status: "extracted",
+  needs_review: false,
+  field_type: "text",
+  options: ["A1 (single)", "B1 (4-bedded)", "C (open)"],
+};
+
+async function mapWith(fields) {
+  routes["/map"] = () => respond({ form_id: "aia_ghs_claim", fields });
+  const panel = loadPanel();
+  await settle();
+  $("paste").value = "Admitted to B1.";
+  $("full-name").value = "Chua Beng Huat";
+  $("nric").value = "S7211043C";
+  $("dob").value = "1972-11-04";
+  $("insurer").value = "AIA";
+  // Picked the way a doctor picks it. Setting `.value` alone leaves the panel
+  // in schema-free mode — the default page here matches nothing in the bank,
+  // so it has offered /map-live — and the mapping would go to the wrong route.
+  $("form-id").value = "aia_ghs_claim";
+  $("form-id").dispatchEvent(new Event("change"));
+  await panel.onMap();
+  return panel;
+}
+
+describe("a field that declares its options", () => {
+  test("is reviewed as the form's own choices, not a text box", async () => {
+    await mapWith([WARD_ROW]);
+
+    const select = $("rows").querySelector("select");
+    expect(select).not.toBeNull();
+    expect([...select.options].map((o) => o.value)).toEqual([
+      "", "A1 (single)", "B1 (4-bedded)", "C (open)",
+    ]);
+    expect(select.value).toBe("B1 (4-bedded)");
+  });
+
+  test("leaving it blank stays reachable — none of these is a real answer", async () => {
+    await mapWith([{ ...WARD_ROW, value: null, status: "missing" }]);
+
+    const select = $("rows").querySelector("select");
+    expect(select.value).toBe("");
+  });
+
+  test("a value the form does not offer selects nothing rather than being invented", async () => {
+    // Should not happen — the backend downgrades an off-list answer to
+    // missing — but if one arrives, the review screen must not manufacture an
+    // option for it and make it look like a choice the form offers.
+    await mapWith([{ ...WARD_ROW, value: "Ward B1" }]);
+
+    const select = $("rows").querySelector("select");
+    expect(select.value).toBe("");
+    expect([...select.options].map((o) => o.value)).not.toContain("Ward B1");
+  });
+
+  test("a field with no options is still a text box", async () => {
+    await mapWith([{ ...WARD_ROW, options: [] }]);
+
+    expect($("rows").querySelector("select")).toBeNull();
+    expect($("rows").querySelector("textarea")).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Saying why, not just what
+// ---------------------------------------------------------------------------
+
+describe("the fill report", () => {
+  test("gives the reason a field was skipped", async () => {
+    const panel = await mapWith([WARD_ROW]);
+    page.fill = {
+      ok: true,
+      refused: false,
+      filled: 0,
+      applied: [{ fieldId: "ward", status: "skipped", reason: "no matching option" }],
+      report: { ...EMPTY_REPORT, results: [{ fieldId: "ward", status: "matched", score: 1, control: null }] },
+    };
+
+    await panel.onFill();
+
+    // "Ward class — skipped" alone covers three situations needing three
+    // different responses from the doctor.
+    expect($("fill-report").textContent).toContain("no matching option");
+  });
+
+  test("names fields waiting on a later step instead of letting them read as failures", async () => {
+    const panel = await mapWith([WARD_ROW]);
+    page.fill = {
+      ok: true,
+      refused: false,
+      filled: 1,
+      applied: [{ fieldId: "ward", status: "filled" }],
+      report: { ...EMPTY_REPORT, deferred: 4, results: [] },
+    };
+
+    await panel.onFill();
+
+    expect($("fill-report").textContent).toMatch(/4 fields belong to a later step/i);
   });
 });
