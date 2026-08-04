@@ -245,9 +245,95 @@
     };
   }
 
+  // ------------------------------------------------------------------
+  // Wizards: one step in the DOM at a time
+  // ------------------------------------------------------------------
+  //
+  // A multi-step form renders one step and holds the rest nowhere. Scoring a
+  // whole plan against that page asks the wrong question: a plan spanning
+  // admission details and diagnosis finds about half its fields on either
+  // step, lands under MIN_MATCH_RATE, and the filler writes nothing. The guard
+  // then systematically answers "wrong page" about the right page.
+  //
+  // The fix is to ask the guard about a step rather than about the form. Note
+  // what it is NOT: MIN_MATCH_RATE is untouched, and each step must clear it on
+  // its own. Lowering the rate globally would reintroduce partial fills
+  // everywhere to solve them in one place, and a partial fill is
+  // indistinguishable from a complete one to someone reviewing quickly.
+
+  /** plan -> Map of step name to the fields on it. */
+  function groupBySteps(fields) {
+    const groups = new Map();
+    for (const field of fields) {
+      const key = field.step || "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(field);
+    }
+    return groups;
+  }
+
+  /**
+   * Locate a plan that may span several wizard steps.
+   *
+   * Each step is scored on its own, and every step that clears the fill guard
+   * by itself is taken to be on screen. Their fields are then located together
+   * in one pass, which is what keeps two steps from both claiming the same
+   * control — the per-step scoring decides *which fields to try*, and the
+   * single final pass decides where each one goes.
+   *
+   * Filling all qualifying steps rather than only the best-scoring one matters
+   * for a form that reveals two sections at once. Picking a single winner would
+   * leave a section that plainly matched unfilled, and "best rate" is a bad
+   * winner anyway: a one-field step that happens to match scores 1.0 and would
+   * beat a twelve-field step with eleven matches.
+   */
+  function locateSteps(plan, controls) {
+    const fields = Array.isArray(plan) ? plan : [];
+    const groups = groupBySteps(fields);
+
+    // No steps declared — every schema written before this existed, and every
+    // form that shows all its questions at once. Same call, same report.
+    if (groups.size <= 1) {
+      return { ...locate(fields, controls), steps: [], deferred: 0 };
+    }
+
+    const steps = [];
+    for (const [step, group] of groups) {
+      const report = locate(group, controls);
+      steps.push({
+        step,
+        matched: report.matched,
+        intended: report.intended,
+        matchRate: report.matchRate,
+        present: report.safeToFill,
+      });
+    }
+
+    const present = new Set(steps.filter((s) => s.present).map((s) => s.step));
+    // Nothing clears the guard on its own: fall back to scoring the whole plan,
+    // which refuses in exactly the way it does today. The per-step breakdown
+    // still travels, so the panel can say which step it was expecting rather
+    // than only that it did not recognise the page.
+    if (!present.size) {
+      return { ...locate(fields, controls), steps, deferred: 0 };
+    }
+
+    const onScreen = fields.filter((f) => present.has(f.step || ""));
+    return {
+      ...locate(onScreen, controls),
+      steps,
+      // Fields belonging to steps that are not rendered. Not a failure and not
+      // an omission — they are filled when the doctor advances the wizard and
+      // the fill is re-run, which is safe because applyPlan is idempotent.
+      deferred: fields.length - onScreen.length,
+    };
+  }
+
   const api = {
     locate,
+    locateSteps,
     locateOne,
+    groupBySteps,
     score,
     normalise,
     tokens,
