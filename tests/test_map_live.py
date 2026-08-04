@@ -104,9 +104,12 @@ class TestMapping:
         assert stub_llm["schema"].pdf_path == ""
 
     def test_nothing_is_stored(self, stub_llm) -> None:
-        before = len(main._claims)
-        post(LIVE_FIELDS)
-        assert len(main._claims) == before
+        # There is no store to check the size of any more — the whole app is
+        # stateless — so the assertion is that the response hands back nothing
+        # to come back for, and that no store has reappeared to hold it.
+        body = post(LIVE_FIELDS).json()
+        assert "claim_id" not in body
+        assert not hasattr(main, "_claims")
 
 
 class TestRefusals:
