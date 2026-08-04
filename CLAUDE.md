@@ -14,10 +14,10 @@ father, a Singapore GP.
 
 | Piece | State |
 |---|---|
-| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 146 backend tests pass (1 skipped) |
+| Pipeline: redact → LLM map → doctor review → PDF fill | Working, 172 backend tests pass (1 skipped). **Stateless as of 2026-08-04** — `POST /map` then `POST /forms/{id}/pdf`, no claim id, nothing held between them |
 | Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 101 tests. **Runs in Chrome 150, and has now filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
-| `POST /map` — stateless mapping for the extension | Working, shares `_review_rows` with `POST /claims` |
+| `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
 | Bank → fallback → draft schema | Working, 114 extension tests + 13 backend. Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. **Not yet run in a browser** — RoboForm is in the bank, so exercising the fallback needs a page that is not |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
@@ -31,12 +31,13 @@ Note: commit `ec7c09c` is named "full deployment on fly.io" but only adds the
 static mount to `main.py` — the actual deploy happened later, on 2026-07-30.
 Verify deploy state with `flyctl`, not commit titles.
 
-**Always deploy with `fly deploy --ha=false`.** Fly's default adds a second
-machine for high availability, which silently breaks this app: a claim created
-on machine A 404s when the approve request lands on machine B. `fly.toml`'s
-`min_machines_running = 1` does *not* prevent it. The first deploy created two
-machines and needed `fly scale count 1` to undo. Check with `fly status` after
-every deploy.
+**`fly deploy --ha=false` — now a cost preference, not a correctness rule.**
+It used to be load-bearing: Fly's default adds a second machine, and a claim
+created on machine A 404'd when approve landed on machine B. With the claim
+store gone (2026-08-04) any number of machines is correct. Keep passing it
+while this is a pilot because one machine is cheaper and easier to reason
+about — but a second one no longer breaks anything, so this is not the first
+thing to suspect when something goes wrong.
 
 ---
 
@@ -129,16 +130,53 @@ thing that exercises host auto-detection at all.
 
 ## Decisions and why
 
+**Hosting is being revisited (2026-08-04), and the statelessness above is what
+unblocks it.** The original single-origin decision assumed the website *was*
+the product; it is not any more, so the website (static: landing, demo,
+pricing) and the API (Python, needs the key, needs a region) no longer have to
+share a host. Two options are open, both now viable:
+
+- **Website on Vercel, API on Fly.** Lowest risk, and the wiring already
+  exists — `VITE_API_URL` and `FORMFILL_ALLOWED_ORIGINS` were deliberately
+  left in place. Buys: no cold start on the marketing site, and the download
+  page stays up when the API is down (it went down with it for ten minutes on
+  2026-08-03).
+- **Everything on Vercel.** Possible only because the API is stateless now —
+  serverless gives no sticky instance, so the old claim store would have 404'd
+  every approve. Two things to check before committing, neither yet done:
+  whether the plan's function timeout survives a 10–30s Opus call with
+  adaptive thinking, and whether the function region can be pinned to
+  Singapore.
+
+Below is the original reasoning, kept because it explains what single-origin
+was protecting:
+
 **One app on Fly, not Vercel + Fly.** The frontend is built into the image and
 served by FastAPI, so there is one URL and one deploy. This removed the CORS
 allowlist and `VITE_API_URL` from the critical path — two fewer things to
 misconfigure during a pilot. `FORMFILL_ALLOWED_ORIGINS` still works and is
 still wired up, in case the frontend is ever split out again.
 
-**Singapore region, exactly one always-on machine.** Claims live in an
-in-memory store (a privacy feature, not an oversight), so a second machine or
-an auto-stop mid-review would split or lose a claim. `fly.toml` pins
-`min_machines_running = 1` and `auto_stop_machines = "off"`.
+**The claim store is gone; the server is stateless (2026-08-04).** It existed
+because the website reviewed on one screen and downloaded from another, so
+something had to hold the rows in between — with a one-hour TTL, a purge timer,
+and the constraint that made `--ha=false` load-bearing (a claim created on
+machine A 404s when approve lands on machine B).
+
+`POST /forms/{id}/pdf` takes the final values and returns the PDF in one
+request. The schema, not a stored claim, says how each field is addressed, so
+nothing needs remembering. The review screen already held every row, so the
+client change was one function.
+
+What this deleted, all at once: the retention window (now genuinely zero), the
+two-machine trap, the purge timer, and the reason this app could not run on a
+serverless host. The remaining reason to pin one machine in `sin` is cost and
+data residency, not correctness.
+
+**Singapore region.** Clinical text should not leave SG-adjacent
+infrastructure unnecessarily, so `primary_region = "sin"` stays. The app
+scales to zero; a cold start measured 5.7s on 2026-08-03, which is fine for
+the extension's API calls and poor for a public landing page.
 
 **Field labels live in the schema JSON, not the UI.** Each field carries a
 `label` ("ICD-10 code") alongside its `description` (the instruction the model
@@ -270,7 +308,8 @@ to hold the claim between "typed the note" and "filled the form"**. Put the
 paste area beside the form and none of that has a reason to exist.
 
 Hence `POST /map`: same review rows, no claim id, nothing stored, nothing to
-purge. Retention on the extension path is zero rather than one hour. `redact →
+purge. Retention is zero — and as of 2026-08-04 the PDF path works the same
+way, so this is no longer a property one path has and the other lacks. `redact →
 map → assemble` lives in `_review_rows` so both endpoints share one path — a
 second caller that reimplemented it is how a route that skips redaction gets
 introduced.
@@ -484,8 +523,8 @@ at coordinates onto flat CamScanner scans that have no fields at all
 page top-left**, not PDF's bottom-left origin — the conversion happens once in
 `overlay_fill._box_to_pdf_rect`. `fill_mode: "web"` is the extension's target:
 no `pdf_path` and no `pdf_field_name`, because the control is located at fill
-time by matching labels against the live page. `POST /claims/{id}/approve`
-refuses a web schema — there is no PDF to hand back.
+time by matching labels against the live page. `POST /forms/{id}/pdf` refuses a
+web schema — there is no PDF to hand back.
 
 **Never eyeball overlay coordinates — use the proof loop.**
 `python scripts/calibrate_overlay.py <pdf> <out>` renders each page with a
@@ -528,9 +567,11 @@ omission to "fix".
   that redacts the name existed. Do not "improve" the parser by handing the
   block to Claude when a field comes back blank — a blank field is a doctor
   typing one line.
-- The token→value map stays in server memory; claims are in-memory only,
-  deleted on download, purged after 1h. `POST /map`, `POST /map-live` and
-  `POST /parse` store nothing at all.
+- **The server is stateless. Every route.** The token→value map lives only for
+  the duration of one request, and there is no claim store, session or id
+  behind any endpoint. Do not add one — a shared store would be a database
+  holding patient data, which this product says publicly it does not have, and
+  it would restore the two-machine trap that `--ha=false` used to guard.
 - **A drafted schema is a proposal, never an installation.** `/map-live`
   returns rows; the panel renders JSON; a human commits it. Do not add a route
   that writes a schema to disk from a running claim — the schema then governs
