@@ -31,7 +31,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**383 tests pass**: 188 backend (1 skipped), 160 extension, 35 website.
+**406 tests pass**: 192 backend (1 skipped), 168 extension, 46 website.
 
 | Piece | State |
 |---|---|
@@ -455,6 +455,53 @@ expands: choosing between 2026 and 1926 for "26" is a guess, and a claim form
 carries dates of birth as readily as dates of admission. A field wanting a full
 year that receives a short one keeps what the model returned and reaches the
 doctor in review.
+
+**Every filled date is confirmed by the doctor, whatever its status
+(2026-08-05).** The owner's call. `needs_review = status != "extracted"` asks
+"did the notes say this", and for a date that is the wrong question: a note can
+state `03/07` perfectly clearly and still not say whether it meant 3 July or
+7 March. Nothing downstream can separate the two — the note is the only
+evidence and the note is exactly what is ambiguous — so this is not a check the
+pipeline can do on the doctor's behalf.
+
+It is also the one place the usual asymmetry inverts. Everywhere else a wrong
+answer is a *blank* the doctor notices; a swapped date is a **plausible wrong
+answer that looks right**, signed and sent as their own statement of when the
+patient was admitted.
+
+Four things that are deliberate and easy to undo by "simplifying":
+
+- **Rows carry a `recheck` reason, not just the flag.** A held date whose badge
+  reads "Extracted from the note" above a bare Confirm button tells the doctor
+  there is nothing to check. Both review surfaces render `recheck` *instead of*
+  the status note.
+- **Only dates that carry a value are held.** A blank is written by hand
+  anyway. On `aia_medical_report` — 22 date fields of 96 — that is the
+  difference between confirming the two or three dates a note supported and
+  confirming twenty-two.
+- **Demographic dates are held too**, and they have the least excuse for being
+  trusted: `parse_demographics` resolves DD/MM by *rule* (Singapore writes day
+  first), with no model and no `source` snippet, so a note written the other way
+  round is misread silently and identically every time. This is the one
+  exception to "demographic = pre-approved green".
+- **The website's "Confirm all" cannot reach a date.** A bulk button confirms a
+  swapped date exactly as fast as a correct one, which is the failure the row
+  was added to prevent. Its count says how many it will actually clear, and it
+  disappears when that is none.
+
+Both surfaces spell the value out under the box — "3 July 2026 — or 7 March
+2026 if the notes wrote the month first" — and keep it in step as the doctor
+edits, because a correction they cannot see take is not a correction. The rival
+reading is offered only when the day is ≤ 12; 25/07 has one reading, and a
+second one that cannot exist is noise that makes the real warnings skimmable.
+Neither expands a two-digit year, for the same reason `_apply_date_format`
+refuses to.
+
+**If the confirm burden proves too high** on a long form, the narrowing to
+reach for is holding only dates whose day is ≤ 12 — those are the only
+ambiguous ones, and it is a one-line change in `_date_recheck`. It was not done
+now because "always" is what was asked for, and because a doctor who learns
+that *some* dates are pre-approved has to work out which ones.
 
 **Still open:** the owner's spec says "date always follows dd/mm/yyyy". That
 most likely means *day-first when reading a note* (so `08/02/2001` is 8
@@ -954,6 +1001,12 @@ omission to "fix".
   the insurer's form, not asking BreezeFill for anything, and an observer that
   wrote on render would quietly put the review step after the writing.
   `panel.test.js` asserts no fill message is sent.
+- **A date with a value is never written without a confirm click**, whatever
+  status it carries. `extracted` means the notes stated it, not that they
+  stated it unambiguously, and DD/MM versus MM/DD is not something a model or a
+  regex can settle from the note. Do not "tidy" this back into
+  `needs_review = status != "extracted"`, and do not let a bulk-confirm control
+  reach one.
 - **An off-list answer is `missing`, never the nearest option.** When a field
   declares `options`, case and whitespace are forgiven and nothing else. Do not
   add fuzzy matching to raise the fill rate — the value is a clinical statement
