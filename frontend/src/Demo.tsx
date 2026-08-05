@@ -22,15 +22,15 @@ import { useState } from "react";
 const NOTE = `Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
 18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902
 
-14/03/2026, 0930h. 53M, previously well, presents with 2-day history of
+03/07/2026, 0930h. 53M, previously well, presents with 2-day history of
 periumbilical pain migrating to right iliac fossa. Nausea, two episodes
 of vomiting.
 
 O/E: T 38.1, HR 96. Marked RIF tenderness with rebound.
-Ix: WBC 15.4, CRP 88. CT abdomen 14/03/2026: acute appendicitis.
+Ix: WBC 15.4, CRP 88. CT abdomen 03/07/2026: acute appendicitis.
 
-Admitted Mount Elizabeth Hospital 14/03/2026. Laparoscopic
-appendicectomy 15/03/2026. Discharged 17/03/2026.`;
+Admitted Mount Elizabeth Hospital 03/07/2026. Laparoscopic
+appendicectomy 04/07/2026. Discharged 06/07/2026.`;
 
 const DEMOGRAPHICS = [
   { label: "Full name", value: "Chua Beng Huat" },
@@ -51,10 +51,16 @@ interface Row {
   /**
    * Why this answer is held even though its status is green.
    *
-   * Only dates carry one. The note stated 14/03/2026 outright, which settles
-   * what the note says and not what it meant — and the real product holds
-   * every date for exactly that reason, so a demo that walked past this one
+   * Only dates carry one, and only ambiguous ones. The note stated 03/07/2026
+   * outright, which settles what the note says and not what it meant — and the
+   * real product holds exactly those, so a demo that walked past this row
    * would be showing a fill the software will not perform.
+   *
+   * The consultation is dated 3 July rather than the 14 March it used to be
+   * for this reason: a day over 12 cannot be a month, so the old date was
+   * unambiguous and the product would no longer stop on it. A demo whose one
+   * illustration of a rule does not trigger the rule teaches the wrong thing
+   * about it.
    */
   recheck?: string;
 }
@@ -76,22 +82,22 @@ const ROWS: Row[] = [
     label: "Diagnosis",
     value: "Acute appendicitis",
     status: "extracted",
-    source: "CT abdomen 14/03/2026: acute appendicitis",
+    source: "CT abdomen 03/07/2026: acute appendicitis",
   },
   {
     id: "admitted",
     label: "Date of admission",
-    value: "14/03/2026",
+    value: "03/07/2026",
     status: "extracted",
-    source: "Admitted Mount Elizabeth Hospital 14/03/2026",
-    recheck: "14 March 2026 — check the day and month are the right way round.",
+    source: "Admitted Mount Elizabeth Hospital 03/07/2026",
+    recheck: "3 July 2026 — or 7 March 2026? Check the day and month are the right way round.",
   },
   {
     id: "operation",
     label: "Operation performed",
     value: "Laparoscopic appendicectomy",
     status: "extracted",
-    source: "Laparoscopic appendicectomy 15/03/2026",
+    source: "Laparoscopic appendicectomy 04/07/2026",
   },
   {
     id: "icd",

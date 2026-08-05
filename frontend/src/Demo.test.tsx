@@ -83,7 +83,7 @@ describe("the walkthrough", () => {
     // the paste box above it — which is the point: the quote is lifted out of
     // the note the doctor pasted, not composed.
     const rows = within(panel().querySelector(".demo-rows") as HTMLElement);
-    expect(rows.getByText(/CT abdomen 14\/03\/2026: acute appendicitis/)).toBeDefined();
+    expect(rows.getByText(/CT abdomen 03\/07\/2026: acute appendicitis/)).toBeDefined();
     expect(rows.getAllByText(/quoted from your note/i).length).toBeGreaterThan(0);
   });
 });
@@ -124,6 +124,20 @@ describe("what the demo refuses to skip", () => {
     const row = within(panel()).getByText("Date of admission").closest(".demo-row");
     expect(row?.querySelector(".pill")?.className).toContain("green");
     expect(row?.querySelector("button")).not.toBeNull();
+  });
+
+  test("the demo's date is one the product would actually stop on", async () => {
+    // The rule only holds a date whose day could also be a month, so a
+    // walkthrough dated 14/03 would illustrate a stop that never happens.
+    // Guarding the day rather than the literal date, so the note can be
+    // rewritten without quietly losing the demonstration.
+    await advanceTo(5);
+    const row = within(panel()).getByText("Date of admission").closest(".demo-row");
+    const shown = row?.querySelector(".demo-row-value")?.textContent ?? "";
+    const day = Number(shown.split("/")[0]);
+
+    expect(day).toBeGreaterThan(0);
+    expect(day).toBeLessThanOrEqual(12);
   });
 
   test("the field the note does not answer is left empty in the form", async () => {
