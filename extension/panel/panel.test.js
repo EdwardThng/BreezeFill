@@ -1111,13 +1111,17 @@ describe("a date row", () => {
     expect(hint).toContain("7 March 2026");
   });
 
-  test("offers no rival reading for a day that cannot be a month", async () => {
-    // 25/07 has exactly one reading. Offering a second one that cannot exist
-    // is noise, and noise is what makes the real warnings skimmable.
-    await mapWith([{ ...ADMISSION_DATE, value: "25/07/2026" }]);
+  test("is still spelled out when it is not ambiguous, but offers no rival", async () => {
+    // 25/07 has exactly one reading, so the backend sends no recheck reason
+    // and the row is not held — but the date is still worth reading back,
+    // because a doctor scanning the list should not have to parse digits.
+    await mapWith([
+      { ...ADMISSION_DATE, value: "25/07/2026", needs_review: false, recheck: null },
+    ]);
 
-    const hint = $("rows").querySelector(".date-hint").textContent;
-    expect(hint).toBe("25 July 2026");
+    expect($("rows").querySelector(".date-hint").textContent).toBe("25 July 2026");
+    expect($("rows").querySelector(".recheck")).toBeNull();
+    expect($("rows").querySelector("button.confirm")).toBeNull();
   });
 
   test("keeps the spelled-out date in step as the doctor corrects it", async () => {
