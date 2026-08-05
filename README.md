@@ -45,7 +45,10 @@ backend/    FastAPI service
   │                  between requests, so there is nothing to purge
   └── schemas/       one JSON schema per insurer form
 forms/      source fillable PDFs (one per schema)
-scripts/    dev utilities (synthetic sample form generator)
+assets/logo/ every sized copy of the logo, named for where it is used;
+            all generated from one master by scripts/make_logo_assets.py
+scripts/    dev utilities (sample form generator, overlay calibration,
+            logo asset generation)
 tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 ```
 
@@ -55,8 +58,8 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 |---|---|---|
 | `GET` | `/forms` | List available form schemas |
 | `POST` | `/parse` | Split one pasted block into demographic fields. Patterns only — no model, nothing stored |
-| `POST` | `/map` | Redact + extract for the browser extension. Stateless: no `claim_id`, nothing retained |
-| `POST` | `/map-live` | Same, against a page's own field labels, for a form no schema describes. A successful fill then drafts that schema |
+| `POST` | `/map` | Redact + extract against a named schema. Stateless: no `claim_id`, nothing retained. Kept for the PDF UI; the extension no longer uses it |
+| `POST` | `/map-live` | **What the extension calls.** Every question on the page in front of the doctor, each carrying the best instruction available for it — a matching schema's `description` where one exists, the page's own wording where none does. Refuses with `422` when nothing on the page is labelled and `413` when there are more questions than one call can carry |
 | `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call |
 | `GET` | `/health` | Liveness + loaded form count |
 | `GET` | `/download/breezefill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
@@ -151,11 +154,18 @@ Coverage includes a golden set of synthetic clinical notes asserting zero identi
 
 A synthetic sample form (`dev_sample_v1`) ships with the repo so the pipeline can be exercised without any real insurer forms; regenerate its PDF with `python scripts/make_dev_form.py`.
 
-**For a web form, you do not have to write the schema first.** Fill it once with
-the extension's fallback — it maps against the page's own field labels — and it
-hands back a draft schema to review and drop into `backend/schemas/`. Read it
-before committing: the field descriptions start out as the page's own wording,
-and a description is what tells the model what a question *means*.
+**For a web form, you do not have to write the schema first.** The extension
+fills whatever questions are on the page whether or not one exists — a schema
+only makes the answers sharper. Fill the form once and it hands back a draft
+schema to review and drop into `backend/schemas/`. Read it before committing:
+the field descriptions start out as the page's own wording, and a description
+is what tells the model what a question *means*.
+
+Author a web schema's labels from **the page's own wording**, not from the
+equivalent PDF form's. The join between schema fields and live controls
+compares words rather than meaning, so "Date of first consultation" does not
+match "7. When did the patient first consult you" — the control still gets
+filled, just without the sharper instruction.
 
 ---
 
