@@ -48,6 +48,20 @@ interface Row {
   value: string;
   status: Status;
   source?: string;
+  /**
+   * Why this answer is held even though its status is green.
+   *
+   * Only dates carry one. The note stated 14/03/2026 outright, which settles
+   * what the note says and not what it meant — and the real product holds
+   * every date for exactly that reason, so a demo that walked past this one
+   * would be showing a fill the software will not perform.
+   */
+  recheck?: string;
+}
+
+/** An answer the doctor has to click before it can be written. */
+function needsConfirming(row: Row): boolean {
+  return row.status === "inferred" || Boolean(row.recheck);
 }
 
 const ROWS: Row[] = [
@@ -70,6 +84,7 @@ const ROWS: Row[] = [
     value: "14/03/2026",
     status: "extracted",
     source: "Admitted Mount Elizabeth Hospital 14/03/2026",
+    recheck: "14 March 2026 — check the day and month are the right way round.",
   },
   {
     id: "operation",
@@ -135,7 +150,7 @@ const STEPS: Step[] = [
   {
     title: "Check what it proposes",
     caption:
-      "Every answer says where it came from. Green is quoted from your note, and the quote is shown. Amber is an inference and cannot be written until you click Confirm. Grey was not in the note and is left for you — the tool would rather leave a blank than invent a referring doctor.",
+      "Every answer says where it came from. Green is quoted from your note, and the quote is shown. Amber is an inference and cannot be written until you click Confirm. Grey was not in the note and is left for you — the tool would rather leave a blank than invent a referring doctor. Dates are confirmed too, however clearly the note stated them: 03/07 is 3 July here and 7 March in half the world's software, and that is not a question a model can settle for you.",
     panel: "review",
   },
   {
@@ -157,7 +172,11 @@ const FORM_FIELDS = [
 
 export default function Demo() {
   const [step, setStep] = useState(0);
-  const [confirmed, setConfirmed] = useState(false);
+  // Per row rather than one flag for the lot: the panel holds an inferred
+  // answer and a date for different reasons, and one button clearing both
+  // would demonstrate a bulk confirm the product deliberately does not offer
+  // over a date.
+  const [confirmed, setConfirmed] = useState<string[]>([]);
   const current = STEPS[step];
 
   const go = (next: number) => {
@@ -166,12 +185,15 @@ export default function Demo() {
 
   const restart = () => {
     setStep(0);
-    setConfirmed(false);
+    setConfirmed([]);
   };
 
-  // Reaching the fill step without confirming would show the amber value
+  // Reaching the fill step with anything unconfirmed would show that value
   // landing in the form, which is precisely what the product does not do.
-  const canAdvance = !(current.panel === "review" && !confirmed);
+  const outstanding = ROWS.filter(
+    (row) => needsConfirming(row) && !confirmed.includes(row.id),
+  );
+  const canAdvance = !(current.panel === "review" && outstanding.length > 0);
 
   return (
     <div className="demo">
@@ -190,7 +212,13 @@ export default function Demo() {
             BreezeFill
           </div>
 
-          <Panel step={current} confirmed={confirmed} onConfirm={() => setConfirmed(true)} />
+          <Panel
+            step={current}
+            confirmed={confirmed}
+            onConfirm={(id) =>
+              setConfirmed((ids) => (ids.includes(id) ? ids : [...ids, id]))
+            }
+          />
         </section>
 
         <section className="demo-browser" aria-label="The insurer's form">
@@ -231,8 +259,9 @@ export default function Demo() {
           <p>{current.caption}</p>
           {!canAdvance && (
             <p className="demo-nudge">
-              Confirm the amber value in the panel to continue — that click is
-              required in the real product too.
+              Confirm {outstanding.length === 1 ? "the remaining answer" : `all ${outstanding.length} answers`} in
+              the panel to continue — the inference and the date both need a
+              click, and both are required in the real product too.
             </p>
           )}
         </div>
@@ -291,8 +320,8 @@ function Panel({
   onConfirm,
 }: {
   step: Step;
-  confirmed: boolean;
-  onConfirm: () => void;
+  confirmed: string[];
+  onConfirm: (id: string) => void;
 }) {
   const shown = step.panel;
 
@@ -340,7 +369,7 @@ function Panel({
       {(shown === "review" || shown === "filled") && (
         <div className="demo-rows">
           {ROWS.map((row) => {
-            const needsClick = row.status === "inferred" && !confirmed;
+            const needsClick = needsConfirming(row) && !confirmed.includes(row.id);
             return (
               <div className={"demo-row " + row.status} key={row.id}>
                 <span className={"pill " + pillClass(row.status)}>
@@ -353,8 +382,16 @@ function Panel({
                 {row.source && (
                   <p className="demo-row-source">“{row.source}”</p>
                 )}
+                {/* Green, quoted, and still held. This is the one row that
+                    shows a doctor the product does not treat "the note said
+                    so" as the end of the question. */}
+                {row.recheck && <p className="demo-row-recheck">{row.recheck}</p>}
                 {needsClick && (
-                  <button className="demo-confirm" onClick={onConfirm}>
+                  <button
+                    className="demo-confirm"
+                    onClick={() => onConfirm(row.id)}
+                    aria-label={`Confirm ${row.label}`}
+                  >
                     Confirm
                   </button>
                 )}

@@ -209,6 +209,16 @@
   padding-left: 8px;
 }
 
+/* Why a green row is still waiting on the doctor. Amber text under a green
+   pill is the point rather than an inconsistency: the note quoted the date
+   correctly, and what it means is still a question. */
+.demo-row-recheck {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amber);
+}
+
 .demo-confirm {
   margin-top: 9px;
   padding: 5px 12px;
