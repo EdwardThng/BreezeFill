@@ -428,6 +428,21 @@ button.link:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+/* A row held for a reason its status does not explain. Heavier than the
+   ordinary status note because it is an instruction rather than a
+   description: there is something specific to look at here. */
+.status-note.recheck {
+  font-weight: 600;
+}
+
+/* The date in words, directly under its box. Quiet — it is the answer to the
+   note below it, not a second warning. */
+.date-hint {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .confirm {
   display: inline-flex;
   align-items: center;
