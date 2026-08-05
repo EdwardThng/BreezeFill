@@ -17,7 +17,7 @@ from one pasted block to values in the page. No insurer portal yet, and
 RoboForm is plain HTML, so nothing there says anything about a
 framework-rendered field.
 
-146 tests pass against jsdom and a synthetic fixture. Running it in a browser
+160 tests pass against jsdom and a synthetic fixture. Running it in a browser
 has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
@@ -56,7 +56,8 @@ requests no storage permission, so there is nowhere to persist it).
 
 | File | Role |
 |---|---|
-| `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`, no `storage`. |
+| `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`, no `storage`. Declares `icons` and `action.default_icon` from `icons/`. |
+| `icons/` | Generated — see `assets/logo/`, never hand-edited. The toolbar icon is the doctor's access grant, not decoration. |
 | `background.js` | Opens the side panel on action click. Nothing else, deliberately. |
 | `panel/` | The doctor's surface: one pasted block → `POST /parse` → `POST /map` → review → fill. Holds the claim in memory. |
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
@@ -81,40 +82,60 @@ by mistake. This is also why `background.js` stays empty of state: an MV3
 service worker is evicted after ~30s idle, so anything it had to remember
 would have to be persisted.
 
-### Which form is this, and what if we don't have it
+### Which form is this — and why it no longer decides anything
 
-Three steps, in order.
+**The bank stopped being a gate on 2026-08-05.** The doctor has to submit the
+form on their screen whatever this repository knows about it, so "is this in
+the bank" can only change *how well each question is answered*, never whether
+they are attempted. There is no picker to get past, no fallback to opt into,
+and no state in which the panel looks at a form and declines to fill it.
 
-**1. The bank.** Every schema is scored against the live controls and the best
-fit wins. This asks "does this page carry the fields this schema describes",
-which is what matters, rather than reading a form id out of the markup, which
-rots at the insurer's next deploy. A host in a schema's `hosts` narrows the
-shortlist first but does not settle it — one insurer serves several forms from
-one domain. Two schemas fitting equally well is not a winner; that falls back
-to the picker.
+**One path.** Every fillable control on the page becomes a question to map.
+`locate.enrich` joins each control to the schema field that describes it, if
+one does, and that field lends its `description` — the instruction you would
+give a colleague ("the date the patient FIRST consulted this doctor for this
+condition, not the latest visit") rather than the question as the page happens
+to word it. A control nothing describes is still filled, from its own label.
+Weaker, and reported as such, but a blank the product could have answered is a
+worse outcome than a weaker instruction.
 
-Identification uses looser thresholds than filling (`IDENTIFY_MIN_RATE` 0.4 vs
-`MIN_MATCH_RATE` 0.7). A wizard shows one step at a time, so the right schema
-may only find a third of its fields on the page in front of you. That is safe
-because identifying is not deciding: whatever is picked still has to clear the
-fill guards before a value is written.
+Two properties of the join worth keeping:
 
-**2. No schema? Map against the page.** `POST /map-live` takes the page's own
-labels instead of a schema's fields. Same redaction, same review, same confirm
-before anything is written. Offered only when nothing fits, and never the
-default, because it is **strictly weaker** — a schema's `description` is the
-instruction you would give a colleague ("the date the patient FIRST consulted
-this doctor for this condition, not the latest visit"), and a page can only
-supply the question as it is worded.
+- **A described control travels under the schema's wording, not the page's.**
+  This is a privacy property, not a cosmetic one: on a page the bank fully
+  describes, what leaves the browser is exactly what the old schema-only route
+  sent. Only questions nothing describes carry their own labels out, which is
+  the irreducible cost of answering them at all. The join runs *in the page*,
+  so instructions reach controls without page structure being sent anywhere to
+  arrange it.
+- **A weak or ambiguous match attaches nothing.** Same `MIN_SCORE` and tie
+  margin that filling uses. Attaching the wrong description is worse than
+  attaching none — it would confidently tell the model to answer a different
+  question than the one on screen, and unlike a mislocated value there is
+  nothing on the page to make that visible in review.
 
-It also has a cost the schema path does not: **page structure becomes an LLM
-input on every claim mapped this way.** Labels are scrubbed twice, in the
-browser and again server-side, and that still cannot catch a name.
+**The limit, found by a test that expected to pass.** Matching compares words,
+not meaning. "7. When did the patient first consult you" and "Date of first
+consultation" are the same question, share one content token, score 0.22, and
+do not match. It fails safely — the control is still filled from its own
+label — but it means **a web schema wants labels authored from the page's own
+wording**, which is what the draft-schema flow produces, rather than from the
+labels of the equivalent PDF form. Do not assume `aia_ghs_claim`'s labels will
+enrich the ClaimEZ page; they were written for a PDF.
 
-Note this path *does* need an `ANTHROPIC_API_KEY` — unlike the RoboForm route
-above, its fields are all `source: "llm"`.
+Identification still runs, quietly, to pick which schema does the enriching.
+It scores each schema by its best-fitting single step at looser thresholds than
+filling (`IDENTIFY_MIN_RATE` 0.4 vs `MIN_MATCH_RATE` 0.7), because a wizard
+shows one step at a time. A host in `hosts` narrows the shortlist but does not
+settle it — one insurer serves several forms from one domain. The picker
+survives as a manual override for a doctor who knows the bank describes their
+form better than the page does.
 
-**3. A successful schema-free fill hands back a draft schema.** JSON in the
+**Everything goes through `POST /map-live`**, which now carries both kinds of
+field in one request. It needs an `ANTHROPIC_API_KEY` — unlike the RoboForm
+route above, these fields are `source: "llm"`.
+
+**A successful fill of a form nothing described hands back a draft schema.** JSON in the
 panel, for you to read and commit into `backend/schemas/`. It is not installed
 and not committed automatically, and that is deliberate: a schema governs every
 later claim against that form, so an unreviewed one turns one mis-mapped field
@@ -169,15 +190,21 @@ snap to the nearest option, and that is not a gap to close: the value is a
 clinical statement the doctor signs, and a near-miss corrected by string
 distance looks exactly like an answer the notes supported.
 
-### Two refusals worth knowing before you debug
+### Refusals worth knowing before you debug
 
 - **Below `MIN_MATCH_RATE`, the filler writes nothing at all** rather than
   filling the part that still matches. A partial fill is indistinguishable
   from a complete one to someone reviewing quickly. A panel reporting "only
   matched 3 of 9" is working as designed.
-- **A live control no schema field claims is left blank** and listed back to
-  the doctor as theirs to fill. That list is also the input to extending the
-  schema.
+- **A live control no schema field claims is still filled**, from its own
+  label, and reported as undescribed. This is the 2026-08-05 change: it used
+  to be left blank and listed back to the doctor. That list is still the input
+  to extending the schema — it is just no longer a blank on the form.
+- **A page whose questions cannot be read is refused with a reason.** No
+  labelled fields comes back `422`, more questions than one call can carry
+  comes back `413`, and the panel turns each into a sentence. Both used to
+  surface as a bare "Request failed (422)", which a tester hit and could do
+  nothing with.
 
 ---
 
@@ -306,8 +333,16 @@ only as good as that list.
 - **An AIA ClaimEZ schema**, blocked on a learn-mode dump from a live page.
   This is also what would switch wizard support on: `step` and `options` are
   schema fields, and no schema sets either today.
-- **A run of the schema-free fallback against a real unknown page.** It is
-  tested, but RoboForm is in the bank now, so it exercises the wrong branch.
+- **A run against a real unknown page.** The undescribed-control path is
+  tested, but RoboForm is in the bank, so it exercises the described branch.
+  Watch two things a test cannot see: how many of a real page's controls come
+  back unlabelled, and whether `MAX_LIVE_FIELDS = 50` is anywhere near right
+  now that *every* control is mapped rather than only the unclaimed ones.
+- **A store listing.** Distribution is the live blocker: a zip plus Developer
+  Mode is not something a GP will do, and Chrome blocks self-hosted `.crx`
+  outside enterprise policy. Icons are done; a privacy policy, listing assets,
+  and dropping the never-requested `optional_host_permissions` are not. See
+  next steps in `../CLAUDE.md`.
 
 ## Assumptions that jsdom cannot test
 
