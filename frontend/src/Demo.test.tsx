@@ -26,7 +26,11 @@ async function advanceTo(stepNumber: number) {
   const user = userEvent.setup();
   while (!screen.queryByText(`Step ${stepNumber} of 6`)) {
     if (next().hasAttribute("disabled")) {
-      await user.click(screen.getByRole("button", { name: "Confirm" }));
+      // More than one row can be waiting — an inference and a date are held
+      // for different reasons — so clear whatever is outstanding.
+      for (const button of screen.getAllByRole("button", { name: /^Confirm / })) {
+        await user.click(button);
+      }
     }
     await user.click(next());
   }
@@ -85,25 +89,41 @@ describe("the walkthrough", () => {
 });
 
 describe("what the demo refuses to skip", () => {
-  test("you cannot reach the fill step without confirming the inferred value", async () => {
+  test("you cannot reach the fill step without confirming what is held", async () => {
     const user = userEvent.setup();
     // Steps 1-4 advance freely.
     for (let i = 0; i < 4; i += 1) await user.click(next());
     expect(screen.getByText(/Step 5 of 6/)).toBeDefined();
 
-    // Step 5 is the review, and it is a wall until the amber row is accepted.
+    // Step 5 is the review, and it is a wall until both held rows are taken.
     expect(next()).toHaveProperty("disabled", true);
-    expect(screen.getByText(/confirm the amber value/i)).toBeDefined();
+    expect(screen.getByText(/Confirm all 2 answers/i)).toBeDefined();
 
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Confirm ICD-10 code" }));
+    expect(next()).toHaveProperty("disabled", true);
+
+    await user.click(screen.getByRole("button", { name: "Confirm Date of admission" }));
     expect(next()).toHaveProperty("disabled", false);
   });
 
-  test("the inferred row is the only one asking to be confirmed", async () => {
+  test("the inference and the date are the rows asking to be confirmed", async () => {
     await advanceTo(5);
-    // Quoted values do not need a click; a missing one has nothing to accept.
-    expect(within(panel()).getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
+    // A quoted value needs no click; a missing one has nothing to accept.
+    // A date does, however cleanly the note stated it — 03/07 is 3 July here
+    // and 7 March in half the world's software, and the note cannot say which.
+    expect(within(panel()).getAllByRole("button", { name: /^Confirm / })).toHaveLength(2);
     expect(within(panel()).getByText(/inferred — confirm this/i)).toBeDefined();
+    expect(within(panel()).getByText(/day and month are the right way round/i)).toBeDefined();
+  });
+
+  test("the held date is green and quoted, and still not written", async () => {
+    // The row exists to show that "the note said so" is not the end of the
+    // question. If it ever renders as amber, the demo has quietly turned it
+    // into an ordinary inference and stopped making that point.
+    await advanceTo(5);
+    const row = within(panel()).getByText("Date of admission").closest(".demo-row");
+    expect(row?.querySelector(".pill")?.className).toContain("green");
+    expect(row?.querySelector("button")).not.toBeNull();
   });
 
   test("the field the note does not answer is left empty in the form", async () => {
