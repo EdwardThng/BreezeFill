@@ -31,7 +31,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**383 tests pass**: 188 backend (1 skipped), 159 extension, 35 website.
+**383 tests pass**: 188 backend (1 skipped), 160 extension, 35 website.
 
 | Piece | State |
 |---|---|
@@ -40,6 +40,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
+| Logo and icons | **Done (2026-08-05).** One generated set in `assets/logo/`, named for where each file is used rather than by size; `scripts/make_logo_assets.py` rebuilds it from the master. The extension declares `icons` and `action.default_icon` at last — it shipped with none until now, so Chrome drew a puzzle piece where the doctor is told to click. 16px assets are framed tighter because the mark blurs at that size; `assets/logo/README.md` has the reasoning |
 | One path: always map the page | **Built and green (2026-08-05).** The bank stopped gating: every fillable control becomes a question, a matching schema lends its `description` to the controls it describes, and a miss costs sharpness rather than the fill. `POST /map` is no longer used by the extension — `/map-live` carries both kinds of field. See "the bank is no longer a gate" |
 | Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
@@ -439,6 +440,28 @@ states this asymmetry explicitly and holds `inferred` to what a clinician
 would conclude without hesitation. `docs/test_notes.md` case 5 is the
 regression check: a one-line note should come back almost entirely `missing`.
 
+**A field's stated date format beats the global one (2026-08-05).** Found by
+running a real claim through production: the AIA form came back with
+`14/03/26` in two boxes and `14/03/2026` in two others. Every date description
+in `aia_ghs_claim` asks for `DD/MM/YY` — its boxes are small — while
+`SYSTEM_PROMPT` mandated `DD/MM/YYYY` absolutely. AIA GHS is the only schema
+wanting a short year, so the rule was right for four forms and wrong for one,
+and the model resolved the contradiction differently field by field.
+
+The prompt now defers to the field, and `_apply_date_format` **enforces** it
+rather than trusting the model to comply. It only ever drops the century, and
+only where the field asked for a short year, which is lossless. It never
+expands: choosing between 2026 and 1926 for "26" is a guess, and a claim form
+carries dates of birth as readily as dates of admission. A field wanting a full
+year that receives a short one keeps what the model returned and reaches the
+doctor in review.
+
+**Still open:** the owner's spec says "date always follows dd/mm/yyyy". That
+most likely means *day-first when reading a note* (so `08/02/2001` is 8
+February), which is about input and does not conflict with the above. If it
+means output must always carry four digits, `aia_ghs_claim` needs rewriting and
+its boxes may overflow. Confirm before changing anything here.
+
 **Doctors confirm, they don't just read.** Anything not directly `extracted`
 requires an explicit confirm click before the PDF can be generated. Editing a
 value counts as confirming it. Do not "helpfully" pre-confirm inferred fields.
@@ -790,6 +813,32 @@ only way to clear a stored `true` is to **remove the extension and load it
 again**; a plain reload keeps the flag. `false` is the default, so a clean
 install needs no call.
 
+**A default backend URL is a version pin (2026-08-05).** The trap that cost the
+most, because nothing in the symptoms pointed at it. A tester was sent the
+product and reported two unrelated-looking failures: the panel called itself by
+the old product name, and Map returned 422. Neither was a bug in this
+repository. `DEFAULT_API_BASE` still aimed at Fly, Fly had not been redeployed
+since 2026-08-03, and its `/download` therefore served the pre-rename
+extension — so the tester ran a two-day-old build against a two-day-old
+backend, and every symptom was downstream of that.
+
+The tell, for next time: **an error string that no longer exists in the source
+means the reporter is not running the source.** Grep for it before debugging
+anything else — `git ls-files | xargs grep -l "<the exact string>"` settles it
+in one command.
+
+Aim a default at a deployment nobody redeploys and you ship that day's build
+forever. Fly is destroyed now, but the same applies to any URL that ends up in
+`DEFAULT_API_BASE`: it is a version number in disguise.
+
+**A refusal the backend explained must not arrive as a bare status code.** Both
+live-mapping refusals used to surface as "Request failed (422)". The
+too-many-fields case is now **413** so the panel can tell them apart from the
+status line alone, and each maps to a sentence naming the cause. The panel must
+**not** read the response body to distinguish them: FastAPI's own validation
+failures are 422 too and they quote the offending input, which on `/map-live`
+contains the clinical note.
+
 **Three traps cost attempts on the first Vercel deploy (2026-08-05).** None is
 derivable from the code, and all three recur on a fresh clone or a rebuild.
 
@@ -1023,23 +1072,35 @@ at once. Paste `extension/learn/dump.js` into the console on the form page,
 run `breezefillLearn.dump()` per step, then `mergeDumps([...])`. Read it before
 sharing it — see `extension/README.md` for the residual risks.
 
-**2. Finish the Vercel migration — preview is done, three things remain.**
-Linked, deployed and verified on 2026-08-05 (see the status table). The build
-command and `public/` both turned out fine; what actually broke was three
-things nobody would have predicted, now in Traps. What is left:
+**2. ~~Finish the Vercel migration~~ — done 2026-08-05.** Production is live and
+public, the key is set for both environments, `DEFAULT_API_BASE` points at it,
+and Fly is destroyed. One residual: **previews sit behind Deployment
+Protection**, so the extension cannot be pointed at a preview URL (its `fetch`
+401s and reads as "Could not reach the backend"). Production is public, so
+testing against production works — turn protection off only if you want preview
+builds testable too.
 
-- **Turn off Deployment Protection for previews, or issue a bypass token.**
-  This is the blocker on ever driving the *extension* against Vercel: a
-  protected preview 401s the panel's `fetch`, which surfaces as "Could not
-  reach the backend" and looks like a backend fault.
-- **Add `ANTHROPIC_API_KEY` for Production** (`vercel env add
-  ANTHROPIC_API_KEY production`). It is Preview-scoped today, so production
-  `/map` 503s until this lands *and* a deploy follows — an env change does not
-  reach a function that is already deployed.
-- ~~**Point `DEFAULT_API_BASE` at the new domain.**~~ Done 2026-08-05, and it
-  turned out to be urgent rather than a formality: it still aimed at Fly, Fly
-  had not been redeployed since 2026-08-03, and a tester therefore installed a
-  pre-rename extension talking to a pre-rename backend. See the traps.
+**2b. Get the extension onto the Chrome Web Store.** Now the distribution
+blocker, since the product targets many doctors and "download a zip, enable
+Developer Mode" is not something a GP will do. Chrome also blocks self-hosted
+`.crx` outside enterprise policy, so the store is effectively the only route.
+**Unlisted** is probably right: one-click install from a link, not publicly
+discoverable, same review either way. It also solves the stale-build problem in
+Traps, because the store auto-updates every install.
+
+Before submitting: a **privacy policy** at a live URL (mandatory — this
+transmits clinical text); **listing assets** (screenshot, description, data
+disclosures); and drop `optional_host_permissions: ["https://*/*"]`, which is
+never requested anywhere in the code and only buys a slower review. Icons are
+done. Expect weeks rather than days — health data plus a permissions story
+means manual review, and a rejection restarts the clock.
+
+Two things that outrank the listing: **the extension has still never filled a
+real insurer form**, and inference is not SG-region, so the product's own rule
+is synthetic notes only — which twenty doctors with a one-click install will
+not honour. And **Vercel Hobby forbids commercial use**; a public site
+distributing to clinics is over that line whether or not money changes hands.
+Pro is $20/month.
 
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
