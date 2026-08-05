@@ -7,6 +7,13 @@
 
   "permissions": ["activeTab", "scripting", "sidePanel"],
 
+  "icons": {
+    "16": "icons/chrome-toolbar-16.png",
+    "32": "icons/chrome-toolbar-retina-32.png",
+    "48": "icons/chrome-manage-page-48.png",
+    "128": "icons/chrome-store-listing-128.png"
+  },
+
   "optional_host_permissions": ["https://*/*"],
 
   "side_panel": {
@@ -19,6 +26,10 @@
   },
 
   "action": {
-    "default_title": "Open BreezeFill"
+    "default_title": "Open BreezeFill",
+    "default_icon": {
+      "16": "icons/chrome-toolbar-16.png",
+      "32": "icons/chrome-toolbar-retina-32.png"
+    }
   }
 }
