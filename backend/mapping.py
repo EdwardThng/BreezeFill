@@ -222,6 +222,12 @@ class MappedField(BaseModel):
     # Guardrail 3: anything not directly extracted (or containing an
     # unresolved token) requires an explicit click to accept.
     needs_review: bool
+    # Why this row is held for the doctor when its status alone would not hold
+    # it. Rendered in place of the status note, because a confirm box with
+    # nothing to check becomes a box that gets clicked: "Copied from what you
+    # wrote" above a Confirm button tells the doctor there is nothing to do.
+    # None for every row whose status already explains itself.
+    recheck: str | None = None
     # Copied from the schema so the review screen can offer the real choices
     # instead of a free-text box, and so a doctor correcting a value picks
     # something the control will accept rather than retyping the near-miss the
@@ -477,6 +483,43 @@ def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+# Every date with a value goes back to the doctor to re-read, whatever status
+# it carries. `extracted` means the notes stated it — not that they stated it
+# unambiguously, and a bare DD/MM is not an unambiguous statement of anything.
+#
+# "03/07" is 3 July to a Singapore GP and 7 March to a CMS exporting US-format
+# dates, and both readings render as a perfectly plausible date on a claim
+# form. Nothing downstream can separate them: the note is the only evidence
+# and the note is precisely what is ambiguous, so re-reading it harder does not
+# help. `_apply_date_format` only reshapes what the model returned — it cannot
+# know which of two dates was meant.
+#
+# This is therefore not a check the pipeline can do on the doctor's behalf, and
+# it is the one place where the usual asymmetry inverts: a swapped date is not
+# a blank the doctor notices and writes in, it is a *wrong answer that looks
+# right*, signed and sent to the insurer as their own statement of when the
+# patient was admitted.
+DATE_RECHECK = (
+    "Check the day and month are the right way round — a date written 03/07 "
+    "is 3 July here and 7 March elsewhere."
+)
+
+
+def _date_recheck(field: FormField, value: str | bool | None) -> str | None:
+    """The recheck reason for a row, or None.
+
+    Only for dates that actually carry a value: a blank date is written by hand
+    anyway and holding it would ask the doctor to confirm nothing. On the
+    96-field AIA medical report that is the difference between confirming the
+    two or three dates a note supported and confirming twenty-two.
+    """
+    if field.type != "date":
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return DATE_RECHECK
+
+
 def _demographic_value(record: PatientRecord, attr: str) -> str | None:
     if attr == "dob":
         return f"{record.dob.day:02d}/{record.dob.month:02d}/{record.dob.year}"
@@ -497,6 +540,16 @@ def assemble_claim(
     for field in schema.fields:
         if field.source.startswith("demographics."):
             attr = field.source.removeprefix("demographics.")
+            value = _demographic_value(record, attr)
+            # A demographic date is held too, and it is the one with the least
+            # excuse for being trusted: it was not read by a model that could
+            # be asked to reconsider, it was assigned by `parse_demographics`,
+            # which resolves DD/MM by *rule* — Singapore writes day first — and
+            # a note that did not is misread silently and identically every
+            # time. The doctor sees it in the details drawer, but seeing a
+            # pre-filled box is not the same as checking it, and a wrong date
+            # of birth is what an insurer rejects the whole claim on.
+            recheck = _date_recheck(field, value)
             rows.append(
                 MappedField(
                     field_id=field.id,
@@ -504,10 +557,11 @@ def assemble_claim(
                     field_type=field.type,
                     label=field.display_label,
                     help=field.description,
-                    value=_demographic_value(record, attr),
+                    value=value,
                     status="demographic",
                     source=None,
-                    needs_review=False,
+                    needs_review=recheck is not None,
+                    recheck=recheck,
                     options=field.options,
                     # Demographics carry a step too: on a wizard they are
                     # usually the verification step, and a plan grouped by step
@@ -528,6 +582,10 @@ def assemble_claim(
                 value, status, needs_review = None, "missing", True
             else:
                 value = merged
+        # Never lowers the bar: a row already held stays held. The unresolved
+        # token branch above blanked the value, so that row gets no recheck
+        # reason and keeps the one its status gives it.
+        recheck = _date_recheck(field, value)
         rows.append(
             MappedField(
                 field_id=field.id,
@@ -538,7 +596,8 @@ def assemble_claim(
                 value=value,
                 status=status,
                 source=answer.source,
-                needs_review=needs_review,
+                needs_review=needs_review or recheck is not None,
+                recheck=recheck,
                 options=field.options,
                 step=field.step,
             )
