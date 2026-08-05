@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&family=Schibsted+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Onest:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #EDEEEC; }
+  a { color: #1A5FB4; }
+  a:hover { color: #12457f; }
+</style>
+</helmet>
+
+<section style="font-family: Figtree, system-ui, sans-serif; padding: 48px 56px 40px; display: flex; flex-direction: column; gap: 30px;">
+  <div style="display: flex; flex-direction: column; gap: 7px; max-width: 800px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #86868B;">Turn 5 · 4c refined</div>
+    <div style="font-size: 27px; font-weight: 500; color: #1D1D1F; letter-spacing: -0.02em;">4c, borders back, yellow out</div>
+    <div style="font-size: 14.5px; line-height: 1.65; color: #6E6E73; text-wrap: pretty;">Paper is now a neutral grey with only a trace of warmth — no cream, no ochre fills. Every card has a hairline border again. The craft rules being applied: concentric radii (14 outer / 10 row / 7 field, each inset by its padding so curves stay parallel), a single 4px spacing grid, one accent colour and nothing else saturated, hairlines at ~6% contrast instead of visible grey lines, tighter tracking as type gets larger, and status colour carried by a small marker plus words rather than by a tinted panel. Two treatments of the pending row.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+    <div id="5a" style="width: 496px; background: #FFFFFF; border: 1px solid #E5E5E3; border-radius: 16px; overflow: hidden; font-family: Figtree, system-ui, sans-serif;">
+      <div style="padding: 18px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EEEEEC;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1F; background: #F5F5F4; border: 1px solid #E5E5E3; border-radius: 5px; padding: 2px 6px;">5a</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1F;">Neutral, tinted pending</span>
+        <span style="font-size: 12.5px; color: #86868B;">paper #F5F5F4 · rows #FCFCFB</span>
+      </div>
+      <div style="padding: 22px; background: #EFEFEE; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #F5F5F4; border: 1px solid #E3E3E0; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 13.5px; line-height: 1.6; color: #1D1D1F;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.015em;">PasteFill</div>
+            <div style="font-size: 12.5px; color: #86868B;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 999px; background: #157553;"></span>
+                <span style="font-size: 12px; font-weight: 500; color: #157553;">Extracted from the note</span>
+              </div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #F4F2EE; border: 1px solid #D9D3C8; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 999px; background: #8A6A28;"></span>
+                <span style="font-size: 12px; font-weight: 500; color: #8A6A28;">Inferred — check this</span>
+              </div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFFFF; border: 1px solid #D9D3C8; border-radius: 7px; padding: 9px 11px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; border-radius: 7px; padding: 8px 14px; cursor: pointer;" style-hover="background: #F5F5F4;">Confirm</button>
+            </div>
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 999px; background: #A1A1A6;"></span>
+                <span style="font-size: 12px; font-weight: 500; color: #86868B;">Not found — fill by hand</span>
+              </div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #E7E7E4; padding-top: 14px;">
+            <div style="font-size: 12.5px; color: #86868B;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 8px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; border-radius: 9px; padding: 10px 17px; cursor: pointer;" style-hover="background: #35353A;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; border-radius: 9px; padding: 10px 17px; cursor: pointer;" style-hover="background: #F0F0EE;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="5b" style="width: 496px; background: #FFFFFF; border: 1px solid #E5E5E3; border-radius: 16px; overflow: hidden; font-family: Figtree, system-ui, sans-serif;">
+      <div style="padding: 18px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EEEEEC;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1F; background: #F5F5F4; border: 1px solid #E5E5E3; border-radius: 5px; padding: 2px 6px;">5b</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1F;">No tints at all</span>
+        <span style="font-size: 12.5px; color: #86868B;">pending marked by a left rule</span>
+      </div>
+      <div style="padding: 22px; background: #EFEFEE; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #F5F5F4; border: 1px solid #E3E3E0; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 13.5px; line-height: 1.6; color: #1D1D1F;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.015em;">PasteFill</div>
+            <div style="font-size: 12.5px; color: #86868B;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #157553;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-left: 3px solid #8A6A28; border-radius: 10px; padding: 12px 12px 12px 13px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8A6A28;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; border-radius: 7px; padding: 8px 14px; cursor: pointer;" style-hover="background: #35353A;">Confirm</button>
+            </div>
+            <div style="background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 12px; font-weight: 500; color: #86868B;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #E7E7E4; padding-top: 14px;">
+            <div style="font-size: 12.5px; color: #86868B;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 8px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #0071E3; background: #0071E3; color: #FFFFFF; border-radius: 9px; padding: 10px 17px; cursor: pointer;" style-hover="background: #0062C4;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; border-radius: 9px; padding: 10px 17px; cursor: pointer;" style-hover="background: #F0F0EE;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 330px; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E5E5E3; border-radius: 16px;">
+      <div style="font-size: 13px; font-weight: 500; color: #1D1D1F;">What is doing the work here</div>
+      <div style="font-size: 12.5px; line-height: 1.65; color: #6E6E73; display: flex; flex-direction: column; gap: 9px; text-wrap: pretty;">
+        <div>Radii are concentric: 14 → 10 → 7, each step equal to the outer radius minus the padding, so no curve looks pinched inside another.</div>
+        <div>Only one saturated colour appears per state, at small size. The row itself is never coloured in <a href="#5b">5b</a>; a 3px rule carries it.</div>
+        <div>Borders sit close to the fill they separate — #E7E7E4 on #FCFCFB — so structure is felt, not seen.</div>
+        <div>Type: 500 is the heaviest weight used, tracking tightens as size grows, and the muted grey is a true neutral so it reads as quieter, not colder.</div>
+        <div>Everything lands on 4px: 12 padding, 16 gaps, 8 inner gaps, 6px markers.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="font-family: Onest, system-ui, sans-serif; padding: 8px 56px 40px; display: flex; flex-direction: column; gap: 30px;">
+  <div style="display: flex; flex-direction: column; gap: 7px; max-width: 780px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #97968F;">Turn 4 · tinted paper, tightened</div>
+    <div style="font-size: 27px; font-weight: 500; color: #1D1D1B; letter-spacing: -0.02em;">PasteFill — warm paper, one notch tighter</div>
+    <div style="font-size: 14.5px; line-height: 1.65; color: #63625C; text-wrap: pretty;">Renamed to PasteFill throughout. No pure white anywhere: the panel sits on a warm tinted paper and the rows are a shade lighter than it, so cards separate by tone rather than by outline. Row padding comes down from turn 3's 16–18px to 13–14px while the gap between rows stays generous — tighter cards, same air between them. Three tint temperatures.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+    <div id="4a" style="width: 496px; background: #FCFBF8; border: 1px solid #E9E7E0; border-radius: 16px; overflow: hidden; font-family: Onest, system-ui, sans-serif;">
+      <div style="padding: 18px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EFEDE6;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F4F2EB; border: 1px solid #E4E1D8; border-radius: 5px; padding: 2px 6px;">4a</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Greige</span>
+        <span style="font-size: 12.5px; color: #857F72;">Onest · paper #F6F4EE</span>
+      </div>
+      <div style="padding: 22px; background: #F1EFE8; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #F6F4EE; border: 1px solid #E5E2D9; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 18px; font-size: 13.5px; line-height: 1.6; color: #221F19;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">PasteFill</div>
+            <div style="font-size: 12.5px; color: #857F72;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: #FBFAF6; border: 1px solid #E9E6DD; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #16704A;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="background: #FFFFFF; border: 1px solid #E9E6DD; border-radius: 9px; padding: 9px 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FBF4E6; border: 1px solid #E3D2AF; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8F5C15;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFDF8; border: 1px solid #E3D2AF; border-radius: 9px; padding: 9px 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #DFDCD1; background: #FBFAF6; color: #221F19; border-radius: 9px; padding: 8px 15px; cursor: pointer;" style-hover="background: #F4F2EB;">Confirm</button>
+            </div>
+            <div style="background: #FBFAF6; border: 1px solid #E9E6DD; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8A8479;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 11px; border-top: 1px solid #E9E6DD; padding-top: 16px;">
+            <div style="font-size: 12.5px; color: #857F72;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 9px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #221F19; background: #221F19; color: #FBFAF6; border-radius: 10px; padding: 10px 17px; cursor: pointer;" style-hover="background: #3A352B;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; border: 1px solid #DFDCD1; background: #FBFAF6; color: #221F19; border-radius: 10px; padding: 10px 17px; cursor: pointer;" style-hover="background: #F4F2EB;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="4b" style="width: 496px; background: #FCFBF6; border: 1px solid #E9E6DB; border-radius: 16px; overflow: hidden; font-family: Manrope, system-ui, sans-serif;">
+      <div style="padding: 18px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EFEBDF;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F5F2E8; border: 1px solid #E4E0D2; border-radius: 5px; padding: 2px 6px;">4b</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Cream</span>
+        <span style="font-size: 12.5px; color: #857E6C;">Manrope · paper #F8F5EB</span>
+      </div>
+      <div style="padding: 22px; background: #F2EEE1; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #F8F5EB; border: 1px solid #E6E1D0; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 18px; font-size: 13.5px; line-height: 1.6; color: #201E17;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">PasteFill</div>
+            <div style="font-size: 12.5px; color: #857E6C;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: #FDFBF4; border: 1px solid #EAE5D6; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #146B49; background: #E9F3EC; border-radius: 999px; padding: 3px 10px;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 600;">Principal diagnosis</div>
+              <div style="background: #FFFEFA; border: 1px solid #EAE5D6; border-radius: 10px; padding: 9px 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FAF2E0; border: 1px solid #E2D0A9; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #8C5911; background: #F3E5CA; border-radius: 999px; padding: 3px 10px;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 600;">ICD-10 code</div>
+              <div style="background: #FFFEFA; border: 1px solid #E2D0A9; border-radius: 10px; padding: 9px 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #DED8C6; background: #FDFBF4; color: #201E17; border-radius: 999px; padding: 8px 16px; cursor: pointer;" style-hover="background: #F5F2E8;">Confirm</button>
+            </div>
+            <div style="background: #FDFBF4; border: 1px solid #EAE5D6; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #6F6A5C; background: #EFEBDF; border-radius: 999px; padding: 3px 10px;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 600;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 11px; border-top: 1px solid #EAE5D6; padding-top: 16px;">
+            <div style="font-size: 12.5px; color: #857E6C;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 9px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 600; border: 1px solid #2F5FA8; background: #2F5FA8; color: #FDFBF4; border-radius: 999px; padding: 10px 19px; cursor: pointer;" style-hover="background: #274F8C;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #DED8C6; background: #FDFBF4; color: #201E17; border-radius: 999px; padding: 10px 19px; cursor: pointer;" style-hover="background: #F5F2E8;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="4c" style="width: 496px; background: #FBFBF9; border: 1px solid #E8E8E4; border-radius: 16px; overflow: hidden; font-family: Figtree, system-ui, sans-serif;">
+      <div style="padding: 18px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EFEFEB;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F3F3EF; border: 1px solid #E4E4DF; border-radius: 5px; padding: 2px 6px;">4c</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Warm grey, borderless</span>
+        <span style="font-size: 12.5px; color: #7F7E77;">Figtree · paper #F4F4F1</span>
+      </div>
+      <div style="padding: 22px; background: #EDEDE9; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #F4F4F1; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 18px; font-size: 13.5px; line-height: 1.6; color: #1F1E1A;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">PasteFill</div>
+            <div style="font-size: 12.5px; color: #7F7E77;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="background: #FAFAF8; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #16704A;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="background: #FFFFFF; border: 1px solid #EAEAE5; border-radius: 9px; padding: 9px 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #F9F1E2; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8F5C15;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFDF8; border: 1px solid #E7D9BB; border-radius: 9px; padding: 9px 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: none; background: #8F5C15; color: #FFFDF8; border-radius: 9px; padding: 8px 16px; cursor: pointer;" style-hover="background: #764B10;">Confirm</button>
+            </div>
+            <div style="background: #FAFAF8; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 12px; font-weight: 500; color: #85847C;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 11px; border-top: 1px solid #E7E7E2; padding-top: 16px;">
+            <div style="font-size: 12.5px; color: #7F7E77;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 9px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: none; background: #1F1E1A; color: #FAFAF8; border-radius: 10px; padding: 10px 18px; cursor: pointer;" style-hover="background: #37352E;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: none; background: #E9E9E4; color: #1F1E1A; border-radius: 10px; padding: 10px 18px; cursor: pointer;" style-hover="background: #E0E0DA;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="font-family: Onest, system-ui, sans-serif; padding: 8px 56px 40px; display: flex; flex-direction: column; gap: 30px;">
+  <div style="display: flex; flex-direction: column; gap: 7px; max-width: 780px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #97968F;">Turn 3 · weight, spacing, radius</div>
+    <div style="font-size: 27px; font-weight: 500; color: #1D1D1B; letter-spacing: -0.02em;">Softer, lighter, roomier</div>
+    <div style="font-size: 14.5px; line-height: 1.65; color: #63625C; text-wrap: pretty;">Same content, three degrees of softness. What changes: heading weight drops from 600 to 500 or 400, the shouty 700-weight uppercase badges become sentence case, corner radius goes up, row padding and gaps roughly double, and rules get lighter so the panel reads as space rather than boxes. Line length and font size stay legible for a 400px panel.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+    <div id="3a" style="width: 496px; background: #FFFFFF; border: 1px solid #ECECE9; border-radius: 16px; overflow: hidden; font-family: Onest, system-ui, sans-serif;">
+      <div style="padding: 20px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #F4F4F2;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F6F6F4; border: 1px solid #ECECE9; border-radius: 5px; padding: 2px 6px;">3a</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Airy</span>
+        <span style="font-size: 12.5px; color: #85847D;">Onest · 400/500 · radius 12</span>
+      </div>
+      <div style="padding: 26px 22px; background: #FAFAF9; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #FFFFFF; border: 1px solid #EDEDEA; border-radius: 14px; padding: 22px 20px; display: flex; flex-direction: column; gap: 22px; font-size: 13.5px; line-height: 1.65; color: #24241F;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">BreezeFill</div>
+            <div style="font-size: 12.5px; color: #85847D;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="border: 1px solid #EDEDEA; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 12px; font-weight: 500; color: #16794F;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="border: 1px solid #EDEDEA; border-radius: 9px; padding: 10px 12px; font-size: 13.5px; color: #24241F;">Acute tonsillitis</div>
+            </div>
+            <div style="border: 1px solid #E8D9BB; background: #FEFAF2; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 12px; font-weight: 500; color: #96601A;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFFFF; border: 1px solid #E8D9BB; border-radius: 9px; padding: 10px 12px; font-size: 13.5px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #E4E4E0; background: #FFFFFF; color: #24241F; border-radius: 9px; padding: 9px 16px; cursor: pointer;" style-hover="background: #FAFAF9;">Confirm</button>
+            </div>
+            <div style="border: 1px solid #EDEDEA; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8B8A83;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #F2F2EF; padding-top: 20px;">
+            <div style="font-size: 12.5px; color: #85847D;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 10px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #24241F; background: #24241F; color: #FFFFFF; border-radius: 10px; padding: 11px 18px; cursor: pointer;" style-hover="background: #3B3A33;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; border: 1px solid #E4E4E0; background: #FFFFFF; color: #24241F; border-radius: 10px; padding: 11px 18px; cursor: pointer;" style-hover="background: #FAFAF9;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="3b" style="width: 496px; background: #FFFFFF; border: 1px solid #ECECE9; border-radius: 16px; overflow: hidden; font-family: Manrope, system-ui, sans-serif;">
+      <div style="padding: 20px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #F4F4F2;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F6F6F4; border: 1px solid #ECECE9; border-radius: 5px; padding: 2px 6px;">3b</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Rounded</span>
+        <span style="font-size: 12.5px; color: #85847D;">Manrope · pill badges · radius 16</span>
+      </div>
+      <div style="padding: 26px 22px; background: #F8F9FA; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #FFFFFF; border: 1px solid #EBEDEF; border-radius: 18px; padding: 24px 20px; display: flex; flex-direction: column; gap: 24px; font-size: 13.5px; line-height: 1.7; color: #1F2225;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">BreezeFill</div>
+            <div style="font-size: 12.5px; color: #7C848C;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="background: #FCFCFD; border: 1px solid #EBEDEF; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #13704C; background: #EAF6F0; border-radius: 999px; padding: 4px 11px;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 600;">Principal diagnosis</div>
+              <div style="background: #FFFFFF; border: 1px solid #E7E9EC; border-radius: 12px; padding: 11px 14px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FDFAF4; border: 1px solid #EBDCC2; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #8F5D18; background: #F7EBD8; border-radius: 999px; padding: 4px 11px;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 600;">ICD-10 code</div>
+              <div style="background: #FFFFFF; border: 1px solid #EBDCC2; border-radius: 12px; padding: 11px 14px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #E7E9EC; background: #FFFFFF; color: #1F2225; border-radius: 999px; padding: 9px 18px; cursor: pointer;" style-hover="background: #F8F9FA;">Confirm</button>
+            </div>
+            <div style="background: #FCFCFD; border: 1px solid #EBEDEF; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 9px;">
+              <div style="align-self: flex-start; font-size: 11.5px; font-weight: 500; color: #6F767D; background: #F1F3F5; border-radius: 999px; padding: 4px 11px;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 600;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 13px;">
+            <div style="font-size: 12.5px; color: #7C848C;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 10px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 600; border: 1px solid #2F6BE0; background: #2F6BE0; color: #FFFFFF; border-radius: 999px; padding: 11px 20px; cursor: pointer;" style-hover="background: #2758BB;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #E7E9EC; background: #FFFFFF; color: #1F2225; border-radius: 999px; padding: 11px 20px; cursor: pointer;" style-hover="background: #F8F9FA;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="3c" style="width: 496px; background: #FFFFFF; border: 1px solid #ECECE9; border-radius: 16px; overflow: hidden; font-family: Figtree, system-ui, sans-serif;">
+      <div style="padding: 20px 22px; display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #F4F4F2;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #1D1D1B; background: #F6F6F4; border: 1px solid #ECECE9; border-radius: 5px; padding: 2px 6px;">3c</span>
+        <span style="font-size: 16px; font-weight: 500; color: #1D1D1B;">Borderless</span>
+        <span style="font-size: 12.5px; color: #85847D;">Figtree · no card outlines · tinted fills</span>
+      </div>
+      <div style="padding: 26px 22px; background: #F7F7F6; display: flex; justify-content: center;">
+        <div style="width: 400px; box-sizing: border-box; flex: none; background: #FFFFFF; border-radius: 16px; padding: 24px 20px; display: flex; flex-direction: column; gap: 26px; font-size: 13.5px; line-height: 1.7; color: #211F1C;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">BreezeFill</div>
+            <div style="font-size: 12.5px; color: #82807A;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <div style="font-size: 12px; font-weight: 500; color: #17714C;">Extracted from the note</div>
+              <div style="font-size: 14px; font-weight: 500;">Principal diagnosis</div>
+              <div style="background: #F7F7F6; border-radius: 10px; padding: 12px 14px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FDF9F1; border-radius: 14px; padding: 18px; margin: 0 -8px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 12px; font-weight: 500; color: #96601A;">Inferred — check this</div>
+              <div style="font-size: 14px; font-weight: 500;">ICD-10 code</div>
+              <div style="background: #FFFFFF; border-radius: 10px; padding: 12px 14px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: none; background: #96601A; color: #FFFFFF; border-radius: 10px; padding: 10px 18px; cursor: pointer;" style-hover="background: #7C4F14;">Confirm</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <div style="font-size: 12px; font-weight: 500; color: #8A8881;">Not found — fill by hand</div>
+              <div style="font-size: 14px; font-weight: 500;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 13px;">
+            <div style="font-size: 12.5px; color: #82807A;">2 values still to confirm. Nothing is written until you do.</div>
+            <div style="display: flex; gap: 10px;">
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: none; background: #211F1C; color: #FFFFFF; border-radius: 11px; padding: 12px 20px; cursor: pointer;" style-hover="background: #3A3730;">Fill</button>
+              <button style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: none; background: #F2F2F0; color: #211F1C; border-radius: 11px; padding: 12px 20px; cursor: pointer;" style-hover="background: #E9E9E6;">Check this page</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="font-family: 'Instrument Sans', system-ui, sans-serif; padding: 8px 56px 40px; display: flex; flex-direction: column; gap: 26px;">
+  <div style="display: flex; flex-direction: column; gap: 6px; max-width: 760px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A8A85;">Turn 2 · type, one palette</div>
+    <div style="font-size: 26px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Six typefaces on the same neutral</div>
+    <div style="font-size: 14px; line-height: 1.55; color: #5F5E59; text-wrap: pretty;">Palette held constant — near-white surface, cool grey rules, one blue accent, the way the Basepoint reference works — so the only variable is the typeface. Same slice of panel in each: header, an extracted row, a pending row, the two buttons. Pick a letter and I'll build the panel out in it.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start;">
+
+    <div id="2a" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: 'Instrument Sans', system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2a</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Instrument Sans</span>
+        <span style="font-size: 12px; color: #6F7378;">tight, low-contrast, modern SaaS</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="2b" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: 'Schibsted Grotesk', system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2b</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Schibsted Grotesk</span>
+        <span style="font-size: 12px; color: #6F7378;">editorial grotesque, crisp caps</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="2c" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: 'Plus Jakarta Sans', system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2c</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Plus Jakarta Sans</span>
+        <span style="font-size: 12px; color: #6F7378;">geometric, wide, product-first</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="2d" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: Manrope, system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2d</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Manrope</span>
+        <span style="font-size: 12px; color: #6F7378;">semi-condensed, quiet, very even</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="2e" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: Onest, system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2e</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Onest</span>
+        <span style="font-size: 12px; color: #6F7378;">neutral UI sans, large x-height</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="2f" style="width: 430px; background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 10px; overflow: hidden; font-family: 'Hanken Grotesk', system-ui, sans-serif;">
+      <div style="padding: 16px 18px; border-bottom: 1px solid #F0F0F1; display: flex; align-items: baseline; gap: 9px;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #17181A; background: #F4F4F5; border: 1px solid #E8E8EA; border-radius: 4px; padding: 2px 6px;">2f</span>
+        <span style="font-size: 16px; font-weight: 600; color: #17181A; letter-spacing: -0.01em;">Hanken Grotesk</span>
+        <span style="font-size: 12px; color: #6F7378;">narrow, economical, holds 320px</span>
+      </div>
+      <div style="padding: 18px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #F0F0F1;">
+        <div style="font-size: 24px; font-weight: 600; color: #17181A; letter-spacing: -0.02em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #17181A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #6F7378;">S1234567D · 14/03/1978 · B1 (4-bedded)</div>
+      </div>
+      <div style="padding: 18px; background: #F7F7F8; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; color: #17181A;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+          <div style="font-size: 12px; color: #6F7378;">Fills the form in place. Never submits it.</div>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E8E8EA; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0E7A4E;">EXTRACTED FROM THE NOTE</div>
+          <div style="font-weight: 600;">Principal diagnosis</div>
+          <div style="border: 1px solid #E3E4E6; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+        </div>
+        <div style="background: #FFF8EC; border: 1px solid #9A5B00; border-radius: 7px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A5B00;">INFERRED — CHECK THIS</div>
+          <div style="font-weight: 600;">ICD-10 code</div>
+          <div style="background: #FFFFFF; border: 1px solid #E7D9BE; border-radius: 5px; padding: 6px 8px; font-family: 'Geist Mono', monospace; font-size: 12px;">J03.90</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2C6CF6; background: #2C6CF6; color: #FFFFFF; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #2159D2;">Fill</button>
+          <button style="font-family: inherit; font-size: 13px; border: 1px solid #E3E4E6; background: #FFFFFF; color: #17181A; border-radius: 6px; padding: 7px 13px; cursor: pointer;" style-hover="background: #F4F4F5;">Check this page</button>
+          <span style="font-size: 12px; color: #6F7378;">2 to confirm</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="font-family: Geist, system-ui, sans-serif; padding: 8px 56px 80px; display: flex; flex-direction: column; gap: 28px;">
+  <div style="display: flex; flex-direction: column; gap: 6px; max-width: 720px;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A8A85;">Turn 1 · colour + type directions</div>
+    <div style="font-size: 26px; font-weight: 600; color: #1A1917; letter-spacing: -0.01em;">Three themes for the panel</div>
+    <div style="font-size: 14px; line-height: 1.55; color: #5F5E59; text-wrap: pretty;">Each one is a full token set — page, surface, text, rule, accent, and the four status colours the review rows depend on — shown as swatches, a type specimen, and a live 380px slice of the panel. Semantic colours are tuned per direction so extracted / inferred / missing stay separable at 10.5px on a light background. Reference <a href="#1a">1a</a>, <a href="#1b">1b</a>, <a href="#1c">1c</a> in chat.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start;">
+
+    <div id="1a" style="width: 560px; background: #FFFFFF; border: 1px solid #E0E0DC; border-radius: 10px; padding: 26px 26px 30px; display: flex; flex-direction: column; gap: 22px; font-family: Geist, system-ui, sans-serif;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #14171A; background: #F0F1F2; border: 1px solid #E4E7EA; border-radius: 4px; padding: 2px 6px;">1a</span>
+        <span style="font-size: 17px; font-weight: 600; color: #14171A;">Paper &amp; Slate</span>
+        <span style="font-size: 12.5px; color: #6B7280;">Geist · JetBrains Mono</span>
+      </div>
+      <div style="font-size: 13px; line-height: 1.6; color: #6B7280; text-wrap: pretty;">The coolest and most neutral of the three. Geist is a grotesque built for interfaces — tight numerals, unambiguous 1/l/I, which matters for NRIC and policy numbers. Accent is a desaturated clinical blue that never competes with the insurer's page.</div>
+
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #F7F8F9; border: 1px solid #E4E7EA;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">PAGE<br>#F7F8F9</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FFFFFF; border: 1px solid #E4E7EA;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">SURFACE<br>#FFFFFF</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #14171A;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">TEXT<br>#14171A</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #6B7280;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">MUTED<br>#6B7280</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #2563A8;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">ACCENT<br>#2563A8</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #147A4B;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">EXTRACTED<br>#147A4B</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #8A5A00;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">INFERRED<br>#8A5A00</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FFF8E8; border: 1px solid #EADFC4;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">PENDING BG<br>#FFF8E8</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #8A9099;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">MISSING<br>#8A9099</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #B3261E;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6B7280;">DANGER<br>#B3261E</div></div>
+      </div>
+
+      <div style="border-top: 1px solid #EDEEEF; padding-top: 18px; display: flex; flex-direction: column; gap: 9px;">
+        <div style="font-size: 22px; font-weight: 600; color: #14171A; letter-spacing: -0.015em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #14171A;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6B7280;">S1234567D · dd/mm/yyyy · B1 (4-bedded)</div>
+      </div>
+
+      <div style="background: #F7F8F9; border: 1px solid #E4E7EA; border-radius: 8px; padding: 16px; display: flex; justify-content: center;">
+        <div style="width: 380px; background: #FFFFFF; border: 1px solid #E4E7EA; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.5; color: #14171A;">
+          <div style="display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #E4E7EA; padding-bottom: 10px;">
+            <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+            <div style="font-size: 12px; color: #6B7280;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="border: 1px solid #E4E7EA; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #147A4B;">EXTRACTED FROM THE NOTE</div>
+              <div style="font-weight: 600;">Principal diagnosis</div>
+              <div style="border: 1px solid #E4E7EA; border-radius: 5px; padding: 6px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FFF8E8; border: 1px solid #8A5A00; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #8A5A00;">INFERRED — CHECK THIS</div>
+              <div style="font-weight: 600;">ICD-10 code</div>
+              <div style="border: 1px solid #EADFC4; background: #FFFFFF; border-radius: 5px; padding: 6px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 12.5px; border: 1px solid #E4E7EA; background: #FFFFFF; color: #14171A; border-radius: 5px; padding: 6px 12px; cursor: pointer;" style-hover="background: #F7F8F9;">Confirm</button>
+            </div>
+            <div style="border: 1px solid #E4E7EA; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #8A9099;">NOT FOUND — FILL BY HAND</div>
+              <div style="font-weight: 600;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #2563A8; background: #2563A8; color: #FFFFFF; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #1E5391;">Fill</button>
+            <button style="font-family: inherit; font-size: 13px; border: 1px solid #E4E7EA; background: #FFFFFF; color: #14171A; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #F7F8F9;">Check this page</button>
+            <span style="font-size: 12px; color: #6B7280;">2 to confirm</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="width: 560px; background: #FFFFFF; border: 1px solid #E0E0DC; border-radius: 10px; padding: 26px 26px 30px; display: flex; flex-direction: column; gap: 22px; font-family: Figtree, system-ui, sans-serif;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #1A1917; background: #F1EFEC; border: 1px solid #E6E3DE; border-radius: 4px; padding: 2px 6px;">1b</span>
+        <span style="font-size: 17px; font-weight: 600; color: #1A1917;">Greige &amp; Ink</span>
+        <span style="font-size: 12.5px; color: #6E6A63;">Figtree · JetBrains Mono</span>
+      </div>
+      <div style="font-size: 13px; line-height: 1.6; color: #6E6A63; text-wrap: pretty;">The closest to the warm reference. Paper is a low-chroma greige, and the accent is near-black ink rather than a colour — so the only saturated things on screen are the three review statuses. Figtree is softer and rounder; friendlier without being informal.</div>
+
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #F6F5F3; border: 1px solid #E6E3DE;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">PAGE<br>#F6F5F3</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FFFFFF; border: 1px solid #E6E3DE;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">SURFACE<br>#FFFFFF</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #1A1917;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">TEXT<br>#1A1917</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #6E6A63;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">MUTED<br>#6E6A63</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #22201D;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">ACCENT<br>#22201D</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #2F6B45;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">EXTRACTED<br>#2F6B45</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #8F5E12;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">INFERRED<br>#8F5E12</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FBF3E4; border: 1px solid #E8DCC2;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">PENDING BG<br>#FBF3E4</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #8C877E;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">MISSING<br>#8C877E</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #A62F22;"></div><div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #6E6A63;">DANGER<br>#A62F22</div></div>
+      </div>
+
+      <div style="border-top: 1px solid #EFEDE9; padding-top: 18px; display: flex; flex-direction: column; gap: 9px;">
+        <div style="font-size: 22px; font-weight: 600; color: #1A1917; letter-spacing: -0.01em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #1A1917;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6E6A63;">S1234567D · dd/mm/yyyy · B1 (4-bedded)</div>
+      </div>
+
+      <div style="background: #F6F5F3; border: 1px solid #E6E3DE; border-radius: 8px; padding: 16px; display: flex; justify-content: center;">
+        <div style="width: 380px; background: #FFFFFF; border: 1px solid #E6E3DE; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.5; color: #1A1917;">
+          <div style="display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #E6E3DE; padding-bottom: 10px;">
+            <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+            <div style="font-size: 12px; color: #6E6A63;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="border: 1px solid #E6E3DE; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #2F6B45;">EXTRACTED FROM THE NOTE</div>
+              <div style="font-weight: 600;">Principal diagnosis</div>
+              <div style="border: 1px solid #E6E3DE; border-radius: 5px; padding: 6px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FBF3E4; border: 1px solid #8F5E12; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #8F5E12;">INFERRED — CHECK THIS</div>
+              <div style="font-weight: 600;">ICD-10 code</div>
+              <div style="border: 1px solid #E8DCC2; background: #FFFFFF; border-radius: 5px; padding: 6px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 12.5px; border: 1px solid #DDD8D0; background: #FFFFFF; color: #1A1917; border-radius: 5px; padding: 6px 12px; cursor: pointer;" style-hover="background: #F6F5F3;">Confirm</button>
+            </div>
+            <div style="border: 1px solid #E6E3DE; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #8C877E;">NOT FOUND — FILL BY HAND</div>
+              <div style="font-weight: 600;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #22201D; background: #22201D; color: #FFFFFF; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #3A3630;">Fill</button>
+            <button style="font-family: inherit; font-size: 13px; border: 1px solid #DDD8D0; background: #FFFFFF; color: #1A1917; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #F6F5F3;">Check this page</button>
+            <span style="font-size: 12px; color: #6E6A63;">2 to confirm</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="width: 560px; background: #FFFFFF; border: 1px solid #E0E0DC; border-radius: 10px; padding: 26px 26px 30px; display: flex; flex-direction: column; gap: 22px; font-family: 'IBM Plex Sans', system-ui, sans-serif;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; color: #101720; background: #EEF2F5; border: 1px solid #DCE3EA; border-radius: 4px; padding: 2px 6px;">1c</span>
+        <span style="font-size: 17px; font-weight: 600; color: #101720;">Clinical</span>
+        <span style="font-size: 12.5px; color: #5A6675;">IBM Plex Sans · IBM Plex Mono</span>
+      </div>
+      <div style="font-size: 13px; line-height: 1.6; color: #5A6675; text-wrap: pretty;">Keeps the existing blue accent and the existing green/amber semantics, just re-tuned for a light panel. Plex reads as institutional rather than consumer, and its mono is a true companion to the sans — useful when a monospace note sits directly under a sans label.</div>
+
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #F4F6F8; border: 1px solid #DCE3EA;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">PAGE<br>#F4F6F8</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FFFFFF; border: 1px solid #DCE3EA;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">SURFACE<br>#FFFFFF</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #101720;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">TEXT<br>#101720</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #5A6675;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">MUTED<br>#5A6675</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #1A5FB4;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">ACCENT<br>#1A5FB4</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #0F7B55;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">EXTRACTED<br>#0F7B55</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #9A6100;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">INFERRED<br>#9A6100</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #FDF3E2; border: 1px solid #EADFC4;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">PENDING BG<br>#FDF3E2</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #737B87;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">MISSING<br>#737B87</div></div>
+        <div style="display: flex; flex-direction: column; gap: 5px;"><div style="height: 46px; border-radius: 5px; background: #B3261E;"></div><div style="font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; color: #5A6675;">DANGER<br>#B3261E</div></div>
+      </div>
+
+      <div style="border-top: 1px solid #EAEEF2; padding-top: 18px; display: flex; flex-direction: column; gap: 9px;">
+        <div style="font-size: 22px; font-weight: 600; color: #101720; letter-spacing: -0.01em;">Patient and note</div>
+        <div style="font-size: 13px; line-height: 1.5; color: #101720;">Names and identifiers are found by pattern, never by a model.</div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5A6675;">S1234567D · dd/mm/yyyy · B1 (4-bedded)</div>
+      </div>
+
+      <div style="background: #F4F6F8; border: 1px solid #DCE3EA; border-radius: 8px; padding: 16px; display: flex; justify-content: center;">
+        <div style="width: 380px; background: #FFFFFF; border: 1px solid #DCE3EA; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; line-height: 1.5; color: #101720;">
+          <div style="display: flex; flex-direction: column; gap: 3px; border-bottom: 1px solid #DCE3EA; padding-bottom: 10px;">
+            <div style="font-size: 15px; font-weight: 600;">BreezeFill</div>
+            <div style="font-size: 12px; color: #5A6675;">Fills the form in place. Never submits it.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="border: 1px solid #DCE3EA; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #0F7B55;">EXTRACTED FROM THE NOTE</div>
+              <div style="font-weight: 600;">Principal diagnosis</div>
+              <div style="border: 1px solid #DCE3EA; border-radius: 5px; padding: 6px 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;">Acute tonsillitis</div>
+            </div>
+            <div style="background: #FDF3E2; border: 1px solid #9A6100; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #9A6100;">INFERRED — CHECK THIS</div>
+              <div style="font-weight: 600;">ICD-10 code</div>
+              <div style="border: 1px solid #EADFC4; background: #FFFFFF; border-radius: 5px; padding: 6px 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;">J03.90</div>
+              <button style="align-self: flex-start; font-family: inherit; font-size: 12.5px; border: 1px solid #DCE3EA; background: #FFFFFF; color: #101720; border-radius: 5px; padding: 6px 12px; cursor: pointer;" style-hover="background: #F4F6F8;">Confirm</button>
+            </div>
+            <div style="border: 1px solid #DCE3EA; border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; color: #737B87;">NOT FOUND — FILL BY HAND</div>
+              <div style="font-weight: 600;">Ward class</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button style="font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #1A5FB4; background: #1A5FB4; color: #FFFFFF; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #154E93;">Fill</button>
+            <button style="font-family: inherit; font-size: 13px; border: 1px solid #DCE3EA; background: #FFFFFF; color: #101720; border-radius: 5px; padding: 7px 12px; cursor: pointer;" style-hover="background: #F4F6F8;">Check this page</button>
+            <span style="font-size: 12px; color: #5A6675;">2 to confirm</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="max-width: 720px; font-size: 12.5px; line-height: 1.6; color: #6E6A63; border-top: 1px solid #DEDFDB; padding-top: 16px; text-wrap: pretty;">Note on the CSP constraint: none of these can load a webfont from a CDN in the shipped extension — whichever direction you pick, the family gets bundled as local <span style="font-family: 'JetBrains Mono', monospace;">.woff2</span> files in the extension and declared with <span style="font-family: 'JetBrains Mono', monospace;">@font-face</span>. All three are open-licensed, so that's fine. Dark-mode counterparts come after the light set is settled.</div>
+</section>
+</x-dc>
+</body>
+</html>
