@@ -412,7 +412,11 @@ def test_assemble_non_extracted_statuses_need_review():
 # The status enum answers "did the notes say this", and for a date that is the
 # wrong question: the notes can state 03/07 perfectly clearly and still not say
 # whether it means 3 July or 7 March. No amount of care in the model or the
-# prompt closes that, so the row goes back to a human every time.
+# prompt closes that, so the row goes back to a human.
+#
+# Only where both readings exist, though. A day over 12 cannot be a month, so
+# 25/07 says one thing to everybody and is left alone — the boundary is what
+# keeps the click meaningful on a form with 22 date fields.
 
 
 def test_an_extracted_date_still_needs_review():
@@ -442,7 +446,8 @@ def test_a_demographic_date_needs_review_but_other_demographics_do_not():
     """The DOB is assigned by pattern, day-first, with no model and no source
     snippet to check it against — so it is the *least* verified date in the
     claim, not the most."""
-    by_id = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), {}, {})}
+    record = make_record(dob=date(1962, 3, 4))  # 04/03/1962 — could be 3 April
+    by_id = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, record, {}, {})}
 
     assert by_id["patient_dob"].status == "demographic"
     assert by_id["patient_dob"].needs_review is True
@@ -450,6 +455,58 @@ def test_a_demographic_date_needs_review_but_other_demographics_do_not():
 
     assert by_id["patient_name"].needs_review is False
     assert by_id["patient_name"].recheck is None
+
+
+def test_a_day_over_twelve_reads_the_same_to_everyone_and_is_not_held():
+    """There is no 25th month, so 25/07 says one thing however the writer
+    thinks about date order. Asking the doctor to confirm it is asking them to
+    check something with one answer, and a confirm click that is never the
+    interesting one is how the ones that are get skimmed past."""
+    answers = {
+        "date_first_consult": FieldAnswer(
+            value="25/07/2026", status="extracted", source="First seen 25/07/2026"
+        )
+    }
+    # ...and the same for a demographic date: 14/03/1962 is unambiguous too.
+    by_id = {
+        r.field_id: r
+        for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})
+    }
+
+    assert by_id["date_first_consult"].needs_review is False
+    assert by_id["date_first_consult"].recheck is None
+    assert by_id["patient_dob"].value == "14/03/1962"
+    assert by_id["patient_dob"].needs_review is False
+
+
+def test_a_month_over_twelve_is_held_because_it_was_written_the_wrong_way_round():
+    """03/25 is not ambiguous — but it is worse than ambiguous. It was written
+    month-first and the form will read it day-first, so the message the row
+    carries is exactly right."""
+    answers = {
+        "date_first_consult": FieldAnswer(value="03/25/2026", status="extracted", source="s")
+    }
+    row = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})}[
+        "date_first_consult"
+    ]
+    assert row.needs_review is True
+    assert row.recheck is not None
+
+
+def test_a_date_that_is_not_a_slash_date_carries_no_recheck_sentence():
+    """The sentence talks about the day and month being swapped. On a value
+    with no day and month to swap it would be describing nothing, so the row
+    keeps whatever review its status earned instead."""
+    answers = {
+        "date_first_consult": FieldAnswer(
+            value="July 2026", status="inferred", source="admitted in July"
+        )
+    }
+    row = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})}[
+        "date_first_consult"
+    ]
+    assert row.recheck is None
+    assert row.needs_review is True  # still held, because it was inferred
 
 
 def test_a_date_with_no_value_is_not_held_for_rechecking():

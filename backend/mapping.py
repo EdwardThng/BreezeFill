@@ -483,8 +483,8 @@ def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-# Every date with a value goes back to the doctor to re-read, whatever status
-# it carries. `extracted` means the notes stated it — not that they stated it
+# An ambiguous date goes back to the doctor to re-read, whatever status it
+# carries. `extracted` means the notes stated it — not that they stated it
 # unambiguously, and a bare DD/MM is not an unambiguous statement of anything.
 #
 # "03/07" is 3 July to a Singapore GP and 7 March to a CMS exporting US-format
@@ -493,6 +493,10 @@ def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
 # and the note is precisely what is ambiguous, so re-reading it harder does not
 # help. `_apply_date_format` only reshapes what the model returned — it cannot
 # know which of two dates was meant.
+#
+# Ambiguity is the whole trigger, and it has a hard boundary: a day over 12
+# cannot be read as a month, so `25/07` says one thing to everybody. Those are
+# left alone — see `_date_recheck`.
 #
 # This is therefore not a check the pipeline can do on the doctor's behalf, and
 # it is the one place where the usual asymmetry inverts: a swapped date is not
@@ -505,17 +509,41 @@ DATE_RECHECK = (
 )
 
 
-def _date_recheck(field: FormField, value: str | bool | None) -> str | None:
-    """The recheck reason for a row, or None.
+# A date as everything upstream writes it: day first, then month, then a two-
+# or four-digit year.
+_DAY_FIRST_DATE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})/\d{2}(?:\d{2})?\s*$")
 
-    Only for dates that actually carry a value: a blank date is written by hand
-    anyway and holding it would ask the doctor to confirm nothing. On the
-    96-field AIA medical report that is the difference between confirming the
-    two or three dates a note supported and confirming twenty-two.
+
+def _date_recheck(field: FormField, value: str | bool | None) -> str | None:
+    """The recheck reason for a row, or None if there is nothing to re-read.
+
+    Held only where the two readings are *both possible*, which is exactly
+    where the day is 12 or under. `25/07` is 25 July however the writer thinks
+    about date order, because there is no 25th month — so asking the doctor to
+    check it is asking them to confirm something that has only one answer, and
+    a confirm click that is never the interesting one is how the clicks that
+    are get skimmed past.
+
+    A day of 12 or under is held even when the *month* is over 12 (`03/25`).
+    That is not ambiguous either, but it is worse: it is a value written
+    month-first, which the form will read day-first, and the message —
+    check the day and month are the right way round — is precisely correct.
+
+    Two other cases return None. A date with no value is written by hand
+    anyway; on the 96-field AIA medical report that alone is the difference
+    between confirming the two or three dates a note supported and confirming
+    twenty-two. And a value that is not a `d/m/y` string at all gets no
+    recheck, because the sentence would not describe it — that row keeps
+    whatever review its status earned.
     """
     if field.type != "date":
         return None
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str):
+        return None
+    match = _DAY_FIRST_DATE.match(value)
+    if not match:
+        return None
+    if int(match.group(1)) > 12:
         return None
     return DATE_RECHECK
 
