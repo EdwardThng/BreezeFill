@@ -1067,6 +1067,100 @@ describe("a field that declares its options", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Dates get read back before they are written
+// ---------------------------------------------------------------------------
+//
+// The backend holds every filled date whatever status it carries, because
+// "the notes said 03/07" does not say whether that was 3 July or 7 March. The
+// panel's job is to make that check answerable — a Confirm button under a
+// value the doctor cannot disambiguate is a button, not a check.
+
+const ADMISSION_DATE = {
+  field_id: "date_of_admission",
+  label: "Date of admission",
+  field_type: "date",
+  help: "Date the patient was admitted",
+  value: "03/07/2026",
+  status: "extracted",
+  needs_review: true,
+  recheck: "Check the day and month are the right way round — a date written 03/07 is 3 July here and 7 March elsewhere.",
+};
+
+describe("a date row", () => {
+  test("says why it is held, even though the badge says it came from the note", async () => {
+    await mapWith([ADMISSION_DATE]);
+
+    const row = $("rows").querySelector(".review-row");
+    expect(row.querySelector(".badge").textContent).toBe("Extracted from the note");
+    expect(row.querySelector(".recheck").textContent).toContain("day and month");
+  });
+
+  test("cannot be written until the doctor confirms it", async () => {
+    await mapWith([ADMISSION_DATE]);
+
+    expect($("fill-btn").disabled).toBe(true);
+    $("rows").querySelector("button.confirm").click();
+    expect($("fill-btn").disabled).toBe(false);
+  });
+
+  test("spells the value out, and names the date it might have been instead", async () => {
+    await mapWith([ADMISSION_DATE]);
+
+    const hint = $("rows").querySelector(".date-hint").textContent;
+    expect(hint).toContain("3 July 2026");
+    expect(hint).toContain("7 March 2026");
+  });
+
+  test("offers no rival reading for a day that cannot be a month", async () => {
+    // 25/07 has exactly one reading. Offering a second one that cannot exist
+    // is noise, and noise is what makes the real warnings skimmable.
+    await mapWith([{ ...ADMISSION_DATE, value: "25/07/2026" }]);
+
+    const hint = $("rows").querySelector(".date-hint").textContent;
+    expect(hint).toBe("25 July 2026");
+  });
+
+  test("keeps the spelled-out date in step as the doctor corrects it", async () => {
+    // The point of the row. A doctor who swaps the digits must be able to see
+    // that the swap took — the digits alone are what they could not read.
+    await mapWith([ADMISSION_DATE]);
+
+    const input = $("rows").querySelector("textarea");
+    input.value = "07/03/2026";
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect($("rows").querySelector(".date-hint").textContent).toContain("7 March 2026");
+  });
+
+  test("a text row gets no date hint", async () => {
+    await mapWith([{ ...ADMISSION_DATE, field_type: "text", recheck: null }]);
+
+    expect($("rows").querySelector(".date-hint")).toBeNull();
+    expect($("rows").querySelector(".recheck")).toBeNull();
+  });
+});
+
+describe("readableDate", () => {
+  test("never invents a century for a two-digit year", async () => {
+    // Echoing "26" is honest; expanding it to 2026 is the guess the server
+    // refuses to make, and a claim form carries dates of birth as readily as
+    // dates of admission.
+    const panel = await mapWith([ADMISSION_DATE]);
+
+    expect(panel.readableDate("03/07/26")).toContain("3 July 26");
+    expect(panel.readableDate("03/07/26")).not.toContain("2026");
+  });
+
+  test("says nothing about a value that is not a date", async () => {
+    const panel = await mapWith([ADMISSION_DATE]);
+
+    for (const value of ["", null, "sometime in July", "2026-07-03", "32/07/2026", "03/13/2026"]) {
+      expect(panel.readableDate(value)).toBe("");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Saying why, not just what
 // ---------------------------------------------------------------------------
 
