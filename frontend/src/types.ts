@@ -13,6 +13,15 @@ export interface MappedField {
   status: FieldStatus;
   source: string | null;
   needs_review: boolean;
+  /**
+   * Why this answer is held for checking when its status alone would not hold
+   * it — today, only that a date's day and month could be the wrong way round.
+   *
+   * Null on every other row. When it is set, show this instead of the status
+   * note: a row reading "Copied from what you wrote" above a Confirm box tells
+   * the doctor there is nothing to check, which is the opposite of true.
+   */
+  recheck: string | null;
 }
 
 /**
