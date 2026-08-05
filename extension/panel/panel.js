@@ -683,6 +683,41 @@ const STATUS_TEXT = {
   demographic: "From the details you entered",
 };
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * A date spelled out in words, and the other date it might have been.
+ *
+ * The recheck the server asks for is only answerable if the doctor can see
+ * what they are being asked about, and "03/07/2026" is exactly as ambiguous in
+ * the review panel as it was in the note. Spelling it out turns the check into
+ * a one-second read; naming the rival reading turns it into the right check,
+ * because the question is never "is this a date" but "is it the right way
+ * round".
+ *
+ * Display only. It never alters what gets written, and it never invents a
+ * century — a two-digit year is echoed exactly as given, which is the same
+ * refusal `_apply_date_format` makes on the server for the same reason.
+ */
+function readableDate(value) {
+  const match = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{2}(?:\d{2})?)\s*$/.exec(String(value ?? ""));
+  if (!match) return "";
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = match[3];
+  if (day < 1 || day > 31 || month < 1 || month > 12) return "";
+
+  const reading = `${day} ${MONTH_NAMES[month - 1]} ${year}`;
+  // Only a day that could itself be a month is ambiguous: 25/07 has one
+  // reading, and offering a doctor a second one that cannot exist is noise
+  // that makes the real warnings easier to skim past.
+  if (day > 12) return reading;
+  return `${reading} — or ${month} ${MONTH_NAMES[day - 1]} ${year} if the note wrote the month first`;
+}
+
 function renderRow(row) {
   const confirmed = state.confirmed.has(row.field_id);
   const pending = row.needs_review && !confirmed && hasValue(row);
@@ -705,6 +740,16 @@ function renderRow(row) {
     help.className = "help";
     help.textContent = row.help;
     wrap.append(help);
+  }
+
+  // Why this row is held when its badge says it came straight from the note.
+  // Shown above the value rather than beside the Confirm button: the doctor
+  // needs to know what they are looking for before they look at it.
+  if (row.recheck) {
+    const recheck = document.createElement("p");
+    recheck.className = "recheck";
+    recheck.textContent = row.recheck;
+    wrap.append(recheck);
   }
 
   let input;
@@ -748,6 +793,22 @@ function renderRow(row) {
     wrap.classList.add("confirmed");
   });
   wrap.append(input);
+
+  // The value in words, kept in step with the box above it. A doctor
+  // correcting a swapped date is the whole point of this row, and they must be
+  // able to see that the correction took — retyping 07/03 and being shown
+  // "7 March" is the confirmation the digits alone cannot give.
+  if (row.field_type === "date") {
+    const hint = document.createElement("p");
+    hint.className = "date-hint";
+    const render = () => {
+      hint.textContent = readableDate(valueOf(row));
+      hint.hidden = !hint.textContent;
+    };
+    render();
+    input.addEventListener("input", render);
+    wrap.append(hint);
+  }
 
   if (row.needs_review && !confirmed && hasValue(row)) {
     const button = document.createElement("button");
@@ -1090,5 +1151,6 @@ globalThis.breezefillPanel = {
   bestCandidate,
   fillPlan,
   draftSchema,
+  readableDate,
   state,
 };
