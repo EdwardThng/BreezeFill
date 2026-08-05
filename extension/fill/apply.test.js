@@ -176,7 +176,107 @@ describe("radio groups", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Native date controls
+// ---------------------------------------------------------------------------
+//
+// The pipeline speaks DD/MM/YYYY end to end. A native date box holds
+// yyyy-mm-dd and silently empties itself when handed anything else, so
+// without conversion the most carefully checked field on the form is the one
+// guaranteed not to arrive — reported filled on the way past.
+
+describe("a native date box", () => {
+  /** A date control with something already in it, as a portal would render. */
+  function dateBox(existing) {
+    const el = document.createElement("input");
+    el.type = "date";
+    document.body.append(el);
+    if (existing) el.value = existing;
+    return el;
+  }
+
+  test("takes DD/MM/YYYY, which is the only format anything upstream produces", () => {
+    const el = dateBox();
+
+    expect(apply.applyOne(el, "03/07/2026").status).toBe("filled");
+    expect(el.value).toBe("2026-07-03");
+  });
+
+  test("pads a single-digit day and month", () => {
+    const el = dateBox();
+
+    apply.applyOne(el, "3/7/2026");
+    expect(el.value).toBe("2026-07-03");
+  });
+
+  test("fires the events a framework listens for, once the value has landed", () => {
+    const el = dateBox();
+    const seen = [];
+    el.addEventListener("input", () => seen.push("input"));
+    el.addEventListener("change", () => seen.push("change"));
+
+    apply.applyOne(el, "03/07/2026");
+    expect(seen).toEqual(["input", "change"]);
+  });
+
+  test("refuses a two-digit year rather than picking a century for it", () => {
+    // 26 is 2026 or 1926 depending on which box it sits in, and a claim form
+    // carries dates of birth as readily as dates of admission. The server
+    // declines this guess too; the doctor makes it in the picker.
+    const el = dateBox();
+
+    const result = apply.applyOne(el, "03/07/26");
+    expect(result.status).toBe("skipped");
+    expect(result.reason).toContain("DD/MM/YYYY");
+    expect(el.value).toBe("");
+  });
+
+  test("reports skipped rather than filled when the date cannot exist", () => {
+    // 31 February. Not checked here — the control's own sanitiser rejects it
+    // and the write is seen not to have landed. One calendar is enough.
+    const el = dateBox();
+
+    expect(apply.applyOne(el, "31/02/2026").status).toBe("skipped");
+    expect(el.value).toBe("");
+  });
+
+  test("never leaves the box emptier than it found it", () => {
+    // The failure that motivated this. Assignment does not throw: the value
+    // is sanitised to "", so a doctor who had already picked a date watches
+    // it disappear and the report calls the field filled.
+    const el = dateBox("2026-03-14");
+
+    const result = apply.applyOne(el, "not a date");
+    expect(result.status).toBe("skipped");
+    expect(el.value).toBe("2026-03-14");
+  });
+
+  test("an ordinary text box still takes the DD/MM/YYYY string unchanged", () => {
+    // Most insurer forms are print-derived and use plain text inputs. The
+    // conversion must not follow the value there — the form asks for
+    // DD/MM/YYYY and that is what the doctor confirmed.
+    const el = document.querySelector("#icd");
+
+    apply.applyOne(el, "03/07/2026");
+    expect(el.value).toBe("03/07/2026");
+  });
+});
+
 describe("guards", () => {
+  test("a control that sanitises away what it is given reports skipped", () => {
+    // Generalises the date fix. A number box handed text empties itself the
+    // same way, and "filled" would be a lie about a field nobody will check
+    // again.
+    const el = document.createElement("input");
+    el.type = "number";
+    document.body.append(el);
+    el.value = "42";
+
+    const result = apply.applyOne(el, "not a number");
+    expect(result.status).toBe("skipped");
+    expect(el.value).toBe("42");
+  });
+
   test("a missing value never clears what is already there", () => {
     // The destructive case: on a wizard the doctor may have typed this by
     // hand. Coercing undefined to "" would erase it and report success.
