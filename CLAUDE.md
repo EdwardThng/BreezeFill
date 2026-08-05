@@ -31,7 +31,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**406 tests pass**: 192 backend (1 skipped), 168 extension, 46 website.
+**418 tests pass**: 195 backend (1 skipped), 176 extension, 47 website.
 
 | Piece | State |
 |---|---|
@@ -456,13 +456,24 @@ carries dates of birth as readily as dates of admission. A field wanting a full
 year that receives a short one keeps what the model returned and reaches the
 doctor in review.
 
-**Every filled date is confirmed by the doctor, whatever its status
+**An ambiguous date is confirmed by the doctor, whatever its status
 (2026-08-05).** The owner's call. `needs_review = status != "extracted"` asks
 "did the notes say this", and for a date that is the wrong question: a note can
 state `03/07` perfectly clearly and still not say whether it meant 3 July or
 7 March. Nothing downstream can separate the two — the note is the only
 evidence and the note is exactly what is ambiguous — so this is not a check the
 pipeline can do on the doctor's behalf.
+
+**Ambiguity is the trigger, and it has a hard boundary (narrowed same day).**
+A day over 12 cannot be read as a month, so `25/07` says one thing to
+everybody and is not held. Asking the doctor to confirm it would be asking them
+to check something with one answer, and a confirm click that is never the
+interesting one is how the ones that are get skimmed past — `aia_medical_report`
+has 22 date fields. Two cases still held on purpose: a day under 13 with a
+month over 12 (`03/25`) is not ambiguous but *is* written the wrong way round
+already, and the row's own sentence is the correct thing to say about it; while
+a value that is not a `d/m/y` string gets no recheck at all, because the
+sentence would be describing nothing.
 
 It is also the one place the usual asymmetry inverts. Everywhere else a wrong
 answer is a *blank* the doctor notices; a swapped date is a **plausible wrong
@@ -476,14 +487,12 @@ Four things that are deliberate and easy to undo by "simplifying":
   there is nothing to check. Both review surfaces render `recheck` *instead of*
   the status note.
 - **Only dates that carry a value are held.** A blank is written by hand
-  anyway. On `aia_medical_report` — 22 date fields of 96 — that is the
-  difference between confirming the two or three dates a note supported and
-  confirming twenty-two.
-- **Demographic dates are held too**, and they have the least excuse for being
-  trusted: `parse_demographics` resolves DD/MM by *rule* (Singapore writes day
-  first), with no model and no `source` snippet, so a note written the other way
-  round is misread silently and identically every time. This is the one
-  exception to "demographic = pre-approved green".
+  anyway, so holding it asks the doctor to confirm nothing.
+- **Demographic dates are held too** when ambiguous, and they have the least
+  excuse for being trusted: `parse_demographics` resolves DD/MM by *rule*
+  (Singapore writes day first), with no model and no `source` snippet, so a note
+  written the other way round is misread silently and identically every time.
+  This is the one exception to "demographic = pre-approved green".
 - **The website's "Confirm all" cannot reach a date.** A bulk button confirms a
   swapped date exactly as fast as a correct one, which is the failure the row
   was added to prevent. Its count says how many it will actually clear, and it
@@ -495,13 +504,14 @@ edits, because a correction they cannot see take is not a correction. The rival
 reading is offered only when the day is ≤ 12; 25/07 has one reading, and a
 second one that cannot exist is noise that makes the real warnings skimmable.
 Neither expands a two-digit year, for the same reason `_apply_date_format`
-refuses to.
+refuses to. An unambiguous date is still spelled out — a doctor scanning the
+list should not have to parse digits — it is simply not held.
 
-**If the confirm burden proves too high** on a long form, the narrowing to
-reach for is holding only dates whose day is ≤ 12 — those are the only
-ambiguous ones, and it is a one-line change in `_date_recheck`. It was not done
-now because "always" is what was asked for, and because a doctor who learns
-that *some* dates are pre-approved has to work out which ones.
+The demo's consultation is dated **3 July** rather than the 14 March it was
+first written with, and that is load-bearing: 14/03 is unambiguous, so the
+walkthrough's one illustration of this rule would no longer trigger it.
+`Demo.test.tsx` asserts the day is ≤ 12 rather than asserting the literal date,
+so the note can be rewritten without silently losing the demonstration.
 
 **Still open:** the owner's spec says "date always follows dd/mm/yyyy". That
 most likely means *day-first when reading a note* (so `08/02/2001` is 8
@@ -919,6 +929,21 @@ derivable from the code, and all three recur on a fresh clone or a rebuild.
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
 
+**A control that rejects a value empties itself instead of complaining.** The
+HTML value sanitising algorithm runs on every assignment, and anything it does
+not recognise becomes the **empty string** — no throw, no warning.
+`<input type="date">` does this to anything that is not `yyyy-mm-dd`, which is
+every date this pipeline produces; `type="number"` does it to text. Two
+consequences, and neither is visible without reading the value back: the write
+is reported *filled* while nothing landed, and if the doctor had already typed
+something there, the write **cleared it**. `writeOrRestore` in `fill/apply.js`
+is the general guard and `applyDate` the DD/MM/YYYY → ISO conversion. Do not
+move the conversion upstream — DD/MM/YYYY is the one format the schemas, the
+prompt, `_apply_date_format` and the review screen all agree on, and the
+control is the only thing that wants something else. Found by reading, not by
+running: no fixture in the repo uses a native date control, and RoboForm's test
+page does not either.
+
 **Three fill modes.** `fill_mode: "acroform"` writes into the PDF's own fields
 (AIA GHS, GE GHS — official fillable PDFs). `fill_mode: "overlay"` stamps text
 at coordinates onto flat CamScanner scans that have no fields at all
@@ -1001,12 +1026,19 @@ omission to "fix".
   the insurer's form, not asking BreezeFill for anything, and an observer that
   wrote on render would quietly put the review step after the writing.
   `panel.test.js` asserts no fill message is sent.
-- **A date with a value is never written without a confirm click**, whatever
+- **An ambiguous date is never written without a confirm click**, whatever
   status it carries. `extracted` means the notes stated it, not that they
   stated it unambiguously, and DD/MM versus MM/DD is not something a model or a
   regex can settle from the note. Do not "tidy" this back into
   `needs_review = status != "extracted"`, and do not let a bulk-confirm control
   reach one.
+- **A value is converted to what the control accepts, never written hopefully.**
+  `<input type="date">` holds `yyyy-mm-dd` and silently empties itself when
+  given anything else, so the whole pipeline's DD/MM/YYYY had to be converted at
+  the last moment (`applyDate`). `writeOrRestore` generalises it: read the value
+  back, put back what was there if the control refused it, and report `skipped`.
+  A control that sanitises away what it was given must never be reported filled
+  — and must never be left emptier than it was found.
 - **An off-list answer is `missing`, never the nearest option.** When a field
   declares `options`, case and whitespace are forgiven and nothing else. Do not
   add fuzzy matching to raise the fill rate — the value is a clinical statement
