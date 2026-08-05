@@ -406,6 +406,81 @@ def test_assemble_non_extracted_statuses_need_review():
 
 
 # ---------------------------------------------------------------------------
+# Dates are always re-read by the doctor
+# ---------------------------------------------------------------------------
+#
+# The status enum answers "did the notes say this", and for a date that is the
+# wrong question: the notes can state 03/07 perfectly clearly and still not say
+# whether it means 3 July or 7 March. No amount of care in the model or the
+# prompt closes that, so the row goes back to a human every time.
+
+
+def test_an_extracted_date_still_needs_review():
+    answers = {
+        "date_first_consult": FieldAnswer(
+            value="03/07/2026", status="extracted", source="First seen 03/07/2026"
+        ),
+        "diagnosis_primary": FieldAnswer(
+            value="Acute appendicitis", status="extracted", source="Dx: appendicitis"
+        ),
+    }
+    by_id = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})}
+
+    date_row = by_id["date_first_consult"]
+    assert date_row.status == "extracted"
+    assert date_row.needs_review is True
+    assert date_row.recheck is not None
+
+    # ...and this is a date rule, not a new blanket distrust of `extracted`.
+    # Text the notes stated outright is still written without a click; making
+    # everything need confirming is how confirming stops meaning anything.
+    assert by_id["diagnosis_primary"].needs_review is False
+    assert by_id["diagnosis_primary"].recheck is None
+
+
+def test_a_demographic_date_needs_review_but_other_demographics_do_not():
+    """The DOB is assigned by pattern, day-first, with no model and no source
+    snippet to check it against — so it is the *least* verified date in the
+    claim, not the most."""
+    by_id = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), {}, {})}
+
+    assert by_id["patient_dob"].status == "demographic"
+    assert by_id["patient_dob"].needs_review is True
+    assert by_id["patient_dob"].recheck is not None
+
+    assert by_id["patient_name"].needs_review is False
+    assert by_id["patient_name"].recheck is None
+
+
+def test_a_date_with_no_value_is_not_held_for_rechecking():
+    """A blank is written by hand whatever we say about it. Holding it would
+    ask the doctor to confirm nothing — 22 times on the AIA medical report."""
+    answers = {"date_first_consult": FieldAnswer(value=None, status="missing", source=None)}
+    row = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})}[
+        "date_first_consult"
+    ]
+    assert row.recheck is None
+    # Still held, but for the reason it always was: there is nothing there.
+    assert row.needs_review is True
+
+
+def test_recheck_never_lowers_the_bar_on_a_row_already_held():
+    """An unresolved token blanks the value, so no recheck reason attaches —
+    and the row must keep the review flag its status earned."""
+    answers = {
+        "date_first_consult": FieldAnswer(
+            value="[REDACTED_9]", status="extracted", source="s"
+        )
+    }
+    row = {r.field_id: r for r in assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})}[
+        "date_first_consult"
+    ]
+    assert row.value is None
+    assert row.needs_review is True
+    assert row.recheck is None
+
+
+# ---------------------------------------------------------------------------
 # End-to-end (offline): redact -> map (stub) -> assemble
 # ---------------------------------------------------------------------------
 
