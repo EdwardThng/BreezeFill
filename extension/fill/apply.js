@@ -66,6 +66,29 @@
     el.checked = checked;
   }
 
+  /**
+   * Write, and put back what was there if the control refuses it.
+   *
+   * Every control runs the HTML value sanitising algorithm on assignment, and
+   * a value it does not recognise does not bounce — it lands as the **empty
+   * string**. `<input type="date">` does this to anything that is not
+   * `yyyy-mm-dd`, `type="number"` to anything non-numeric.
+   *
+   * That is worse than a failed write in two ways, and both are invisible from
+   * here without checking. The box may have held something the doctor typed by
+   * hand, so the write is a *clearance*; and the caller would go on to report
+   * the field filled, because assignment threw nothing. So: read the value
+   * back, restore what was there when it did not take, and let the caller say
+   * it was skipped.
+   */
+  function writeOrRestore(el, text) {
+    const before = el.value;
+    setNativeValue(el, text);
+    if (el.value === text) return true;
+    if (el.value !== before) setNativeValue(el, before);
+    return false;
+  }
+
   function notify(el) {
     const view = (el.ownerDocument && el.ownerDocument.defaultView) || root;
     const EventCtor = view.Event || root.Event;
@@ -78,7 +101,52 @@
   // ------------------------------------------------------------------
 
   function applyText(el, value) {
-    setNativeValue(el, value == null ? "" : String(value));
+    const text = value == null ? "" : String(value);
+    if (!writeOrRestore(el, text)) {
+      return { status: "skipped", reason: "the control would not take this value" };
+    }
+    notify(el);
+    return { status: "filled" };
+  }
+
+  // A date as every schema in this repo writes it, and as the model is told to
+  // answer. Four-digit years only — see applyDate.
+  const DAY_FIRST_DATE = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/;
+
+  /**
+   * `<input type="date">` holds `yyyy-mm-dd` and nothing else.
+   *
+   * The whole pipeline speaks DD/MM/YYYY: the schemas ask for it, the prompt
+   * mandates it, `_apply_date_format` enforces it, and the doctor confirms it
+   * in that shape. Handing that string to a native date control sets it to the
+   * empty string — so the field the doctor just checked most carefully was the
+   * one guaranteed not to arrive, and it reported itself filled on the way
+   * past. Converting here rather than upstream keeps DD/MM/YYYY as the one
+   * format everything else agrees on; this is the only place a control needs
+   * something different.
+   *
+   * A two-digit year is refused rather than expanded. Choosing 2026 over 1926
+   * for "26" is the same guess `_apply_date_format` declines to make on the
+   * server, and a claim form carries dates of birth as readily as dates of
+   * admission. The doctor gets told, and types it into the picker themselves.
+   *
+   * An impossible date (31/02) is not checked here — the control's own
+   * sanitiser rejects it, `writeOrRestore` sees the value did not land, and it
+   * is reported skipped. One calendar implementation is enough.
+   */
+  function applyDate(el, value) {
+    const match = DAY_FIRST_DATE.exec(String(value == null ? "" : value));
+    if (!match) {
+      // Says which half is wrong: a doctor who sees "needs DD/MM/YYYY" can fix
+      // a short year in the review box, where it will then convert cleanly.
+      return { status: "skipped", reason: "this date box needs DD/MM/YYYY" };
+    }
+    const [, day, month, year] = match;
+    const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+
+    if (!writeOrRestore(el, iso)) {
+      return { status: "skipped", reason: "the date box rejected this date" };
+    }
     notify(el);
     return { status: "filled" };
   }
@@ -194,6 +262,9 @@
     if (tag === "select") return applySelect(target, value);
     if (type === "checkbox") return applyCheckbox(target, value);
     if (type === "radio") return applyRadio([target], value, opts.labelOf);
+    // Before the text fallback: a native date control looks like a text input
+    // from here, and is the one that silently swallows what we write.
+    if (type === "date") return applyDate(target, value);
     return applyText(target, value);
   }
 
@@ -239,6 +310,7 @@
   const api = {
     applyPlan,
     applyOne,
+    applyDate,
     setNativeValue,
     setNativeChecked,
   };
