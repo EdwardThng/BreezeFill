@@ -27,6 +27,42 @@ const STATUS: Record<FieldStatus, { label: string; note: string }> = {
   demographic: { label: "From patient details", note: "Copied from what you entered." },
 };
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * A date spelled out, plus the date it might have been instead.
+ *
+ * A row asking "is the day and month the right way round" is only answerable
+ * if the doctor can see both readings, and "03/07/2026" shows neither. The
+ * rival is offered only when the day could itself be a month — 25/07 has one
+ * reading, and a second one that cannot exist is noise.
+ *
+ * Display only: it never changes the value sent to the server, and it never
+ * expands a two-digit year, because choosing 2026 over 1926 is a guess the
+ * backend deliberately refuses to make (see `_apply_date_format`).
+ *
+ * The extension's panel carries its own copy. Two bundles, and this is
+ * presentation rather than a rule, so a drift between them costs a phrasing
+ * difference and nothing more — unlike the redaction patterns, which is why
+ * those live on the server alone.
+ */
+export function readableDate(value: string | boolean | null): string {
+  if (typeof value !== "string") return "";
+  const match = /^\s*(\d{1,2})\/(\d{1,2})\/(\d{2}(?:\d{2})?)\s*$/.exec(value);
+  if (!match) return "";
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = match[3];
+  if (day < 1 || day > 31 || month < 1 || month > 12) return "";
+
+  const reading = `${day} ${MONTH_NAMES[month - 1]} ${year}`;
+  if (day > 12) return reading;
+  return `${reading} — or ${month} ${MONTH_NAMES[day - 1]} ${year} if the notes wrote the month first`;
+}
+
 export default function ReviewScreen({ claim, busy, error, onApprove, onDiscard }: Props) {
   const [rows, setRows] = useState<RowState[]>(() =>
     claim.fields.map((f) => ({ ...f, confirmed: !f.needs_review })),
@@ -41,9 +77,19 @@ export default function ReviewScreen({ claim, busy, error, onApprove, onDiscard 
   const needsChecking = rows.filter((r) => r.needs_review);
   const settled = rows.filter((r) => !r.needs_review);
   const pending = needsChecking.filter((r) => !r.confirmed).length;
+  const pendingRecheck = needsChecking.filter((r) => !r.confirmed && r.recheck).length;
 
+  // "Confirm all" deliberately does not reach a row with a recheck reason.
+  // Those rows exist because reading them one at a time is the whole point —
+  // a bulk button over a swapped date confirms it as fast as a correct one,
+  // which is the failure this was added to prevent. Everything else is a
+  // value the doctor has read and agreed with, and clearing those in one
+  // click is what keeps the remaining ones worth stopping at.
+  const bulkConfirmable = needsChecking.filter((r) => !r.confirmed && !r.recheck).length;
   const confirmAll = () =>
-    setRows((rs) => rs.map((r) => (r.needs_review ? { ...r, confirmed: true } : r)));
+    setRows((rs) =>
+      rs.map((r) => (r.needs_review && !r.recheck ? { ...r, confirmed: true } : r)),
+    );
 
   const approve = () => {
     const values: Record<string, string | boolean | null> = {};
@@ -74,12 +120,16 @@ export default function ReviewScreen({ claim, busy, error, onApprove, onDiscard 
                 {pending === 1 ? "s" : ""} your check.
               </strong>
               <div className="hint">
-                These were worked out by the AI or weren't in the notes at all.
+                {pendingRecheck > 0
+                  ? "Dates are checked one at a time — the day and month can be the wrong way round. The rest were worked out by the AI or weren't in the notes at all."
+                  : "These were worked out by the AI or weren't in the notes at all."}
               </div>
             </div>
-            <button type="button" className="secondary" onClick={confirmAll}>
-              I've read them — confirm all {pending}
-            </button>
+            {bulkConfirmable > 0 && (
+              <button type="button" className="secondary" onClick={confirmAll}>
+                I've read them — confirm all {bulkConfirmable}
+              </button>
+            )}
           </div>
         ) : (
           <div className="banner banner-ok">
@@ -191,8 +241,19 @@ function Row({
           />
         )}
 
+        {row.field_type === "date" && readableDate(row.value) && (
+          <div className="date-hint">{readableDate(row.value)}</div>
+        )}
+
         {row.source && <div className="source">From your notes: “{row.source}”</div>}
-        {row.needs_review && <div className="status-note">{status.note}</div>}
+        {/* The recheck reason wins over the status note. A date held for
+            checking would otherwise read "Copied from what you wrote", which
+            tells the doctor there is nothing here to look at. */}
+        {row.needs_review && (
+          <div className={row.recheck ? "status-note recheck" : "status-note"}>
+            {row.recheck ?? status.note}
+          </div>
+        )}
 
         {row.needs_review && (
           <label className={`confirm ${row.confirmed ? "confirm-on" : ""}`}>
