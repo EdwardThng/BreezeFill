@@ -345,6 +345,24 @@ button.link[hidden] {
   color: var(--missing);
 }
 
+/* The reason a row is held when its badge alone would not hold it. Carries
+   the warning colour rather than the muted one used by .help: this is the
+   sentence the doctor has to act on, not context for the question. */
+.review-row .recheck {
+  color: var(--inferred);
+  font-size: 11.5px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+/* The date in words, under its box. Quiet on purpose — it is the answer to
+   the warning above, not a second warning. */
+.review-row .date-hint {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin: 5px 0 0;
+}
+
 .review-row .confirm {
   margin-top: 7px;
 }
