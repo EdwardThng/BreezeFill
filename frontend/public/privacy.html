@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — BreezeFill</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1d21;
+    --muted: #5b6570;
+    --rule: #e3e7eb;
+    --accent: #0f6f5c;
+    --panel: #f6f8f9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a;
+      --fg: #e8ecef;
+      --muted: #9aa5b1;
+      --rule: #2a3036;
+      --accent: #4fbfa5;
+      --panel: #1c2126;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.25rem 5rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .4rem; }
+  h2 {
+    font-size: 1.2rem;
+    margin: 2.6rem 0 .75rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+  }
+  h3 { font-size: 1rem; margin: 1.6rem 0 .4rem; }
+  .updated { color: var(--muted); margin: 0 0 2rem; font-size: .9rem; }
+  .lede {
+    background: var(--panel);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    border-radius: 0 6px 6px 0;
+    margin: 0 0 1rem;
+  }
+  .lede p:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .93rem; }
+  th, td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+    background: var(--panel);
+    padding: .12em .35em;
+    border-radius: 3px;
+  }
+  a { color: var(--accent); }
+  ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  .scroll { overflow-x: auto; }
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: .9rem;
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>BreezeFill Privacy Policy</h1>
+<p class="updated">Last updated 6 August 2026</p>
+
+<div class="lede">
+  <p><strong>The short version.</strong> BreezeFill helps a doctor fill an
+  insurer's claim form from a consultation note. To do that, the note is sent to
+  the BreezeFill server, which strips out the patient's identifying details and
+  sends only the de-identified remainder to an AI model to answer the form's
+  questions.</p>
+  <p>Nothing is stored. There is no database, no account, and no file on disk —
+  the note exists only for the seconds it takes to answer one request, and is
+  gone when that request finishes. The patient's name, NRIC, date of birth,
+  phone, address and policy number are <strong>never</strong> sent to the AI
+  model at all.</p>
+</div>
+
+<h2>Who this covers</h2>
+
+<p>This policy covers the BreezeFill Chrome extension, the BreezeFill website,
+and the BreezeFill server that both talk to. BreezeFill is currently a private
+pilot operated by its author, not a registered company.</p>
+
+<p>The people whose data is involved are usually not the people using
+BreezeFill: the user is a doctor, and the data is their patient's. Both are
+addressed below.</p>
+
+<h2>What BreezeFill handles</h2>
+
+<p>Everything BreezeFill sees comes from one action: a doctor pasting a
+consultation note into the side panel. BreezeFill does not connect to any
+clinic system, patient record, or practice-management software, and holds no
+credentials to any of them.</p>
+
+<p>From that pasted text, two kinds of information are separated:</p>
+
+<ul>
+  <li><strong>Patient details</strong> — name, NRIC/FIN, date of birth, phone
+  number, address, policy number, insurer. These are found by pattern matching
+  alone. No AI model is involved in finding them, and that ordering is
+  deliberate: a model asked to pick the name out of the paste would have read
+  the name before the list that removes it from the note existed.</li>
+  <li><strong>Clinical text</strong> — the rest of the note: history,
+  diagnosis, dates, treatment.</li>
+</ul>
+
+<h2>What leaves the browser, and where it goes</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>When</th><th>What is sent</th><th>To whom</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>You paste a note and BreezeFill fills in the patient details</td>
+      <td>The pasted text, as-is</td>
+      <td><strong>BreezeFill server only.</strong> Matched against patterns in
+      memory and discarded. No AI model, no storage, no log.</td>
+    </tr>
+    <tr>
+      <td>You press <em>Map fields</em></td>
+      <td>The pasted text and the patient details you confirmed</td>
+      <td><strong>BreezeFill server</strong>, which removes the identifiers and
+      then sends <strong>only the de-identified text</strong> to Anthropic.</td>
+    </tr>
+    <tr>
+      <td>You press <em>Map fields</em> on a form BreezeFill does not have a
+      stored description for</td>
+      <td>The wording of the questions on that page — labels only, never the
+      values already in the boxes, never headings or surrounding prose</td>
+      <td><strong>BreezeFill server</strong>, then Anthropic, so the questions
+      can be answered at all.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>What is never sent to the AI model</h3>
+
+<ul>
+  <li>The patient's name, NRIC/FIN, date of birth, phone number, address or
+  policy number. These are used to <em>remove</em> those same details from the
+  clinical text, and are copied onto the form directly by the extension.</li>
+  <li>The web address of the claim page. Insurer claim links often carry a
+  token that acts as a password to one patient's claim, so BreezeFill records
+  the site's hostname and never the full address.</li>
+  <li>The contents of any field already filled in on the insurer's page.</li>
+  <li>Anything from any other browser tab. BreezeFill cannot see them.</li>
+</ul>
+
+<h2>How the de-identification works, and where it falls short</h2>
+
+<p>The clinical text goes through three passes before it reaches the AI model.
+The first replaces the patient's own details, using the list of details taken
+from the paste. The second finds anything shaped like an NRIC/FIN, a Singapore
+phone number or an email address — catching identifiers belonging to family
+members or other patients. The third asks a model to check the result for
+anything the first two missed.</p>
+
+<p><strong>This is careful, not perfect, and the limit is worth stating
+plainly.</strong> The second pass finds identifiers by their <em>shape</em>. A
+name has no shape: <code>Tan Wei Ming</code> looks the same to a pattern as
+<code>Tan Tock Seng</code>. Names in the note are removed because the doctor's
+own paste tells BreezeFill what the patient is called — but a third party named
+in the note, and not otherwise identified, may not be caught.</p>
+
+<p>Treat de-identification as a strong reduction in what is exposed, not a
+guarantee that nothing identifying can pass.</p>
+
+<h2>Who else is involved</h2>
+
+<table>
+  <tbody>
+    <tr>
+      <td><strong>Anthropic</strong></td>
+      <td>Provides the AI model that answers the form's questions. Receives
+      de-identified clinical text and the questions being answered. See
+      <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy
+      policy</a>; retention of API data is governed by their terms, not by
+      BreezeFill.</td>
+    </tr>
+    <tr>
+      <td><strong>Vercel</strong></td>
+      <td>Hosts the BreezeFill server and website. Sees requests in transit and
+      keeps standard operational logs. See
+      <a href="https://vercel.com/legal/privacy-policy">Vercel's privacy
+      policy</a>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>There is no analytics, no advertising, no tracking pixel and no third-party
+script anywhere in the extension or the website. Nothing is sold or shared with
+anyone else.</p>
+
+<h2>Where processing happens</h2>
+
+<p>The BreezeFill server runs in <strong>Singapore</strong>
+(Vercel's <code>sin1</code> region).</p>
+
+<p><strong>The AI model does not currently run in Singapore.</strong> Anthropic's
+API routes inference to the United States or globally; there is no Singapore
+option available to BreezeFill today. De-identified clinical text therefore
+leaves Singapore. This is the single most important limitation on this page,
+and it is why the pilot is restricted as described below.</p>
+
+<h2>Retention</h2>
+
+<p><strong>BreezeFill stores nothing.</strong> Every part of the server is
+stateless: there is no database, no session, no claim record, and no uploaded
+file. A note exists in server memory for the duration of the one request that
+carried it, and is gone when the response is sent. There is nothing to export
+and nothing to delete, because nothing was kept.</p>
+
+<p>Error logs record the <em>type</em> of a failure and nothing else — never the
+text that caused it, because that text is the clinical note.</p>
+
+<p>In the extension, the note lives in the side panel's memory while it is open.
+The extension does not request permission to write to disk and cannot do so;
+closing the panel discards the note.</p>
+
+<h2>What the extension can and cannot do</h2>
+
+<p>The extension requests three permissions: <code>activeTab</code>,
+<code>scripting</code> and <code>sidePanel</code>.</p>
+
+<ul>
+  <li>It can read and fill the page <strong>only on the tab where you clicked
+  the BreezeFill icon</strong>, and only after that click. Switching tabs means
+  clicking again.</li>
+  <li>It cannot see your browsing history, your other tabs, or their addresses.
+  It does not request the permission that would allow this.</li>
+  <li>It cannot store anything on your computer.</li>
+  <li><strong>It never submits a form.</strong> It writes proposed answers into
+  the fields and stops. You review them, correct them, and submit the form
+  yourself.</li>
+</ul>
+
+<h2>Review before anything is written</h2>
+
+<p>Every answer BreezeFill proposes is shown with where it came from — a quote
+from your note, or a marker saying it was inferred, or a blank saying the note
+did not answer the question. Anything not quoted directly from your note
+requires an explicit confirmation before it can be written into the insurer's
+form. Dates are held for confirmation even when quoted directly, because a date
+written <code>03/07</code> is 3 July in Singapore and 7 March in much of the
+world, and no model can settle that from the note alone.</p>
+
+<h2>Current status of the pilot</h2>
+
+<p>Because inference does not yet run in Singapore, BreezeFill is currently for
+use with <strong>synthetic or anonymised notes only</strong>. It is not
+approved, and should not be used, for real identifiable patient data until that
+changes. This restriction is a deliberate condition of the pilot, and it will
+be lifted here when it no longer applies.</p>
+
+<h2>Responsibilities of the doctor using it</h2>
+
+<p>You remain the data controller for your patients' information and remain
+responsible for the accuracy of anything you sign and submit. BreezeFill assists
+with completion; it does not practise medicine, does not check your clinical
+judgement, and does not submit anything on your behalf. Please satisfy yourself
+that using it is consistent with your obligations to your patients and your
+regulator before using it with real data.</p>
+
+<h2>Changes to this policy</h2>
+
+<p>Material changes will be reflected in the date at the top of this page. As
+BreezeFill is a pilot with a small, known group of users, significant changes
+will also be communicated directly.</p>
+
+<h2>Contact</h2>
+
+<p>Questions about this policy, or about data handled by BreezeFill:
+<a href="mailto:privacy@breezefill.com">privacy@breezefill.com</a>.</p>
+
+<footer>
+  <p>BreezeFill assists with form completion. The reviewing doctor remains
+  responsible for the accuracy of every submitted form.</p>
+  <p><a href="/">← Back to BreezeFill</a></p>
+</footer>
+
+</main>
+</body>
+</html>
