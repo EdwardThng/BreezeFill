@@ -43,11 +43,28 @@
 // pin. Pointing it at a deployment nobody redeploys means shipping that day's
 // build forever, and the symptoms surface as unrelated bugs in the extension.
 //
+// So this points at a hostname WE own (2026-08-06), not at Vercel's. The
+// previous default was `breezefill-livid.vercel.app`, where `livid` is a
+// suffix Vercel generated for the project — it lives in Vercel's namespace,
+// survives only as long as that project does, and changes if the project is
+// ever renamed or recreated. Every install bakes this string in and no
+// installed extension can be edited afterwards, so a default aimed at a host
+// someone else names is a version pin with a second failure mode bolted on.
+//
+// `api.` rather than the apex on purpose: the site and the API are one Vercel
+// project today, and this lets them be separated later — a different host, a
+// different region, Bedrock for SG-region inference — without breaking a
+// single extension already in a doctor's browser.
+//
+// The DNS must exist BEFORE a build carrying this is handed to anyone. There
+// is no fallback to the old URL: the panel would report "could not reach the
+// backend" and the doctor's only route out is Advanced → Backend URL.
+//
 // Point this at http://localhost:8000 under Advanced for the RoboForm test
 // route: `roboform_test_v1` is `internal: true` and FORMFILL_SHOW_INTERNAL is
 // deliberately unset in production, so the deployed backend does not offer it
 // — a doctor must never be shown a form that is not a real insurer's.
-const DEFAULT_API_BASE = "https://breezefill-livid.vercel.app";
+const DEFAULT_API_BASE = "https://api.breezefill.com";
 
 // Order matters: the orchestrator expects the other three to have registered
 // themselves on globalThis by the time it runs.
