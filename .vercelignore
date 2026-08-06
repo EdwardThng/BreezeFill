@@ -3,6 +3,18 @@
 .venv/
 node_modules/
 frontend/node_modules/
+
+# LOCAL nvm PIN ONLY — must not reach Vercel. It names the Node version this
+# Mac has installed (26.x); Vercel selects the build runtime from Project
+# Settings (24.x) and offers no 26.x. A .nvmrc naming a version Vercel cannot
+# provide fails the build before it starts, and the failure is invisible from
+# the CLI: `vercel ls` reports UNKNOWN with no duration, `inspect --logs`
+# returns nothing, and `promote` says only "not ready". Every deploy on
+# 2026-08-06 died this way until the file was excluded.
+#
+# Excluding it rather than editing it keeps one source of truth per
+# environment: .nvmrc governs local dev, Project Settings governs the build.
+.nvmrc
 __pycache__/
 *.pyc
 .pytest_cache/
