@@ -1254,20 +1254,33 @@ which `~/.zshrc` loads for interactive shells only — so a non-interactive
 shell (Claude Code's Bash tool, a hook, a cron) reports `command not found`
 while the user's own terminal is fine.
 
-**The version lives in `.nvmrc`, so never hardcode it** — not in a command,
-not in this file. Write it **with the leading `v`**, which is not cosmetic:
-nvm accepts either form, but the `v` makes the file's contents identical to
-the install directory name under `~/.nvm/versions/node/`, and that is what
-lets a shell find node without sourcing nvm at all:
+Derive the path instead of hardcoding a version:
 
 ```bash
-export PATH="$HOME/.nvm/versions/node/$(cat .nvmrc)/bin:$PATH"   # any shell
-nvm use                                                          # if nvm is loaded
+export PATH="$HOME/.nvm/versions/node/$(ls ~/.nvm/versions/node | tail -1)/bin:$PATH"
+nvm use --lts     # if nvm is loaded (interactive shells only)
 ```
 
-`nvm use` walks up for the file, so it works from `frontend/` too — which
-matters, because `cd frontend && npm test` is a documented command. Drop the
-`v` and the first line silently breaks while the second keeps working.
+**DO NOT ADD A `.nvmrc`. It breaks every Vercel build, silently
+(2026-08-06).** One was added that morning to keep the Node version out of
+commands. It pinned `v26.7.0` — correct for this Mac — and the Vercel project
+builds on **24.x**. Vercel reads `.nvmrc` to select the build runtime, and
+asking for a version it does not offer kills the build *before it starts*.
+
+The cost was the whole afternoon, because nothing reports it. `vercel ls`
+shows `UNKNOWN` with a `?` duration, `vercel inspect --logs` returns one line
+and no log, and the only real signal is `vercel promote`, which says
+`not ready and cannot be promoted (422)`. Fourteen deploys accumulated, each
+looking like a slow build; the tell was that a **two-hour-old** deployment
+also said "not ready" — a queue drains, a broken build never does.
+
+Excluding it in `.vercelignore` was tried first and is **not** sufficient:
+that file trims a *CLI upload*, while these deploys come from the GitHub
+integration, which clones the repo and never reads it. A file that breaks the
+build has to be absent from the repo.
+
+If a Node pin is ever genuinely needed, set it in **Vercel Project Settings**
+(one source of truth for the build) and leave the repo alone.
 
 Also absent: `timeout` (GNU coreutils, not a macOS builtin), and `python3` is
 3.14 where the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14

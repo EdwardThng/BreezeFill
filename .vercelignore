@@ -4,17 +4,12 @@
 node_modules/
 frontend/node_modules/
 
-# LOCAL nvm PIN ONLY — must not reach Vercel. It names the Node version this
-# Mac has installed (26.x); Vercel selects the build runtime from Project
-# Settings (24.x) and offers no 26.x. A .nvmrc naming a version Vercel cannot
-# provide fails the build before it starts, and the failure is invisible from
-# the CLI: `vercel ls` reports UNKNOWN with no duration, `inspect --logs`
-# returns nothing, and `promote` says only "not ready". Every deploy on
-# 2026-08-06 died this way until the file was excluded.
-#
-# Excluding it rather than editing it keeps one source of truth per
-# environment: .nvmrc governs local dev, Project Settings governs the build.
-.nvmrc
+# NOTE: there is deliberately no `.nvmrc` entry here, because there is
+# deliberately no `.nvmrc` file — see CLAUDE.md. Excluding it here was tried
+# first and is NOT sufficient: `.vercelignore` trims a CLI upload, but these
+# deploys come from the GitHub integration, which clones the repo and never
+# consults this file. A build-breaking file has to be absent from the repo,
+# not merely from the upload.
 __pycache__/
 *.pyc
 .pytest_cache/
