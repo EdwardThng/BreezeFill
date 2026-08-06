@@ -1261,26 +1261,47 @@ export PATH="$HOME/.nvm/versions/node/$(ls ~/.nvm/versions/node | tail -1)/bin:$
 nvm use --lts     # if nvm is loaded (interactive shells only)
 ```
 
-**DO NOT ADD A `.nvmrc`. It breaks every Vercel build, silently
-(2026-08-06).** One was added that morning to keep the Node version out of
-commands. It pinned `v26.7.0` — correct for this Mac — and the Vercel project
-builds on **24.x**. Vercel reads `.nvmrc` to select the build runtime, and
-asking for a version it does not offer kills the build *before it starts*.
+**SET `git config user.email` BEFORE COMMITTING ON A NEW MACHINE. Vercel
+blocks deployments from commits it cannot attribute (2026-08-06).** This cost
+an entire afternoon and every symptom pointed somewhere else.
 
-The cost was the whole afternoon, because nothing reports it. `vercel ls`
-shows `UNKNOWN` with a `?` duration, `vercel inspect --logs` returns one line
-and no log, and the only real signal is `vercel promote`, which says
-`not ready and cannot be promoted (422)`. Fourteen deploys accumulated, each
-looking like a slow build; the tell was that a **two-hour-old** deployment
-also said "not ready" — a queue drains, a broken build never does.
+A fresh macOS install has no `user.email`, so git silently invents one from
+the hostname — here `edwardthng@Edwards-MacBook-Pro.local`. Commits succeed
+and push fine. GitHub accepts them. But the Vercel GitHub integration
+**refuses to build a commit whose author email is not a valid GitHub
+account**:
 
-Excluding it in `.vercelignore` was tried first and is **not** sufficient:
-that file trims a *CLI upload*, while these deploys come from the GitHub
-integration, which clones the repo and never reads it. A file that breaks the
-build has to be absent from the repo.
+> The deployment was blocked because the commit author email
+> (edwardthng@Edwards-MacBook-Pro.local) is not valid. Ensure your git email
+> matches your GitHub account.
 
-If a Node pin is ever genuinely needed, set it in **Vercel Project Settings**
-(one source of truth for the build) and leave the repo alone.
+Fourteen deployments accumulated over one afternoon, none of them ever built.
+
+**The reason it is so expensive to diagnose is that the CLI never says this.**
+The message above appears only in the Vercel dashboard. From the terminal:
+
+- `vercel ls` → `UNKNOWN` status, `?` duration, for every deployment
+- `vercel inspect --logs` → one line, `status UNKNOWN`, no log at all
+- `vercel promote` → `not ready and cannot be promoted (422)` — the closest
+  thing to a real signal, and it reads like a build still in progress
+
+**A blocked deployment is indistinguishable from a slow one over the CLI.**
+The tell is that a *hours-old* deployment still reports "not ready": a queue
+drains, a blocked deployment never does. Check the dashboard the moment two
+deployments of different ages both say it.
+
+Check before committing on any new machine:
+
+```bash
+git var GIT_AUTHOR_IDENT     # must show a real GitHub-registered address
+```
+
+*Two things were wrongly blamed first, so they are recorded here as ruled
+out:* a `.nvmrc` pinning Node 26 against a project set to 24.x (plausible, and
+Vercel does read `.nvmrc` — but it was not this), and a build-queue backlog
+from many pushes. Neither was the cause. `.nvmrc` was deleted anyway and the
+commands above derive the node path instead, which is the better arrangement
+regardless.
 
 Also absent: `timeout` (GNU coreutils, not a macOS builtin), and `python3` is
 3.14 where the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14

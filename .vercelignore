@@ -4,12 +4,10 @@
 node_modules/
 frontend/node_modules/
 
-# NOTE: there is deliberately no `.nvmrc` entry here, because there is
-# deliberately no `.nvmrc` file — see CLAUDE.md. Excluding it here was tried
-# first and is NOT sufficient: `.vercelignore` trims a CLI upload, but these
-# deploys come from the GitHub integration, which clones the repo and never
-# consults this file. A build-breaking file has to be absent from the repo,
-# not merely from the upload.
+# Worth knowing if you ever add an entry here to fix a build: this file trims
+# a *CLI upload* only. Deploys from the GitHub integration clone the repo and
+# never consult it, so excluding a file here does not keep it out of those
+# builds.
 __pycache__/
 *.pyc
 .pytest_cache/
