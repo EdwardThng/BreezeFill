@@ -359,6 +359,11 @@ function Footer() {
         Assists with form completion. The reviewing doctor remains responsible
         for the accuracy of every submitted form.
       </p>
+      {/* A real path, not a #/ route: the policy is served as static HTML so
+          that it reads even if this bundle does not. See privacy.html. */}
+      <p>
+        <a href="/privacy.html">Privacy policy</a>
+      </p>
     </footer>
   );
 }
