@@ -1140,11 +1140,26 @@ anything is broken.
 *macOS, the current machine (2026-08-06).* `node`/`npm` come from **nvm**,
 which `~/.zshrc` loads for interactive shells only — so a non-interactive
 shell (Claude Code's Bash tool, a hook, a cron) reports `command not found`
-while the user's own terminal is fine. Prefix such a shell with
-`export PATH="$HOME/.nvm/versions/node/v26.7.0/bin:$PATH"`. Also absent:
-`timeout` (GNU coreutils, not a macOS builtin), and `python3` is 3.14 where
-the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14 resolves
-clean and all 418 tests pass on it.
+while the user's own terminal is fine.
+
+**The version lives in `.nvmrc`, so never hardcode it** — not in a command,
+not in this file. Write it **with the leading `v`**, which is not cosmetic:
+nvm accepts either form, but the `v` makes the file's contents identical to
+the install directory name under `~/.nvm/versions/node/`, and that is what
+lets a shell find node without sourcing nvm at all:
+
+```bash
+export PATH="$HOME/.nvm/versions/node/$(cat .nvmrc)/bin:$PATH"   # any shell
+nvm use                                                          # if nvm is loaded
+```
+
+`nvm use` walks up for the file, so it works from `frontend/` too — which
+matters, because `cd frontend && npm test` is a documented command. Drop the
+`v` and the first line silently breaks while the second keeps working.
+
+Also absent: `timeout` (GNU coreutils, not a macOS builtin), and `python3` is
+3.14 where the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14
+resolves clean and all 418 tests pass on it.
 
 *Windows, the previous machine.* On the OneDrive-synced copy, `node`/`npm`
 were installed but invisible to both the Bash tool and PowerShell's
