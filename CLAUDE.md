@@ -20,9 +20,11 @@ ClaimFill, now **BreezeFill** (renamed 2026-08-04). The sweep covered display
 names, JS globals, the message target and the download filename. Two things
 said `claimfill` — the Fly app and the `DEFAULT_API_BASE` that pointed at it.
 Both are gone as of 2026-08-05: Fly is destroyed and the default backend is
-`https://breezefill-livid.vercel.app`. Nothing user-facing carries an old name
-any more, and a check for one is cheap: `git ls-files | xargs grep -il
-claimfill`. `FORMFILL_*`
+`https://api.breezefill.com` (2026-08-06 — see "the domain"). Nothing
+user-facing carries an old name any more, and a check for one is cheap:
+`git ls-files | xargs grep -il claimfill` — the git remote was the last holdout
+and was repointed on 2026-08-06, GitHub having silently redirected pushes until
+then. `FORMFILL_*`
 environment variables also survive from the first name and have **not** been
 swept; renaming them means touching every command in these docs plus anything
 set on a host, so it is a deliberate not-yet rather than an oversight.
@@ -45,14 +47,14 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
-| Vercel **production** | **Live at `https://breezefill-livid.vercel.app` (2026-08-05)**, region `sin1`. Publicly reachable — unlike a preview, production carries no SSO wall: landing page, `/health` (7 forms), `/forms` and the extension download all answer to plain `curl`. **`POST /map` returns 503**, because `ANTHROPIC_API_KEY` is Preview-scoped; it needs `vercel env add ANTHROPIC_API_KEY production` **and then a redeploy**, since an env change does not reach an already-deployed function |
+| Vercel **production** | **Live (2026-08-05)**, region `sin1`, plan **Pro since 2026-08-06**. Reachable at `https://breezefill-livid.vercel.app` and — once DNS is added — at `breezefill.com` / `api.breezefill.com`. Publicly reachable — unlike a preview, production carries no SSO wall: landing page, `/health` (7 forms), `/forms` and the extension download all answer to plain `curl`. **`POST /map` returns 503**, because `ANTHROPIC_API_KEY` is Preview-scoped; it needs `vercel env add ANTHROPIC_API_KEY production` **and then a redeploy**, since an env change does not reach an already-deployed function |
 | Vercel migration | **Done (2026-08-05).** Preview and production both verified end to end: `/health` reports 7 forms, `/forms` and the extension download answer, and `POST /map` returns real review rows from a live model call. Production is public; **previews are behind Deployment Protection**, so only `vercel curl` reaches them and the extension cannot. `DEFAULT_API_BASE` points at production |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
 | `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | `ANTHROPIC_API_KEY` | **Set as a Vercel environment variable**, Preview and Production, and confirmed working — a live `POST /map` returns real review rows, which exercises the sweep too. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1`. Changing it does not reach an already-deployed function; redeploy after |
-| **Demoable?** | **Yes — no terminal, no key.** `DEFAULT_API_BASE` is `https://breezefill-livid.vercel.app`, which is live and holds the key. Load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
+| **Demoable?** | **Blocked on one DNS record (2026-08-06).** `DEFAULT_API_BASE` is now `https://api.breezefill.com`, which does **not resolve yet** — until `vercel domains add` is run, a fresh install reports "could not reach the backend" and the only way out is Advanced → Backend URL. Point it at `https://breezefill-livid.vercel.app` to demo before then; that host is still live and still holds the key. Once DNS exists this returns to **yes — no terminal, no key**: load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
 
 Note: a commit title is not evidence of a deploy — `ec7c09c` is named "full
 deployment on fly.io" and only adds a static mount. Verify deploy state with
@@ -334,6 +336,50 @@ whether a hidden step should be filled.)
 
 ## Decisions and why
 
+**The domain: linked early, announced late (2026-08-06).** `breezefill.com` was
+bought and pointed at the Vercel project. The site was *not* announced, and the
+two halves of that are separate decisions with separate reasons.
+
+*Why link before there is anything to show.* Not for marketing — for the
+version pin in Traps. `DEFAULT_API_BASE` was
+`https://breezefill-livid.vercel.app`, where `livid` is a suffix **Vercel**
+generated: it lives in Vercel's namespace, survives only as long as that
+project does, and changes if the project is renamed or recreated. Every install
+bakes that string in and **no installed extension can be edited afterwards**.
+So the window to move the default onto a name we own closes the moment the
+first doctor installs anything, which makes this a before-distribution task
+rather than a launch task. It is now `https://api.breezefill.com`.
+
+`api.` rather than the apex, though both point at one project today: it leaves
+the API free to move — another host, another region, Bedrock for SG-region
+inference — without touching extensions already in browsers. The site itself
+needed no change at all, being same-origin throughout (`api.ts` resolves
+`API_BASE` to `""` in production, `DOWNLOAD_URL` is relative).
+
+*Why not announce.* Three of the four blockers stand: no privacy policy exists
+at any URL, inference is still not SG-region so the product's own rule is
+synthetic notes only, and the install is still "download a zip, enable
+Developer Mode" — which a GP will not complete, so an announced site cannot do
+its one job. Only the fourth cleared: the plan is Pro, so commercial use is
+permitted.
+
+*How it is kept out of search, and why not the obvious way.* An
+`X-Robots-Tag: noindex, nofollow` header on `/(.*)` in `vercel.json`.
+Deliberately **not** `Disallow: /` in `robots.txt`: `Disallow` blocks
+*crawling*, not *indexing*, so a blocked URL that anything links to can still
+surface as a bare link — and blocking is precisely what stops a crawler from
+fetching the page and reading the noindex. The two fight and `Disallow` wins by
+making the stronger instruction unreachable. `frontend/public/robots.txt`
+therefore allows crawling on purpose and says why.
+
+**To announce: delete the `headers` block from `vercel.json` and redeploy.**
+Nothing else changes. `robots.txt` stays as it is.
+
+`vercel.json` carries no `comment` key next to that block, though it wants one:
+an unknown property risks `Invalid vercel.json`, and a config that fails to
+parse is a deploy failure this repo has already paid for once (see the BOM
+trap).
+
 **Hosting is being revisited (2026-08-04), and the statelessness above is what
 unblocks it.** The original single-origin decision assumed the website *was*
 the product; it is not any more, so the website (static: landing, demo,
@@ -373,11 +419,14 @@ Two things to carry forward:
   2.82 MB before filling. A future insurer form that is a longer scan would
   413 on Vercel. There is no second host to fall back to any more, so check
   the size when adding an overlay form.
-- **Hobby forbids commercial use**, and Vercel counts "advertising the sale of
-  a product or service" as commercial — donations too. **The pricing page the
-  owner plans puts this over the line**, and it does so on any hosting shape,
-  because the marketing site is what carries it. Pro is $20/month. Today, as a
-  free pilot with no pricing page, Hobby is legitimate.
+- ~~**Hobby forbids commercial use**~~ — **settled 2026-08-06: the plan is
+  Pro.** Hobby counted "advertising the sale of a product or service" as
+  commercial, donations included, so the planned pricing page put the project
+  over the line on any hosting shape — the marketing site is what carries it.
+  Pro ($20/month) removes the question rather than answering it, which is the
+  point: the alternative was re-litigating "is this commercial yet" at every
+  copy change. The 4.5 MB response cap above is unchanged by the upgrade and
+  is still the limit with the least headroom.
 
 Favourable detail worth knowing: Vercel bills *active CPU*, and "waiting for
 I/O (e.g. calling AI models) does not count". This app spends nearly all its
@@ -1237,9 +1286,8 @@ means manual review, and a rejection restarts the clock.
 Two things that outrank the listing: **the extension has still never filled a
 real insurer form**, and inference is not SG-region, so the product's own rule
 is synthetic notes only — which twenty doctors with a one-click install will
-not honour. And **Vercel Hobby forbids commercial use**; a public site
-distributing to clinics is over that line whether or not money changes hands.
-Pro is $20/month.
+not honour. The Vercel plan is no longer one of them: **Pro since 2026-08-06**,
+so commercial use is permitted and the pricing page is unblocked.
 
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
