@@ -165,24 +165,73 @@ credentials to any of them.</p>
   <li>Anything from any other browser tab. BreezeFill cannot see them.</li>
 </ul>
 
-<h2>How the de-identification works, and where it falls short</h2>
+<h2>De-identification: the AI never learns who the patient is</h2>
 
-<p>The clinical text goes through three passes before it reaches the AI model.
-The first replaces the patient's own details, using the list of details taken
-from the paste. The second finds anything shaped like an NRIC/FIN, a Singapore
-phone number or an email address — catching identifiers belonging to family
-members or other patients. The third asks a model to check the result for
-anything the first two missed.</p>
+<p>This is the core protection in BreezeFill, so it is worth being exact about
+what it does and does not cover.</p>
 
-<p><strong>This is careful, not perfect, and the limit is worth stating
-plainly.</strong> The second pass finds identifiers by their <em>shape</em>. A
-name has no shape: <code>Tan Wei Ming</code> looks the same to a pattern as
-<code>Tan Tock Seng</code>. Names in the note are removed because the doctor's
-own paste tells BreezeFill what the patient is called — but a third party named
-in the note, and not otherwise identified, may not be caught.</p>
+<h3>The guarantee</h3>
 
-<p>Treat de-identification as a strong reduction in what is exposed, not a
-guarantee that nothing identifying can pass.</p>
+<p><strong>The patient's identity is never sent to the AI model.</strong> Their
+name, NRIC/FIN, date of birth, phone number, address and policy number are held
+back from every AI call without exception — not redacted from it, simply never
+included. Those details are instead used as the dictionary that removes the
+same information from the clinical text, and are copied onto the claim form
+directly by the extension.</p>
+
+<p>So the model answering the form's questions is working from a note in which
+the patient appears only as <code>[PATIENT]</code>, <code>[NRIC]</code> and
+<code>[DOB]</code>. It is told what happened clinically. It is never told to
+whom.</p>
+
+<h3>How the clinical text is stripped</h3>
+
+<p>Three passes run before any AI call, each catching what the last could
+not:</p>
+
+<ol>
+  <li><strong>The patient's own details</strong> are replaced using the list
+  taken from the paste — including every common way a date or an NRIC gets
+  written, and the name in either order and part by part.</li>
+  <li><strong>Anything shaped like an identifier</strong> — an NRIC/FIN, a
+  Singapore phone number, an email address — is replaced next. This is what
+  catches identifiers belonging to <em>other</em> people mentioned in the note:
+  a family member, another patient.</li>
+  <li><strong>A checking pass</strong> re-reads the stripped text and removes
+  anything identifying that the first two missed.</li>
+</ol>
+
+<p>Questions read off the insurer's page are scrubbed twice over — once in your
+browser before they are sent, once again on arrival — so a label reaches the AI
+only if both passes missed it.</p>
+
+<h3>Where it stops, stated plainly</h3>
+
+<p>De-identification covers <strong>what is sent to the AI</strong>. Two parts
+of the process necessarily handle the real details, and no honest description
+of this product can claim otherwise:</p>
+
+<ul>
+  <li><strong>Reading the paste.</strong> The pasted note arrives at the
+  BreezeFill server as you wrote it, and is separated into patient details and
+  clinical text by pattern matching. It has to work this way round: the list of
+  the patient's details is what the stripping uses, so it must be read before
+  anything can be stripped. No AI is involved at this step, nothing is written
+  down, and it exists only for the seconds that one request takes.</li>
+  <li><strong>Filling the form.</strong> An insurance claim identifies a
+  patient by name and NRIC — that is what the insurer needs in order to pay it.
+  Once you have reviewed each answer, the real details are written into the
+  insurer's own form on your screen, ready for you to submit.</li>
+</ul>
+
+<p>And the stripping itself is careful rather than infallible. The second pass
+finds identifiers by their <em>shape</em>, and a name has no shape:
+<code>Tan Wei Ming</code> looks the same to a pattern as
+<code>Tan Tock Seng</code>. The patient's own name is removed because your
+paste tells BreezeFill what it is — but a third party named in the note, and
+not otherwise identified, may not be caught. Treat this as a strong reduction
+in what is exposed, not a guarantee that nothing identifying can ever
+pass.</p>
 
 <h2>Who else is involved</h2>
 
