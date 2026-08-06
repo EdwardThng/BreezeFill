@@ -1,7 +1,10 @@
 # Test notes for the pilot
 
 Six synthetic cases for trying BreezeFill at
-**https://breezefill-livid.vercel.app**.
+**https://breezefill-livid.vercel.app** — moving to **https://breezefill.com**
+once the DNS is added. Both serve the same deployment; the second is the one
+worth learning, since the first is Vercel's name for the project rather than
+ours and can change out from under us.
 
 **Install the extension from that URL, and delete any copy you downloaded
 earlier.** There used to be a second address serving an older build, and an
