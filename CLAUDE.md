@@ -1068,9 +1068,13 @@ omission to "fix".
 
 ## Commands
 
+Paths are macOS/Linux (`.venv/bin/python`) as of 2026-08-06. On Windows the
+same venv puts the interpreter at `.venv/Scripts/python.exe` — see the
+toolchain note below, which is the whole of what changes between the two.
+
 ```bash
 # tests (offline, no API key needed)
-./.venv/Scripts/python.exe -m pytest -q
+.venv/bin/python -m pytest -q
 
 # extension tests (separate toolchain — vitest + jsdom, from the repo root)
 npm install && npm test
