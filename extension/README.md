@@ -28,7 +28,7 @@ all-demographics, so no model is called at any point.
 
 ```bash
 FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1 \
-  ./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
+  .venv/bin/python -m uvicorn main:app --app-dir backend --port 8000
 ```
 
 Then open <https://www.roboform.com/filling-test-all-fields>, click the

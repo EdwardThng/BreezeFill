@@ -1093,14 +1093,14 @@ cd frontend && npm install && npm test
 # backend dev. The key must be exported IN THIS SHELL — the extension's only
 # backend is this process, and without the key POST /map returns 503.
 export ANTHROPIC_API_KEY=...    # never via Claude Code's `!` prefix: it is logged
-./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
+.venv/bin/python -m uvicorn main:app --app-dir backend --port 8000
 
 # ...except for the RoboForm route, which needs NO key at all. Its schema is
 # all-demographics, so map_fields never calls the model; disabling the sweep
 # removes the only other call. FORMFILL_SHOW_INTERNAL puts the test schema in
 # the picker, which is the only way the panel can name it.
 export FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1
-./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8000
+.venv/bin/python -m uvicorn main:app --app-dir backend --port 8000
 # then: https://www.roboform.com/filling-test-all-fields, click the BreezeFill
 # icon ON THAT TAB, paste a case from docs/test_notes.md, Map, Fill.
 
@@ -1109,10 +1109,10 @@ cd frontend && npm run dev            # http://localhost:5173
 
 # production shape locally: build the frontend, then hit the backend alone
 cd frontend && npm run build          # backend then serves it at /
-./.venv/Scripts/python.exe -m uvicorn main:app --app-dir backend --port 8100
+.venv/bin/python -m uvicorn main:app --app-dir backend --port 8100
 
 # dump a PDF's field names when adding a form
-./.venv/Scripts/python.exe backend/pdf_fill.py forms/your_form.pdf
+.venv/bin/python backend/pdf_fill.py forms/your_form.pdf
 
 # Vercel. Login and `env add` need a real terminal; everything else runs from
 # here once ~/.vercel auth and .vercel/project.json exist. `vercel env ls`
@@ -1132,14 +1132,49 @@ vercel curl https://<deployment>/map -s -i -X POST \
 
 The `!` prefix in Claude Code runs **Bash**, not PowerShell.
 
-**Toolchain quirks that cost a session to work out.** On the OneDrive-synced
-copy, `node`/`npm` are installed but invisible to both the Bash tool and
-PowerShell's `Get-Command` — reach them through `cmd /c "npm test"`. And
-`.venv` was created under a different Windows user profile, so
-`.venv/Scripts/python.exe` resolves to a path that does not exist
-(`C:\Users\thnge\...`); recreate the venv on any machine where that happens
-rather than assuming Python is missing. Check both before concluding a suite
-cannot be run.
+**Toolchain quirks that cost a session to work out.** The lesson generalises
+past the machine it was learned on: when a suite will not run, the cause has
+twice been the *toolchain path*, not the code. Check that before concluding
+anything is broken.
+
+*macOS, the current machine (2026-08-06).* `node`/`npm` come from **nvm**,
+which `~/.zshrc` loads for interactive shells only — so a non-interactive
+shell (Claude Code's Bash tool, a hook, a cron) reports `command not found`
+while the user's own terminal is fine. Prefix such a shell with
+`export PATH="$HOME/.nvm/versions/node/v26.7.0/bin:$PATH"`. Also absent:
+`timeout` (GNU coreutils, not a macOS builtin), and `python3` is 3.14 where
+the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14 resolves
+clean and all 418 tests pass on it.
+
+*Windows, the previous machine.* On the OneDrive-synced copy, `node`/`npm`
+were installed but invisible to both the Bash tool and PowerShell's
+`Get-Command` — reached through `cmd /c "npm test"`. And `.venv` had been
+created under a different Windows user profile, so `.venv/Scripts/python.exe`
+resolved to a path that did not exist (`C:\Users\thnge\...`).
+
+**A venv and a `node_modules` do not survive a machine move, and they fail
+differently (2026-08-06).** Both are gitignored, so a repo copied between
+machines carries neither correctly — but only one of them says so.
+
+- The **venv** is a directory of absolute paths to an interpreter that is not
+  there. Obvious the moment anything runs.
+- **`node_modules` is the quiet one.** npm installs *platform-specific* native
+  binaries, so a tree installed on Windows holds `@esbuild/win32-x64` and
+  `@rollup/rollup-win32-*` and nothing that can run on a Mac. It looks
+  complete, `npm test` looks like it should work, and the failure reads as a
+  broken build rather than a wrong architecture. Confirm with
+  `ls frontend/node_modules/@esbuild` — the answer should name the host you
+  are on. The fix is `rm -rf` and reinstall, not a repair.
+
+Recreating both after a move:
+
+```bash
+rm -rf .venv && python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt
+
+rm -rf node_modules frontend/node_modules
+npm install && (cd frontend && npm install)
+```
 
 The backend serves the frontend only if `frontend/dist` exists — that is why
 local dev without a build still works, and why the Dockerfile builds it in a
