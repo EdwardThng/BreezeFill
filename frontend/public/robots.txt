@@ -1,0 +1,19 @@
+# BreezeFill is not announced yet. Keeping it out of search is done by the
+# `X-Robots-Tag: noindex, nofollow` header in vercel.json — NOT by a
+# `Disallow: /` here, and the difference is the whole reason this file has a
+# comment on it.
+#
+# `Disallow` blocks *crawling*, not *indexing*. A blocked URL that something
+# links to can still appear in results as a bare link with no description,
+# because the crawler was never allowed to fetch the page and find out
+# otherwise. Worse, blocking is what stops a crawler from ever seeing the
+# noindex header — the two settings fight, and Disallow wins by making the
+# stronger instruction unreachable.
+#
+# So crawling is allowed on purpose. The crawler fetches, reads noindex, and
+# drops the page. That is the outcome we want.
+#
+# To announce: remove the X-Robots-Tag header from vercel.json. This file
+# stays as it is.
+User-agent: *
+Allow: /
