@@ -1123,8 +1123,16 @@ omission to "fix".
   indistinguishable in review from an answer the notes supported.
 - No patient data in logs or error messages. LLM failures return a generic
   `"LLM call failed"`.
-- **No real patient data until inference is confirmed in-region.** Both calls
-  run `claude-opus-5` on the first-party API, which is not SG-region.
+- ~~**No real patient data until inference is confirmed in-region.**~~
+  **Overridden by the owner 2026-08-06: real patient notes are in scope.** The
+  product is past its testing phase and a note anonymised before pasting no
+  longer contains what the form asks for, so the rule was blocking the product
+  rather than protecting it. **Everything below about the region is unchanged
+  and still true** — what changed is the decision about it, not the fact. The
+  privacy policy now discloses the transfer instead of forbidding the data, and
+  `docs/test_notes.md` remains synthetic because repo fixtures still must be.
+
+  Both calls run `claude-opus-5` on the first-party API, which is not SG-region.
   **`inference_geo` cannot solve this** — **re-verified against the live docs
   2026-08-06**: the supported values are exactly `"us"` and `"global"`, and
   `"global"` is documented as "may run in **any** available geography". There
