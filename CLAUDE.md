@@ -1315,10 +1315,14 @@ Developer Mode" is not something a GP will do. Chrome also blocks self-hosted
 discoverable, same review either way. It also solves the stale-build problem in
 Traps, because the store auto-updates every install.
 
-Before submitting: a **privacy policy** at a live URL (mandatory — this
-transmits clinical text); **listing assets** (screenshot, description, data
-disclosures); and drop `optional_host_permissions: ["https://*/*"]`, which is
-never requested anywhere in the code and only buys a slower review. Icons are
+Before submitting: ~~a **privacy policy**~~ — **written 2026-08-06**
+(`frontend/public/privacy.html`), but it is only half done until it is *live*:
+that needs the DNS records and a production deploy, plus a working mailbox at
+the address it publishes. **Listing assets** (screenshot, description, data
+disclosures) are still outstanding, and the data disclosures must agree with
+the policy — the store form asks the same questions and a mismatch is a
+rejection. Drop `optional_host_permissions: ["https://*/*"]`, which is never
+requested anywhere in the code and only buys a slower review. Icons are
 done. Expect weeks rather than days — health data plus a permissions story
 means manual review, and a rejection restarts the clock.
 
