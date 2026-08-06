@@ -8,6 +8,15 @@ __pycache__/
 node_modules/
 frontend/dist/
 
+# Built by Vercel's buildCommand (frontend/dist copied here). Generated, never
+# authored — the one file committed under frontend/public is the source.
+/public/
+
+# macOS. The Finder writes these into any directory it displays, so they turn
+# up on their own. `_NOT_SHIPPED` in backend/main.py already keeps them out of
+# the extension zip; this keeps them out of the history.
+.DS_Store
+
 # Env & secrets
 .env
 .env.*
