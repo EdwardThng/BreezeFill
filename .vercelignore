@@ -11,7 +11,13 @@ frontend/node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
-public/
+# ANCHORED, and it matters. This excludes the generated root `public/` that
+# buildCommand creates by copying frontend/dist into it. Written unanchored as
+# `public/` it also matches **frontend/public/** at any depth — the authored
+# source of privacy.html, robots.txt and the favicons — and those then never
+# reach the build. The site still deploys and the JS bundle is correct, so the
+# only symptom is a handful of 404s on files that build fine locally.
+/public/
 
 # pytest configuration, and nothing else — see the file. It has to be kept out
 # of the upload entirely rather than merely out of the function bundle, because
