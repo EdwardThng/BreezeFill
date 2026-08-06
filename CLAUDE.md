@@ -375,6 +375,34 @@ therefore allows crawling on purpose and says why.
 **To announce: delete the `headers` block from `vercel.json` and redeploy.**
 Nothing else changes. `robots.txt` stays as it is.
 
+*State as of 2026-08-06.* Both `breezefill.com` and `api.breezefill.com` are
+**attached to the `breezefill` project** under the `breeze-fill` team
+(`vercel domains ls`). **DNS is not configured** — the registrar is a third
+party and `dig` returns nothing for either name, so neither resolves. Each
+needs an `A` record to `76.76.21.21`, or the nameservers moved to
+`ns1/ns2.vercel-dns.com`. Until that lands the extension's default backend
+points at a host that does not exist; see the "Demoable?" row.
+
+*A correction to the reasoning above, worth keeping because it was nearly
+recorded wrong.* `breezefill-livid.vercel.app` did **not** rot when the project
+moved onto the team — `vercel alias ls` shows it and
+`breezefill-breeze-fill.vercel.app` resolving to the *same* deployment. One
+project simply carries several generated aliases. That weakens the "the URL
+changes under you" story and leaves the real argument standing on its own: the
+name is in **Vercel's** namespace, so it is theirs to change, and an installed
+extension cannot be edited when they do. Do not restate the domain rationale as
+"the old URL broke". It did not.
+
+**A privacy policy exists as of 2026-08-06**: `frontend/public/privacy.html`,
+served at `/privacy.html`, linked from the landing footer. Static HTML rather
+than a `#/` route on purpose — it is the document a Chrome Web Store reviewer
+and a regulator have to be able to read, so it must not depend on the React
+bundle rendering. Two things in it are claims about the world rather than about
+this repo, and both need to stay true: the contact address
+`privacy@breezefill.com` **has no mailbox yet**, and the "synthetic notes only"
+restriction is the public form of the SG-region guardrail — lift it there only
+when inference actually moves.
+
 `vercel.json` carries no `comment` key next to that block, though it wants one:
 an unknown property risks `Invalid vercel.json`, and a config that fails to
 parse is a deploy failure this repo has already paid for once (see the BOM
@@ -1164,8 +1192,19 @@ cd frontend && npm run build          # backend then serves it at /
 .venv/bin/python backend/pdf_fill.py forms/your_form.pdf
 
 # Vercel. Login and `env add` need a real terminal; everything else runs from
-# here once ~/.vercel auth and .vercel/project.json exist. `vercel env ls`
-# prints names and "Encrypted", never values.
+# here once auth exists. `vercel env ls` prints names and "Encrypted", never
+# values.
+#
+# Auth is NOT at ~/.vercel on macOS — it lives in
+# ~/Library/Application Support/com.vercel.cli, so an absent ~/.vercel proves
+# nothing. Check with `vercel whoami`, which is the only reliable test.
+# `vercel link` here wrote .vercel/repo.json (repo-level) and an OIDC token
+# into .env.local; both are gitignored, and .env.local holds a credential, so
+# keep it that way.
+vercel whoami                       # is anyone logged in at all
+vercel domains ls --scope breeze-fill
+vercel domains inspect breezefill.com --scope breeze-fill   # prints the DNS records needed
+vercel alias ls                     # which hostname points at which deployment
 vercel deploy --yes                 # preview
 vercel deploy --prod --yes          # production
 vercel env ls
