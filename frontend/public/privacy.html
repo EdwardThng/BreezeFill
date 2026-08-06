@@ -264,14 +264,43 @@ anyone else.</p>
 
 <h2>Where processing happens</h2>
 
-<p>The BreezeFill server runs in <strong>Singapore</strong>
-(Vercel's <code>sin1</code> region).</p>
+<p>Two stages, in two different places. The distinction matters, so it is worth
+reading rather than skimming.</p>
 
-<p><strong>The AI model does not currently run in Singapore.</strong> Anthropic's
-API routes inference to the United States or globally; there is no Singapore
-option available to BreezeFill today. De-identified clinical text therefore
-leaves Singapore. This is the single most important limitation on this page,
-and it is why the pilot is restricted as described below.</p>
+<table>
+  <tbody>
+    <tr>
+      <td><strong>Your patient's identifying details</strong><br>
+      Name, NRIC/FIN, date of birth, phone, address, policy number</td>
+      <td><strong>Stay in Singapore.</strong> The BreezeFill server runs in
+      Singapore (Vercel's <code>sin1</code> region), and these details are read,
+      used to strip the clinical text, and discarded there. They are never sent
+      to the AI model, so they never leave.</td>
+    </tr>
+    <tr>
+      <td><strong>The de-identified clinical text</strong><br>
+      The note with the patient replaced by <code>[PATIENT]</code>,
+      <code>[NRIC]</code>, <code>[DOB]</code></td>
+      <td><strong>Leaves Singapore.</strong> It is sent to Anthropic to answer
+      the form's questions, and Anthropic's API routes inference to the United
+      States or globally. There is no Singapore option available to BreezeFill
+      today.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>This is the most important limitation on this page.</strong> The
+de-identified text is stripped of identifiers but it is still the clinical
+substance of a consultation — the history, the diagnosis, the dates — and it is
+processed outside Singapore. Singapore's Personal Data Protection Act permits
+transferring personal data overseas where the recipient is bound to a
+comparable standard of protection; it does not require that processing stay in
+the country. We tell you plainly that this transfer happens so you can judge
+whether it fits your own obligations to your patients.</p>
+
+<p>Moving inference into Singapore is planned. Until it lands, the sentence
+above is the accurate description, and it will be updated here — not quietly —
+when that changes.</p>
 
 <h2>Retention</h2>
 
@@ -315,13 +344,20 @@ form. Dates are held for confirmation even when quoted directly, because a date
 written <code>03/07</code> is 3 July in Singapore and 7 March in much of the
 world, and no model can settle that from the note alone.</p>
 
-<h2>Current status of the pilot</h2>
+<h2>Real consultation notes</h2>
 
-<p>Because inference does not yet run in Singapore, BreezeFill is currently for
-use with <strong>synthetic or anonymised notes only</strong>. It is not
-approved, and should not be used, for real identifiable patient data until that
-changes. This restriction is a deliberate condition of the pilot, and it will
-be lifted here when it no longer applies.</p>
+<p>BreezeFill is built for ordinary clinical use. You paste the consultation
+note as it sits in your system — real patient details, real history, real
+dates — and BreezeFill maps it onto the insurer's form in front of you. There
+is no separate test mode and no expectation that you anonymise anything
+first; anonymising the note would remove the very details the form is asking
+for.</p>
+
+<p>What that means for the patient's information is set out above: their
+identifying details are used to strip the same details out of the clinical
+text, are copied onto the claim form directly, and are never sent to the AI
+model. Where each part of that processing physically happens is set out
+below.</p>
 
 <h2>Responsibilities of the doctor using it</h2>
 
