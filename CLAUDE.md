@@ -1125,9 +1125,25 @@ omission to "fix".
   `"LLM call failed"`.
 - **No real patient data until inference is confirmed in-region.** Both calls
   run `claude-opus-5` on the first-party API, which is not SG-region.
-  **`inference_geo` cannot solve this** — verified against the docs, it accepts
-  only `"us"` and `"global"`; there is no Singapore value, and workspace geo is
-  US-only too. It is wired up behind `FORMFILL_INFERENCE_GEO` (unset by
+  **`inference_geo` cannot solve this** — **re-verified against the live docs
+  2026-08-06**: the supported values are exactly `"us"` and `"global"`, and
+  `"global"` is documented as "may run in **any** available geography". There
+  is no Singapore, APAC or `ap-southeast` value.
+
+  Two things that make this sharper than it was written:
+
+  - **Workspace geo — where data is stored *at rest*, and where endpoint
+    processing happens — is US-only, and cannot be changed after a workspace is
+    created.** So this is not only about where inference runs.
+  - **`FORMFILL_INFERENCE_GEO` is unset, so nothing is sent, so requests take
+    the workspace default.** Unset does not mean "nearest"; it means `global`.
+
+  **The confusion worth naming, because it nearly got written into the privacy
+  policy: `sin1` is real but it is the wrong hop.** `vercel.json` pins the
+  function to Singapore, so the raw paste genuinely does not leave SG when it
+  reaches the server. `_review_rows` then calls `api.anthropic.com`, and *that*
+  is the hop that exits the region. "The deployment is in Singapore" and
+  "inference is in Singapore" are different claims and only the first is true. It is wired up behind `FORMFILL_INFERENCE_GEO` (unset by
   default) for whenever more geos land. Real SG-region inference needs
   **Amazon Bedrock `ap-southeast-1`**, where the region comes from the endpoint
   rather than a parameter — that means the `AnthropicBedrockMantle` client and
