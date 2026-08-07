@@ -168,6 +168,52 @@
               <label for="clinical-findings">Principal diagnosis and clinical findings</label>
               <textarea id="clinical-findings" name="clinicalFindings"></textarea>
             </div>
+
+            <!--
+              A REPEATING QUESTION. One outer heading names the question; each
+              entry below it has its own sub-heading and the same set of
+              sub-questions. The doctor adds entries with the button at the
+              bottom — BreezeFill never clicks it, because creating an entry is
+              the doctor using the form.
+
+              Comorbidity is just what this fixture happens to ask about. The
+              mechanism is structural and knows nothing about the subject: the
+              entry index comes from spotting that a container's siblings hold
+              the same controls in the same order. Swap this for allergies,
+              procedures or previous claims and nothing in the code changes.
+
+              The sub-headings are <h4>, deliberately. Learn mode may not read
+              headings (a heading is a name-bearing surface and a name has no
+              shape for the scrubber), so this fixture is only useful as a test
+              if the entry text is genuinely unreadable — otherwise it would be
+              proving the wrong thing.
+            -->
+            <h3 class="repeat-title">Comorbidities</h3>
+            <div id="entries">
+              <div class="entry">
+                <h4>Comorbidity 1</h4>
+                <div class="q">
+                  <label for="cm-cond-1">Condition</label>
+                  <select id="cm-cond-1" name="cmCondition1">
+                    <option value="">— Select —</option>
+                    <option>Diabetes mellitus</option>
+                    <option>Hypertension</option>
+                    <option>Asthma</option>
+                    <option>Chronic kidney disease</option>
+                    <option>Ischaemic heart disease</option>
+                  </select>
+                </div>
+                <div class="q">
+                  <label for="cm-date-1">Date first diagnosed</label>
+                  <input type="text" id="cm-date-1" name="cmDate1" placeholder="DD/MM/YYYY" />
+                </div>
+                <div class="q">
+                  <label for="cm-doc-1">Attending doctor and clinic</label>
+                  <input type="text" id="cm-doc-1" name="cmDoctor1" />
+                </div>
+              </div>
+            </div>
+            <button type="button" id="add-entry" class="ghost">＋ Add another comorbidity</button>
           </fieldset>
 
           <div class="nav">
@@ -215,6 +261,27 @@
           document.getElementById("next").textContent =
             current === steps.length - 1 ? "Review" : "Next";
         }
+
+        // "Add another" clones the last entry, clears it, and renumbers. The
+        // clone is what makes the entries siblings with an identical control
+        // shape, which is the only signal instanceIndexOf() has to work from.
+        var entries = document.getElementById("entries");
+        document.getElementById("add-entry").addEventListener("click", function () {
+          var all = entries.querySelectorAll(".entry");
+          var n = all.length + 1;
+          var copy = all[all.length - 1].cloneNode(true);
+          copy.querySelector("h4").textContent = "Comorbidity " + n;
+          copy.querySelectorAll("label").forEach(function (label) {
+            var id = label.getAttribute("for").replace(/-\d+$/, "-" + n);
+            label.setAttribute("for", id);
+          });
+          copy.querySelectorAll("select, input").forEach(function (el) {
+            el.id = el.id.replace(/-\d+$/, "-" + n);
+            el.name = el.name.replace(/\d+$/, String(n));
+            el.value = "";
+          });
+          entries.append(copy);
+        });
 
         document.getElementById("next").addEventListener("click", function () {
           if (current < steps.length - 1) { current += 1; render(); }

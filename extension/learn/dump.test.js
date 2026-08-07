@@ -358,3 +358,66 @@ describe("mergeDumps", () => {
     expect(learn.mergeDumps(null)).toBeNull();
   });
 });
+
+/**
+ * Repeating entries, detected from structure alone.
+ *
+ * The subject matter is irrelevant to the mechanism — these fixtures use
+ * conditions, but nothing in the code knows or cares what the question asks.
+ */
+describe("repeating entries", () => {
+  function form(entries) {
+    document.body.innerHTML = `<form><div id="wrap">${Array.from({ length: entries })
+      .map(
+        (_, i) => `<div class="entry">
+          <div class="q"><label for="s${i}">Condition</label>
+            <select id="s${i}"><option value="">-</option><option>A</option></select></div>
+          <div class="q"><label for="d${i}">Date</label><input type="text" id="d${i}"></div>
+          <div class="q"><label for="n${i}">Doctor</label><input type="text" id="n${i}"></div>
+        </div>`
+      )
+      .join("")}</div></form>`;
+    return globalThis.breezefillLearn.collectControls(document).controls;
+  }
+
+  test("a single entry is not numbered — there is nothing to tell apart", () => {
+    expect(form(1).every((c) => c.instance === null)).toBe(true);
+  });
+
+  test("each repeated entry gets its own 1-based index", () => {
+    const byEntry = {};
+    for (const c of form(3)) (byEntry[c.instance] ??= []).push(c.label);
+    expect(Object.keys(byEntry).sort()).toEqual(["1", "2", "3"]);
+    expect(byEntry["2"]).toEqual(["Condition", "Date", "Doctor"]);
+  });
+
+  test("question rows are not mistaken for entries", () => {
+    // Every row holds one control, so sibling rows look alike. An entry is
+    // what holds SEVERAL sub-questions; a one-control row is just a row.
+    document.body.innerHTML = `<form>
+      <div class="q"><label for="a">One</label><input type="text" id="a"></div>
+      <div class="q"><label for="b">Two</label><input type="text" id="b"></div>
+      <div class="q"><label for="c">Three</label><input type="text" id="c"></div>
+    </form>`;
+    const controls = globalThis.breezefillLearn.collectControls(document).controls;
+    expect(controls.every((c) => c.instance === null)).toBe(true);
+  });
+
+  test("no heading text is read to work any of this out", () => {
+    // The entry sub-heading is the obvious key and the one surface learn mode
+    // may not read. If a name ever appears in one, it must not reach a dump.
+    document.body.innerHTML = `<form><div id="wrap">
+      <div class="entry"><h4>Claim for Tan Wei Ming (S1234567D)</h4>
+        <label for="s1">Condition</label><select id="s1"><option>A</option></select>
+        <label for="d1">Date</label><input type="text" id="d1"></div>
+      <div class="entry"><h4>Entry two</h4>
+        <label for="s2">Condition</label><select id="s2"><option>A</option></select>
+        <label for="d2">Date</label><input type="text" id="d2"></div>
+    </div></form>`;
+    const controls = globalThis.breezefillLearn.collectControls(document).controls;
+    expect(controls.map((c) => c.instance)).toEqual([1, 1, 2, 2]);
+    const serialised = JSON.stringify(controls);
+    expect(serialised).not.toContain("Tan Wei Ming");
+    expect(serialised).not.toContain("S1234567D");
+  });
+});

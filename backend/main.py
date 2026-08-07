@@ -154,11 +154,14 @@ class LiveField(BaseModel):
     options: list[str] = []
     # Which repeating entry this control belongs to, 1-based, or None.
     #
-    # A question the doctor can answer several times ("Comorbidity 1",
-    # "Comorbidity 2") renders as repeated containers holding the same
-    # sub-questions. The index comes from the DOM's shape, never from the
-    # sub-header naming the entry — that is prose, and prose is unreadable by
-    # rule because a name has no shape for the scrubber to find.
+    # A question the doctor can answer several times renders as repeated
+    # containers, one per entry, each holding the same sub-questions. The
+    # index comes from the DOM's shape, never from the sub-header naming the
+    # entry — that is prose, and prose is unreadable by rule because a name
+    # has no shape for the scrubber to find.
+    #
+    # Nothing here knows what the question is ABOUT. The mechanism is purely
+    # structural and must stay that way: no clinical vocabulary belongs in it.
     instance: int | None = None
 
 
@@ -321,8 +324,8 @@ def _slug(label: str, taken: set[str]) -> str:
 def _entry_label(field: LiveField) -> str:
     """The control's label, qualified by which repeating entry it belongs to.
 
-    "Date of diagnosis" appears once per comorbidity, so on a page with three
-    of them the bare label names three different controls. That breaks two
+    A sub-question repeats once per entry, so on a page with three entries the
+    bare label names three different controls. That breaks two
     things at once: `_slug` would collide the ids the model answers against,
     and the matcher would call every one of them ambiguous and fill none.
 

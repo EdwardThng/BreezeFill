@@ -254,8 +254,8 @@
   // Repeating instances
   // --------------------------------------------------------------------
   //
-  // A question the doctor can answer several times ("Comorbidity 1",
-  // "Comorbidity 2", ...) renders as repeated containers, one per instance,
+  // A question the doctor can answer several times renders as repeated
+  // containers, one per entry, each holding the same sub-questions,
   // created by the form's own "add another" button.
   //
   // THE INDEX IS DERIVED FROM STRUCTURE, NEVER FROM THE HEADING TEXT. Reading
@@ -288,7 +288,15 @@
     const root = (doc && doc.body) || null;
     while (node && node !== root) {
       const shape = controlShape(node);
-      if (shape) {
+      // AT LEAST TWO CONTROLS, or this is not an entry.
+      //
+      // Without this the walk stops at the first level whose siblings match,
+      // which on a normally-built form is the question row: every row holds
+      // one input, so every row looks like a twin of the next. Three
+      // sub-questions in a single entry were being reported as entries 1, 2
+      // and 3 of nothing. An entry is what holds SEVERAL sub-questions; a row
+      // holding one control is just a row.
+      if (shape && shape.indexOf(",") !== -1) {
         const parent = node.parentElement;
         const twins = parent
           ? Array.from(parent.children).filter(
