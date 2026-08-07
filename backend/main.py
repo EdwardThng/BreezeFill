@@ -152,6 +152,14 @@ class LiveField(BaseModel):
     # free-text box, and empty when the browser withheld the list because it
     # looked like claim data rather than choices.
     options: list[str] = []
+    # Which repeating entry this control belongs to, 1-based, or None.
+    #
+    # A question the doctor can answer several times ("Comorbidity 1",
+    # "Comorbidity 2") renders as repeated containers holding the same
+    # sub-questions. The index comes from the DOM's shape, never from the
+    # sub-header naming the entry — that is prose, and prose is unreadable by
+    # rule because a name has no shape for the scrubber to find.
+    instance: int | None = None
 
 
 class MapLiveRequest(BaseModel):
@@ -310,6 +318,24 @@ def _slug(label: str, taken: set[str]) -> str:
     return candidate
 
 
+def _entry_label(field: LiveField) -> str:
+    """The control's label, qualified by which repeating entry it belongs to.
+
+    "Date of diagnosis" appears once per comorbidity, so on a page with three
+    of them the bare label names three different controls. That breaks two
+    things at once: `_slug` would collide the ids the model answers against,
+    and the matcher would call every one of them ambiguous and fill none.
+
+    The qualifier is a NUMBER, synthesised here from the DOM's shape. It is
+    deliberately not the sub-header the doctor reads on screen — that heading
+    is prose, and prose is the one surface learn mode may not read, because a
+    name has no shape for the scrubber to catch.
+    """
+    if field.instance is None:
+        return field.label
+    return f"{field.label} (entry {field.instance})"
+
+
 def _live_schema(fields: list[LiveField]) -> FormSchema:
     """The page's controls, as a schema for one request only.
 
@@ -347,13 +373,13 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
         fill_mode="web",
         fields=[
             FormField(
-                id=_slug(field.label, taken),
+                id=_slug(_entry_label(field), taken),
                 type=types.get(field.type.lower(), "text"),
                 source="llm",
                 # Scrubbed a second time. The extension already ran the same
                 # patterns before this left the browser; a label reaches the
                 # model only if both passes missed it.
-                label=scrub_patterns(field.label),
+                label=scrub_patterns(_entry_label(field)),
                 # The schema's instruction when there is one, the page's own
                 # words when there is not. Scrubbed either way: a description
                 # is authored in this repo and needs no cleaning, but the

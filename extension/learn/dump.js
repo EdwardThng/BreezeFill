@@ -250,6 +250,58 @@
    * sections. That is the right trade — a missing section label is an
    * inconvenience while writing a schema, a leaked name is a breach.
    */
+  // --------------------------------------------------------------------
+  // Repeating instances
+  // --------------------------------------------------------------------
+  //
+  // A question the doctor can answer several times ("Comorbidity 1",
+  // "Comorbidity 2", ...) renders as repeated containers, one per instance,
+  // created by the form's own "add another" button.
+  //
+  // THE INDEX IS DERIVED FROM STRUCTURE, NEVER FROM THE HEADING TEXT. Reading
+  // the sub-header would be the obvious way to tell instances apart and it is
+  // exactly what NEVER_A_LABEL forbids: a heading is a name-bearing surface,
+  // a name has no shape, and learn mode has no dictionary to catch one. So
+  // this reads tag names and control types only — no text of any kind leaves
+  // this function.
+  //
+  // The signal is that clones look alike: an instance container has siblings
+  // holding the same controls in the same order.
+
+  /** The controls inside a node, by type and order. Structure, not content. */
+  function controlShape(node) {
+    return Array.from(node.querySelectorAll("input, select, textarea"))
+      .map((el) => (el.getAttribute("type") || el.tagName || "").toLowerCase())
+      .join(",");
+  }
+
+  /**
+   * Which repeating instance this control sits in, 1-based, or null when the
+   * control is not inside a repeating group.
+   *
+   * Walks outward to the nearest ancestor whose siblings carry the same
+   * control shape. Two or more matching siblings is the repeat; one is just a
+   * container.
+   */
+  function instanceIndexOf(el, doc) {
+    let node = el.parentElement;
+    const root = (doc && doc.body) || null;
+    while (node && node !== root) {
+      const shape = controlShape(node);
+      if (shape) {
+        const parent = node.parentElement;
+        const twins = parent
+          ? Array.from(parent.children).filter(
+              (sib) => sib.nodeType === 1 && controlShape(sib) === shape
+            )
+          : [];
+        if (twins.length >= 2) return twins.indexOf(node) + 1;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function sectionFor(el) {
     const fieldset = el.closest && el.closest("fieldset");
     if (!fieldset) return "";
@@ -400,6 +452,9 @@
       options: optionsFor(el),
       // Content boundary: presence only, never the value itself.
       hasValue: hasValue(el),
+      // Which repeating instance this control sits in, 1-based, or null.
+      // Derived from structure only — see instanceIndexOf.
+      instance: instanceIndexOf(el, doc),
     };
   }
 
@@ -436,6 +491,7 @@
       // enumeration, but nothing stops a portal listing claimants as radios.
       options: buildOptions(els.map((e) => rawLabelFor(e, doc).text)),
       hasValue: els.some((e) => e.checked === true),
+      instance: instanceIndexOf(first, doc),
     };
   }
 
@@ -472,6 +528,7 @@
       visible: els.some(isVisible),
       options: buildOptions(els.map((e) => rawLabelFor(e, doc).text)),
       hasValue: els.some((e) => e.checked === true),
+      instance: instanceIndexOf(first, doc),
     };
   }
 

@@ -173,3 +173,39 @@ class TestLabelsAreScrubbed:
         assert "Tan Wei Ming" not in stub_llm["redacted_text"]
         assert "S1234567A" not in stub_llm["redacted_text"]
         assert "[PATIENT]" in stub_llm["redacted_text"]
+
+
+# ---------------------------------------------------------------------------
+# Repeating entries
+# ---------------------------------------------------------------------------
+#
+# "Comorbidity 1", "Comorbidity 2" repeat the same sub-questions, so the bare
+# label names several controls at once. Qualifying it by entry keeps the ids
+# distinct — and the qualifier is a number from the DOM's shape, never the
+# sub-header, which is prose learn mode may not read.
+
+def test_repeated_labels_are_kept_apart_by_entry():
+    from main import LiveField, _live_schema
+
+    schema = _live_schema(
+        [
+            LiveField(label="Condition", type="select", options=["Diabetes"], instance=1),
+            LiveField(label="Date of diagnosis", type="text", instance=1),
+            LiveField(label="Condition", type="select", options=["Diabetes"], instance=2),
+            LiveField(label="Date of diagnosis", type="text", instance=2),
+        ]
+    )
+    ids = [f.id for f in schema.fields]
+    assert len(set(ids)) == 4, ids
+    assert "condition_entry_1" in ids and "condition_entry_2" in ids
+    labels = {f.label for f in schema.fields}
+    assert "Date of diagnosis (entry 1)" in labels
+    assert "Date of diagnosis (entry 2)" in labels
+
+
+def test_a_field_outside_any_repeat_keeps_its_plain_label():
+    from main import LiveField, _live_schema
+
+    schema = _live_schema([LiveField(label="Principal diagnosis", type="text")])
+    assert schema.fields[0].label == "Principal diagnosis"
+    assert schema.fields[0].id == "principal_diagnosis"

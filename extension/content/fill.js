@@ -182,6 +182,13 @@
           options: c.options || [],
           description: c.description,
           describedBy: c.describedBy,
+          // Which repeating entry this control belongs to, 1-based, or null.
+          // A number derived from the DOM's shape — never from the sub-header
+          // that names the entry on screen, which is prose and unreadable by
+          // rule. The backend uses it to tell otherwise-identical questions
+          // apart, so "Date of diagnosis" in entry 1 and entry 2 stop being
+          // one ambiguous question.
+          instance: c.instance == null ? null : c.instance,
         })),
     };
   }
