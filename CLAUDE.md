@@ -33,7 +33,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**418 tests pass**: 195 backend (1 skipped), 176 extension, 47 website.
+**479 tests pass**: 201 backend (1 skipped), 231 extension, 47 website.
 
 | Piece | State |
 |---|---|
@@ -44,7 +44,8 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
 | Logo and icons | **Done (2026-08-05).** One generated set in `assets/logo/`, named for where each file is used rather than by size; `scripts/make_logo_assets.py` rebuilds it from the master. The extension declares `icons` and `action.default_icon` at last — it shipped with none until now, so Chrome drew a puzzle piece where the doctor is told to click. 16px assets are framed tighter because the mark blurs at that size; `assets/logo/README.md` has the reasoning |
 | One path: always map the page | **Built and green (2026-08-05).** The bank stopped gating: every fillable control becomes a question, a matching schema lends its `description` to the controls it describes, and a miss costs sharpness rather than the fill. `POST /map` is no longer used by the extension — `/map-live` carries both kinds of field. See "the bank is no longer a gate" |
-| Wizard support (steps + options) | **Built and green (2026-08-04), never run on a wizard.** Per-step fill guard (`locateSteps`), per-step identification, a `MutationObserver` that re-identifies when a step renders, schema-declared `options` validated server-side, and skip reasons surfaced. Degrades to the old behaviour for a schema with no `step` and no `options` — which is every schema in the bank, so **nothing in the bank exercises any of it**. See "The AIA form" |
+| Wizard support (steps + options) | **Built 2026-08-04; first exercised 2026-08-06** against `tests/fixtures/wizard_like.html` and `wizard_test_v1`, the first schema to declare `step` and `options`. Measured on that fixture: whole-plan `locate` scores 3/6 and refuses, `locateSteps` scores 3/3 and fills — the failure the per-step guard was written for, reproduced and fixed. Still **never run on a real wizard**; the fixture is synthetic and modelled on a verbal description. See "The AIA form" |
+| Repeating entries, checkbox/option handling | **Built 2026-08-06, fixture-tested only.** Entry grouping from DOM shape (`instanceIndexOf`), options-beat-type coercion, never-overwrite, none-of-the-above, no-duplicate-option. Every one of these was designed from a verbal account of ClaimEZ — see the warning at the top of "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
 | Vercel **production** | **Live (2026-08-05)**, region `sin1`, plan **Pro since 2026-08-06**. Reachable at `https://breezefill-livid.vercel.app` and — once DNS is added — at `breezefill.com` / `api.breezefill.com`. Publicly reachable — unlike a preview, production carries no SSO wall: landing page, `/health` (7 forms), `/forms` and the extension download all answer to plain `curl`. **`POST /map` returns 503**, because `ANTHROPIC_API_KEY` is Preview-scoped; it needs `vercel env add ANTHROPIC_API_KEY production` **and then a redeploy**, since an env change does not reach an already-deployed function |
@@ -77,11 +78,12 @@ possible at all, and it is a property to preserve rather than a Fly detail.
 | `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly |
 | `backend/schemas/*.json` | The form bank. `fill_mode` is `acroform`, `overlay` or `web` |
 | `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists |
-| `extension/learn/dump.js` | Label resolution + the scrubber. Used by both learn mode and the filler |
+| `extension/learn/dump.js` | Label resolution + the scrubber. Used by both learn mode and the filler. Also groups radios/checkboxes into one question, and derives repeating-entry indices from DOM shape |
 | `extension/fill/locate.js` | Joins schema fields to live controls by label. Also what identifies a form |
-| `extension/fill/apply.js` | Writes values. Idempotent. Never submits |
+| `extension/fill/apply.js` | Writes values. Never overwrites an existing answer, never repeats an option within a repeating question, never submits |
 | `extension/content/fill.js` | The only code that touches the insurer's page |
-| `frontend/src/` | `Landing.tsx`, `Demo.tsx` (talks to nothing), `ClaimApp.tsx` at `#/app` |
+| `frontend/src/` | `Landing.tsx`, `Demo.tsx` (talks to nothing), `ClaimApp.tsx` at `#/app`, `privacy.html` in `public/` |
+| `tests/fixtures/wizard_like.html` | Two-step wizard + a repeating question with an "add another" button. The only thing exercising steps, entries and option questions |
 | `api/index.py`, `vercel.json` | Vercel migration, prepared but not deployed |
 
 Three test suites, three runners: `pytest`, `npm test` (extension, from the
@@ -182,15 +184,32 @@ Described to the owner in a walkthrough on 2026-08-04. **Not yet seen by any
 tool** — this is a verbal account of the real ClaimEZ form, and it is the best
 information the project has about its actual target.
 
-**All three fixes are now built and tested (2026-08-04), and none of them has
-met the form they were written for.** They are mechanism, not configuration:
-each one degrades to exactly the old behaviour when a schema declares no steps
-and no options, which is every schema in the bank today. So the risk is not
-that they break what works — the suites cover that — it is that the mechanism
-answers a differently-shaped problem than the real ClaimEZ turns out to pose.
-Read the fixes below as *implemented*, and the facts they rest on as still
-verbal. **The dump remains next steps item 1 and is what would confirm any of
-this.**
+**Everything in this section is built, tested against a synthetic fixture, and
+has still never met the form it was written for.** They are mechanism, not
+configuration: each degrades to the old behaviour when the shape they look for
+is absent. So the risk is not that they break what works — the suites cover
+that — it is that the mechanism answers a differently-shaped problem than the
+real ClaimEZ turns out to pose. **The dump remains next steps item 1 and is
+what would confirm any of it.**
+
+**Six mechanisms now rest on this one verbal account** (2026-08-06). Listed
+here so that a dump contradicting any of them is understood to overrule the
+description, not the other way round:
+
+| Mechanism | The assumption it rests on |
+|---|---|
+| `locateSteps` per-step guard | One step in the DOM at a time |
+| Step `MutationObserver` | The URL does not change between steps |
+| `instanceIndexOf` entry grouping | Repeated entries are **sibling containers holding 2+ controls** |
+| No-duplicate option rule | Every instance of a repeating dropdown offers the **same option list** |
+| Never-overwrite | A filled control was filled by the doctor or the insurer, not by us |
+| None-of-the-above | A multi-select with no "none" option cannot distinguish unanswered from "none apply" |
+
+The third and fourth are the most fragile: both were designed from a
+description of how the page *looks*, and both fail closed (detection returns
+null, nothing groups, today's behaviour resumes) rather than filling wrongly.
+**A single dump of one repeating question with two entries open settles every
+row in that table.**
 
 **The form:** five steps — verification, admission details, patient diagnosis,
 requested fees, review. Questions are a mix of dropdowns, yes/no options and
@@ -1002,6 +1021,30 @@ derivable from the code, and all three recur on a fresh clone or a rebuild.
    route's own "extension not bundled" reply is 48 bytes, so the length alone
    tells you whether the route was even reached.
 
+**`options` must be checked before `type`, in four places (2026-08-06).** The
+common insurer shape is a question answered by picking one of a named set, and
+its control is often a checkbox or radio rather than a `<select>`. Anything
+that branches on type first makes `options` unreachable for it:
+
+- `_coerce_answer` demanded `"true"/"false"` for a checkbox field, so a model
+  answering `"Emergency"` collapsed to `missing` before the option list was
+  consulted.
+- Both review screens rendered a tick box for such a question, which cannot
+  represent the answer — and `ReviewScreen.approve()` sent `false` for every
+  real one.
+
+All four now test `field.options` first. The system prompt says so explicitly
+too, because the type line otherwise contradicts it.
+
+**A sibling-shape heuristic finds question rows, not entries.** `instanceIndexOf`
+walks outward looking for a container whose siblings hold the same controls —
+and on a normally-built form the *first* such level is the question row, since
+every row holds one input and therefore looks like a twin of the next. Three
+sub-questions inside a single entry were reported as entries 1, 2 and 3 of
+nothing. The discriminator is that **an entry holds two or more controls**; a
+one-control row is just a row. Found only because the fixture was built with
+realistic per-question `<div>`s — an earlier flatter check passed happily.
+
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
@@ -1116,6 +1159,37 @@ omission to "fix".
   back, put back what was there if the control refused it, and report `skipped`.
   A control that sanitises away what it was given must never be reported filled
   — and must never be left emptier than it was found.
+- **An answer already in a control is never overwritten** (2026-08-06). Every
+  write in `applyOne` is gated by `hasExistingAnswer`. A filled control was
+  filled by the doctor or by the insurer pre-populating the form, and writing
+  over it replaces a human decision with a model's *after* the review step has
+  passed. A lone checkbox is deliberately asymmetric — ticked is an answer,
+  unticked is indistinguishable from unanswered — so an untouched box stays
+  fillable and a ticked one is never cleared. This also inverted an older
+  assertion: an empty string no longer clears an existing value, because that
+  is the same clearance by another route.
+- **A multi-select with nothing ticked is only fillable if it can say "none".**
+  An explicit "none of the above" (or `nil`, `N/A`, `not applicable`, …) makes
+  empty legible as unanswered. Without one, empty means either unanswered or
+  "none of these apply" and nothing can separate them, so the question is left
+  for the doctor. The synonym list is exact rather than fuzzy on purpose: a
+  miss is safe (the group reads ambiguous), a false match invites a wrong tick.
+  `"No known allergies"` is an answer, not a refusal of a list.
+- **Never put the same option in two instances of one repeating question.** A
+  hard rule in `applyPlan`, keyed on the shared option list rather than on
+  `name` (which frameworks index or regenerate). Seeded from the page first, so
+  an option the doctor picked by hand is occupied too.
+- **BreezeFill never clicks "add another", or any other page button.** Creating
+  an entry is the doctor using the insurer's form. The filler writes into the
+  instances that already exist and no others — the same rule as never
+  submitting.
+- **Entry numbers come from DOM shape, never from the heading that names
+  them.** The sub-header ("Comorbidity 1") is the obvious key and is exactly
+  the surface `NEVER_A_LABEL` forbids: a heading is name-bearing, a name has no
+  shape, and learn mode has no dictionary. `instanceIndexOf` reads tag names
+  and control types only, and `dump.test.js` plants a name in a sub-heading to
+  prove it never reaches a dump. Do not "improve" the qualifier by reading the
+  heading text.
 - **An off-list answer is `missing`, never the nearest option.** When a field
   declares `options`, case and whitespace are forgiven and nothing else. Do not
   add fuzzy matching to raise the fill rate — the value is a clinical statement
@@ -1305,7 +1379,7 @@ regardless.
 
 Also absent: `timeout` (GNU coreutils, not a macOS builtin), and `python3` is
 3.14 where the old venv was 3.11 — every dependency is `>=`-pinned, so 3.14
-resolves clean and all 418 tests pass on it.
+resolves clean and the whole suite passes on it.
 
 *Windows, the previous machine.* On the OneDrive-synced copy, `node`/`npm`
 were installed but invisible to both the Bash tool and PowerShell's
@@ -1393,13 +1467,18 @@ so commercial use is permitted and the pricing page is unblocked.
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
 
-**3. ~~Wizard support~~ — built 2026-08-04, now waiting on the dump to be
-verified.** All three problems are addressed in code and covered by tests; see
-"The AIA form" above for what each fix does and what it deliberately does not
-do. What remains is not implementation: it is that no schema declares a `step`
-or an `options` list, so **none of it runs on anything today**. The first
-ClaimEZ schema is what turns it on, and one open question (should a step hidden
-rather than unmounted be filled?) is recorded there for the dump to answer.
+**3. ~~Wizard support~~ — built 2026-08-04, first exercised 2026-08-06.**
+`tests/fixtures/wizard_like.html` and `wizard_test_v1` (`internal: true`) turn
+it on: two `<legend>`-named steps, three question types each, a URL that never
+changes, and a repeating question with an "add another" button. Against that
+fixture, whole-plan `locate` scores 3/6 and refuses while `locateSteps` scores
+3/3 and fills — the exact failure the per-step guard was written for.
+
+The fixture also has a **mount/unmount toggle**, because the open question
+(should a step hidden behind `display:none` be filled?) is still open —
+`isFillable` checks `disabled` and `readOnly` but not visibility, and the
+dumper does report `visible` correctly, so the information exists and only the
+decision is missing. Answering it needs the real page, not the fixture.
 
 **4. The AIA schema itself — now the thing that switches item 3 on.** Blocked
 on the same dump. Write `step` on every field (from the `<legend>` the dumper
@@ -1407,8 +1486,9 @@ records) and `options` on every dropdown and yes/no group; both are inert
 elsewhere and load-bearing here. An expired link renders
 an error page with no fields, `submit-offline` is post-submission only, and the
 portal is a JS-rendered SPA so no fetch-based tool can see its DOM.
-`roboform_test_v1` is still the only schema declaring `hosts`, so on any
-insurer page the picker is the expected outcome rather than a bug.
+`roboform_test_v1` and `wizard_test_v1` are the only schemas declaring
+`hosts` (`roboform.com`, `localhost`), and both are `internal: true`, so on any
+real insurer page the picker is the expected outcome rather than a bug.
 
 **5. Prove a write lands in a *framework-rendered* field.** RoboForm is plain
 HTML, so filling it says nothing about React's `_valueTracker` — the failure

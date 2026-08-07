@@ -63,7 +63,7 @@ requests no storage permission, so there is nowhere to persist it).
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
 | `learn/dump.js` | Learn mode, plus the control collection and label scrubbing the filler reuses. |
 | `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. Also what identifies a form: the same measurement, read at a looser threshold. |
-| `fill/apply.js` | Writes values past a framework's value tracker. Never submits. |
+| `fill/apply.js` | Writes values past a framework's value tracker. Never overwrites an answer already in a control, never puts the same option in two instances of one repeating question, never clicks a page button, never submits. |
 
 ### What it can reach, and when
 
@@ -243,6 +243,7 @@ copy(JSON.stringify(breezefillLearn.mergeDumps(steps), null, 2));
 | `maxLength` | Silent truncation risk. The web equivalent of the `/MaxLen` comb-field trap in `pdf_fill.py`. |
 | `visible` | False for a step that is present but not displayed. Absent entirely for a step not in the DOM. |
 | `hasValue` | Whether the control was populated. **The only thing the dump says about content.** |
+| `instance` | Which repeating entry the control sits in, 1-based, or `null`. Derived from DOM shape — the nearest ancestor whose siblings hold the same controls in the same order, and which holds two or more of them. **Never from the sub-heading that names the entry on screen**: a heading is a name-bearing surface and `NEVER_A_LABEL` forbids reading one. `null` until a second entry exists, because one entry needs no disambiguation. |
 | `scrubbedStrings` | How many pieces of page chrome held a shaped identifier. Nothing from them is emitted; it is a warning that this page is PHI-bearing. |
 
 ---
@@ -258,6 +259,10 @@ PHI around `backend/redaction.py` entirely.
 What the dumper guarantees:
 
 - No control's value is ever read. `hasValue` is a boolean.
+- Repeating entries are numbered from structure, not from their headings. The
+  sub-header is the obvious key and is precisely the surface the heading ban
+  exists for — `dump.test.js` plants a name in one and asserts it never
+  reaches a dump.
 - Every emitted string goes through `scrub()`: NRIC/FIN, SG phone, email, and
   long digit runs, mirroring pass 2 of `redaction.py`.
 - `type="password"` is skipped and never inventoried; `type="hidden"` is
