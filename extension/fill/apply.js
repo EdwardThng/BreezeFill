@@ -224,6 +224,39 @@
     return { status: "filled" };
   }
 
+  // An option that lets the doctor say "none of these apply" explicitly.
+  // Deliberately narrow: it must look like a refusal of the whole list, not
+  // merely contain the word "no" (which would match "No known allergies").
+  const NONE_OF_THE_ABOVE =
+    /^\s*(none(\s+of\s+the\s+above)?|not\s+applicable|n\.?\/?a\.?|no\s+(other|further)\b.*)\s*$/i;
+
+  function isNoneOption(el, labelOf) {
+    const text = String(labelOf ? labelOf(el) : "") || String(el.value || "");
+    return NONE_OF_THE_ABOVE.test(text);
+  }
+
+  /**
+   * A multi-select checkbox group with nothing ticked: unanswered, or answered
+   * "none of these"?
+   *
+   * The list itself decides. If it offers an explicit "none of the above",
+   * then a doctor who meant that would have ticked it — so an empty group is
+   * genuinely unanswered and safe to fill. If it offers no such option, empty
+   * carries both meanings at once and nothing here can separate them, so the
+   * question is left alone.
+   *
+   * That asymmetry is the same bet the rest of the product makes: a blank the
+   * doctor completes costs seconds, a wrong tick is a clinical statement they
+   * sign. Radio groups are excluded — they are single-select and an empty one
+   * is always simply unanswered.
+   */
+  function isAmbiguousEmptyGroup(els, labelOf) {
+    if (!Array.isArray(els) || els.length === 0) return false;
+    if (els[0].type !== "checkbox") return false;
+    if (els.some((el) => el.checked === true)) return false;
+    return !els.some((el) => isNoneOption(el, labelOf));
+  }
+
   /**
    * Is this control already answered?
    *
@@ -319,6 +352,13 @@
     // finds its own values in place and writes nothing.
     if (hasExistingAnswer(target)) {
       return { status: "skipped", reason: "already answered" };
+    }
+
+    if (isAmbiguousEmptyGroup(target, opts.labelOf)) {
+      return {
+        status: "skipped",
+        reason: "nothing ticked and no 'none of the above' — cannot tell unanswered from none",
+      };
     }
 
     if (Array.isArray(target)) {

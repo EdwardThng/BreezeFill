@@ -464,10 +464,14 @@ describe("checkbox answers", () => {
 
 describe("checkbox groups", () => {
   function group(checkedIndex) {
+    // Carries an explicit "None of the above": without one, an empty group is
+    // ambiguous and refused before any ticking is attempted — which is its own
+    // test in the "empty checkbox group" block below.
     document.body.innerHTML = `
       <input type="checkbox" name="admit" id="a" value="Emergency">
       <input type="checkbox" name="admit" id="b" value="Elective">
-      <input type="checkbox" name="admit" id="c" value="Day surgery">`;
+      <input type="checkbox" name="admit" id="c" value="Day surgery">
+      <input type="checkbox" name="admit" id="d" value="None of the above">`;
     const els = Array.from(document.querySelectorAll("input[name=admit]"));
     if (checkedIndex != null) els[checkedIndex].checked = true;
     return els;
@@ -499,7 +503,7 @@ describe("checkbox groups", () => {
   test("the matching member is ticked and the others are left alone", () => {
     const els = group(null);
     expect(apply.applyOne(els, "Elective").status).toBe("filled");
-    expect(els.map((e) => e.checked)).toEqual([false, true, false]);
+    expect(els.map((e) => e.checked)).toEqual([false, true, false, false]);
   });
 
   test("a group with something already ticked is left alone", () => {
@@ -507,7 +511,7 @@ describe("checkbox groups", () => {
     const result = apply.applyOne(els, "Elective");
     expect(result.status).toBe("skipped");
     expect(result.reason).toBe("already answered");
-    expect(els.map((e) => e.checked)).toEqual([true, false, false]);
+    expect(els.map((e) => e.checked)).toEqual([true, false, false, false]);
   });
 });
 
@@ -580,5 +584,64 @@ describe("an answer already in the control is never overwritten", () => {
     expect(apply.applyOne(el, "Raffles Hospital").status).toBe("filled");
     expect(apply.applyOne(el, "Raffles Hospital").status).toBe("skipped");
     expect(el.value).toBe("Raffles Hospital");
+  });
+});
+
+/**
+ * Multi-select checkbox groups, and what an empty one means.
+ *
+ * The list decides. An explicit "none of the above" makes empty legible as
+ * unanswered; without one, empty means either "not yet answered" or "none of
+ * these apply" and nothing can separate the two.
+ */
+describe("an empty checkbox group", () => {
+  function group(optionLabels) {
+    document.body.innerHTML = `<fieldset><legend>Which complications occurred?</legend>${optionLabels
+      .map(
+        (t, i) =>
+          `<input type="checkbox" name="comp" id="o${i}" value="${t}"><label for="o${i}">${t}</label>`
+      )
+      .join("")}</fieldset>`;
+    return Array.from(document.querySelectorAll("input[name=comp]"));
+  }
+  const labelOf = (el) =>
+    document.querySelector(`label[for="${el.id}"]`)?.textContent ?? "";
+
+  test("is fillable when the list offers 'none of the above'", () => {
+    const els = group(["Bleeding", "Infection", "None of the above"]);
+    const result = apply.applyOne(els, "Infection", { labelOf });
+    expect(result.status).toBe("filled");
+    expect(els[1].checked).toBe(true);
+  });
+
+  test.each(["None", "Not applicable", "N/A", "none of the above"])(
+    "%s counts as an explicit none option",
+    (none) => {
+      const els = group(["Bleeding", none]);
+      expect(apply.applyOne(els, "Bleeding", { labelOf }).status).toBe("filled");
+    }
+  );
+
+  test("is left alone when the list offers no way to say 'none'", () => {
+    // Empty here means either unanswered or "none of these apply", and
+    // guessing between them is how a wrong clinical tick gets signed.
+    const els = group(["Bleeding", "Infection"]);
+    const result = apply.applyOne(els, "Infection", { labelOf });
+    expect(result.status).toBe("skipped");
+    expect(els.every((e) => !e.checked)).toBe(true);
+  });
+
+  test("'No known allergies' is not mistaken for a none option", () => {
+    // The pattern must match a refusal of the whole list, not any option that
+    // happens to start with "no".
+    const els = group(["Penicillin", "No known allergies"]);
+    expect(apply.applyOne(els, "Penicillin", { labelOf }).status).toBe("skipped");
+  });
+
+  test("an empty RADIO group is still fillable — it is single-select", () => {
+    document.body.innerHTML = `
+      <input type="radio" name="r" id="a" value="Yes"><input type="radio" name="r" id="b" value="No">`;
+    const els = Array.from(document.querySelectorAll("input[name=r]"));
+    expect(apply.applyOne(els, "Yes").status).toBe("filled");
   });
 });
