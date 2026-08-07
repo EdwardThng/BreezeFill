@@ -200,7 +200,7 @@ description, not the other way round:
 |---|---|
 | `locateSteps` per-step guard | One step in the DOM at a time |
 | Step `MutationObserver` | The URL does not change between steps |
-| `instanceIndexOf` entry grouping | Repeated entries are **sibling containers holding 2+ controls** |
+| `instanceIndexOf` entry grouping | Repeated entries are **siblings that either hold 2+ controls or open with a delimiter** — a delimiter being any element before the first control that is not a control and not a label bound to one, so `<legend>`, `<h4>` and a styled `<div>` all qualify |
 | No-duplicate option rule | Every instance of a repeating dropdown offers the **same option list** |
 | Never-overwrite | A filled control was filled by the doctor or the insurer, not by us |
 | None-of-the-above | A multi-select with no "none" option cannot distinguish unanswered from "none apply" |
@@ -1041,9 +1041,22 @@ walks outward looking for a container whose siblings hold the same controls —
 and on a normally-built form the *first* such level is the question row, since
 every row holds one input and therefore looks like a twin of the next. Three
 sub-questions inside a single entry were reported as entries 1, 2 and 3 of
-nothing. The discriminator is that **an entry holds two or more controls**; a
-one-control row is just a row. Found only because the fixture was built with
-realistic per-question `<div>`s — an earlier flatter check passed happily.
+nothing. Found only because the fixture was built with realistic per-question
+`<div>`s; an earlier flatter check passed happily.
+
+The first fix — require two or more controls — was too narrow: it also excluded
+a legitimate entry that asks only one question. **A delimiter is the real
+discriminator** (2026-08-06). An entry opens with something that names it; a
+question row opens with a `<label>` bound to its own control. Deciding that by
+*association* rather than by reading the text is what keeps the heading ban
+intact, and what makes it tag-agnostic — nothing has to know whether a given
+insurer titles entries with `<legend>`, `<h4>` or a styled `<div>`.
+
+**Steps and entries are otherwise structurally identical**, so the detector
+also requires every twin to be **visible at once**. Entries sit on screen
+together; a wizard shows one step at a time. Without that check, a form keeping
+its steps in the DOM behind `display:none` has every step read as an entry and
+every label pointlessly qualified.
 
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,

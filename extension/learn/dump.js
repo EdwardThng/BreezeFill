@@ -283,27 +283,89 @@
    * control shape. Two or more matching siblings is the repeat; one is just a
    * container.
    */
+  const IS_CONTROL = /^(INPUT|SELECT|TEXTAREA)$/;
+
+  /**
+   * A label belonging to a control inside this unit, rather than a title for
+   * the unit itself. Decided by ASSOCIATION — `for` pointing inward, or a
+   * control wrapped inside — never by reading what the label says.
+   */
+  function isBoundLabel(node, unit) {
+    if (node.tagName !== "LABEL") return false;
+    const forId = node.getAttribute("for");
+    if (forId) {
+      try {
+        if (unit.querySelector(`#${cssEscape(forId)}`)) return true;
+      } catch (err) {
+        /* an id that will not compile into a selector is not a binding */
+      }
+    }
+    return Boolean(node.querySelector("input, select, textarea"));
+  }
+
+  /**
+   * Does this unit open with something that names it?
+   *
+   * A delimiter is any element that appears before the unit's first control
+   * and is neither a control nor a label bound to one inside the unit. That is
+   * deliberately TAG-AGNOSTIC: a <legend>, an <h4> and a styled <div> all
+   * qualify, so nothing here has to know which a given insurer used — and the
+   * one thing that must NOT qualify, a question row's own <label>, is excluded
+   * by association rather than by what it says.
+   *
+   * The only fact read about the text is whether there is any. Its content is
+   * never inspected and never emitted, so the heading ban is untouched.
+   */
+  function hasDelimiter(unit) {
+    for (const child of unit.children) {
+      if (IS_CONTROL.test(child.tagName)) return false;
+      if (child.querySelector && child.querySelector("input, select, textarea")) {
+        return false;
+      }
+      if (isBoundLabel(child, unit)) continue;
+      if (rawTextOf(child) !== "") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Which repeating entry this control sits in, 1-based, or null.
+   *
+   * Walks outward to the innermost level whose siblings repeat the same
+   * controls in the same order, and which looks like an entry rather than a
+   * question row. Two independent things can make it an entry, so a form
+   * qualifies whichever way it is built:
+   *
+   *   - it holds two or more controls, or
+   *   - it opens with a delimiter (see hasDelimiter)
+   *
+   * The second is what lets a one-question entry work at all, and what makes
+   * containment optional — a flat run of delimiter-then-control still
+   * segments. The first is kept because a form may wrap entries without
+   * titling them.
+   *
+   * ALL THE TWINS MUST BE VISIBLE AT ONCE. That is what separates entries from
+   * wizard steps, which are otherwise identical in structure: entries sit on
+   * screen together, a wizard shows one step at a time. Without it, a form
+   * that keeps its steps in the DOM behind display:none would have every step
+   * read as an entry and every label uselessly qualified.
+   */
   function instanceIndexOf(el, doc) {
     let node = el.parentElement;
     const root = (doc && doc.body) || null;
     while (node && node !== root) {
       const shape = controlShape(node);
-      // AT LEAST TWO CONTROLS, or this is not an entry.
-      //
-      // Without this the walk stops at the first level whose siblings match,
-      // which on a normally-built form is the question row: every row holds
-      // one input, so every row looks like a twin of the next. Three
-      // sub-questions in a single entry were being reported as entries 1, 2
-      // and 3 of nothing. An entry is what holds SEVERAL sub-questions; a row
-      // holding one control is just a row.
-      if (shape && shape.indexOf(",") !== -1) {
+      if (shape) {
         const parent = node.parentElement;
         const twins = parent
           ? Array.from(parent.children).filter(
               (sib) => sib.nodeType === 1 && controlShape(sib) === shape
             )
           : [];
-        if (twins.length >= 2) return twins.indexOf(node) + 1;
+        const looksLikeEntry = shape.indexOf(",") !== -1 || hasDelimiter(node);
+        if (twins.length >= 2 && looksLikeEntry && twins.every(isVisible)) {
+          return twins.indexOf(node) + 1;
+        }
       }
       node = node.parentElement;
     }

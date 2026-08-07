@@ -421,3 +421,94 @@ describe("repeating entries", () => {
     expect(serialised).not.toContain("S1234567D");
   });
 });
+
+/**
+ * The two shapes the container-only detector could not see.
+ *
+ * Both are the same underlying gap: the boundary was inferred from what an
+ * entry CONTAINS rather than from what DELIMITS it. A delimiter is any element
+ * before the first control that is not a control and not a label bound to one
+ * — so <legend>, <h4> and a styled <div> all work and nothing hardcodes which.
+ */
+describe("entries found by their delimiter", () => {
+  const dump = () => globalThis.breezefillLearn.collectControls(document).controls;
+
+  test("one sub-question per entry, delimited by a heading", () => {
+    // Each entry holds a single control, so the two-or-more-controls branch
+    // cannot fire. The <h4> is what makes them entries.
+    document.body.innerHTML = `<form><div id="w">
+      <div class="e"><h4>Entry one</h4><label for="a">Condition</label>
+        <select id="a"><option>X</option></select></div>
+      <div class="e"><h4>Entry two</h4><label for="b">Condition</label>
+        <select id="b"><option>X</option></select></div>
+    </div></form>`;
+    expect(dump().map((c) => c.instance)).toEqual([1, 2]);
+  });
+
+  test("the same thing with <legend> instead of a heading", () => {
+    document.body.innerHTML = `<form><div id="w">
+      <fieldset><legend>Entry one</legend><label for="a">Condition</label>
+        <select id="a"><option>X</option></select></fieldset>
+      <fieldset><legend>Entry two</legend><label for="b">Condition</label>
+        <select id="b"><option>X</option></select></fieldset>
+    </div></form>`;
+    expect(dump().map((c) => c.instance)).toEqual([1, 2]);
+  });
+
+  test("and with a plain styled div as the title", () => {
+    // Nothing hardcodes a tag, so a form that titles entries with a <div>
+    // segments exactly like one that uses a heading.
+    document.body.innerHTML = `<form><div id="w">
+      <div class="e"><div class="t">Entry one</div><label for="a">Condition</label>
+        <select id="a"><option>X</option></select></div>
+      <div class="e"><div class="t">Entry two</div><label for="b">Condition</label>
+        <select id="b"><option>X</option></select></div>
+    </div></form>`;
+    expect(dump().map((c) => c.instance)).toEqual([1, 2]);
+  });
+
+  test("question rows are still not entries — their label is bound", () => {
+    // A row's leading element is a <label for> pointing at the control inside
+    // it, which is excluded by association, not by reading the text.
+    document.body.innerHTML = `<form>
+      <div class="q"><label for="a">One</label><input type="text" id="a"></div>
+      <div class="q"><label for="b">Two</label><input type="text" id="b"></div>
+      <div class="q"><label for="c">Three</label><input type="text" id="c"></div>
+    </form>`;
+    expect(dump().every((c) => c.instance === null)).toBe(true);
+  });
+
+  test("a wrapping label is excluded too", () => {
+    document.body.innerHTML = `<form>
+      <div class="q"><label>One <input type="text" id="a"></label></div>
+      <div class="q"><label>Two <input type="text" id="b"></label></div>
+    </form>`;
+    expect(dump().every((c) => c.instance === null)).toBe(true);
+  });
+
+  test("hidden twins are steps, not entries", () => {
+    // Entries sit on screen together; a wizard shows one step at a time. Two
+    // same-shaped fieldsets where one is display:none are steps, and numbering
+    // them would qualify every label on the form for nothing.
+    document.body.innerHTML = `<form><div id="w">
+      <fieldset><legend>Step one</legend><label for="a">Ward</label>
+        <select id="a"><option>X</option></select></fieldset>
+      <fieldset style="display:none"><legend>Step two</legend><label for="b">Ward</label>
+        <select id="b"><option>X</option></select></fieldset>
+    </div></form>`;
+    expect(dump().every((c) => c.instance === null)).toBe(true);
+  });
+
+  test("no delimiter text is emitted, whatever the delimiter is", () => {
+    document.body.innerHTML = `<form><div id="w">
+      <div class="e"><h4>Claim for Tan Wei Ming (S1234567D)</h4>
+        <label for="a">Condition</label><select id="a"><option>X</option></select></div>
+      <div class="e"><h4>Entry two</h4>
+        <label for="b">Condition</label><select id="b"><option>X</option></select></div>
+    </div></form>`;
+    const controls = dump();
+    expect(controls.map((c) => c.instance)).toEqual([1, 2]);
+    expect(JSON.stringify(controls)).not.toContain("Tan Wei Ming");
+    expect(JSON.stringify(controls)).not.toContain("S1234567D");
+  });
+});
