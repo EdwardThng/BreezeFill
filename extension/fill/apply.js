@@ -184,8 +184,34 @@
    * a checkbox that is already correct would toggle it to wrong, which is why
    * the state check comes first.
    */
+  // What a checkbox understands, compared case-insensitively. The previous
+  // check was `value === "yes"`, which is false for "Yes" — the exact string
+  // an options list supplies — so a correct answer read as "don't tick".
+  const CHECKBOX_TRUE = new Set(["true", "yes", "y", "on", "checked", "1"]);
+  const CHECKBOX_FALSE = new Set(["false", "no", "n", "off", "unchecked", "0"]);
+
+  /** true, false, or null when the value says nothing about a tick. */
+  function checkboxIntent(value) {
+    if (value === true) return true;
+    if (value === false) return false;
+    const text = String(value == null ? "" : value).trim().toLowerCase();
+    if (CHECKBOX_TRUE.has(text)) return true;
+    if (CHECKBOX_FALSE.has(text)) return false;
+    return null;
+  }
+
   function applyCheckbox(el, value) {
-    const wanted = value === true || value === "true" || value === "yes";
+    const wanted = checkboxIntent(value);
+
+    // An unrecognised value must NOT fall through to `false`. That is what the
+    // old expression did, and on a box the doctor had already ticked it meant
+    // the "fill" silently UNTICKED their answer — the same clearance bug that
+    // writeOrRestore exists to prevent, on the one control writeOrRestore
+    // does not cover.
+    if (wanted === null) {
+      return { status: "skipped", reason: "not a tick/untick answer" };
+    }
+
     if (el.checked === wanted) return { status: "unchanged" };
 
     el.click();
@@ -199,10 +225,11 @@
   }
 
   /**
-   * Radio groups: click the member whose label matches the value. No match
-   * means no selection — never "pick the first one".
+   * One question spread over several inputs — a radio group, or a set of
+   * checkboxes sharing a name. Click the member whose label matches the value.
+   * No match means no selection — never "pick the first one".
    */
-  function applyRadio(els, value, labelOf) {
+  function applyOption(els, value, labelOf) {
     const wanted = String(value == null ? "" : value).trim().toLowerCase();
     if (!wanted) return { status: "skipped", reason: "no value" };
 
@@ -215,6 +242,21 @@
 
     if (!match) return { status: "skipped", reason: "no matching option" };
     if (match.checked) return { status: "unchanged" };
+
+    // Checkboxes do not clear their siblings the way radios do, so a group of
+    // them can end up with two ticked — and two ticked on a single-answer
+    // question is a wrong answer that reads as a considered one.
+    //
+    // Ticking ours and unticking theirs is not the fix: that overwrites an
+    // answer the doctor gave by hand. So neither is done. The conflict is
+    // reported and the group is left exactly as found, which is the same call
+    // `applyOne`'s absent-vs-empty guard makes.
+    const conflicting = els.some(
+      (el) => el !== match && el.type === "checkbox" && el.checked === true
+    );
+    if (conflicting) {
+      return { status: "skipped", reason: "another option is already ticked" };
+    }
 
     match.click();
     if (!match.checked) {
@@ -249,7 +291,7 @@
     }
 
     if (Array.isArray(target)) {
-      return applyRadio(target, value, opts.labelOf);
+      return applyOption(target, value, opts.labelOf);
     }
     if (!target) return { status: "skipped", reason: "no target" };
     if (target.disabled || target.readOnly) {
@@ -261,7 +303,7 @@
 
     if (tag === "select") return applySelect(target, value);
     if (type === "checkbox") return applyCheckbox(target, value);
-    if (type === "radio") return applyRadio([target], value, opts.labelOf);
+    if (type === "radio") return applyOption([target], value, opts.labelOf);
     // Before the text fallback: a native date control looks like a text input
     // from here, and is the one that silently swallows what we write.
     if (type === "date") return applyDate(target, value);

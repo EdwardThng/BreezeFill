@@ -29,6 +29,9 @@ const row = (over: Partial<MappedField>): MappedField => ({
   source: null,
   needs_review: false,
   recheck: null,
+  // The server always sends this (it defaults to [] on MappedField), so the
+  // type requires it and the default here matches a free-text row.
+  options: [],
   ...over,
 });
 

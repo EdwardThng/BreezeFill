@@ -332,7 +332,16 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
     correctly, and they have to submit it either way.
     """
     taken: set[str] = set()
-    types = {"checkbox": "checkbox", "radio-group": "checkbox", "date": "date"}
+    # A grouped question is a checkbox-typed field carrying options, and
+    # `_coerce_answer` consults options before type — so the model answers with
+    # the option's own wording rather than true/false. A lone checkbox has no
+    # options and stays a plain boolean toggle.
+    types = {
+        "checkbox": "checkbox",
+        "radio-group": "checkbox",
+        "checkbox-group": "checkbox",
+        "date": "date",
+    }
     return FormSchema(
         form_id="__live__",
         fill_mode="web",

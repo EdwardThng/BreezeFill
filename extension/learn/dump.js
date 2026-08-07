@@ -439,6 +439,42 @@
     };
   }
 
+  /**
+   * Checkboxes sharing a name are one question too.
+   *
+   * Radios were grouped from the start; checkboxes were not, so a "tick the
+   * one that applies" question arrived as N separate controls each labelled
+   * with a single option word ("Yes", "Emergency"). Nothing described the
+   * question, so no schema field could match it and the whole question was
+   * silently unfillable.
+   *
+   * Grouped only at two or more. A lone named checkbox is a plain yes/no
+   * toggle, and turning it into a one-option group would change what it means.
+   */
+  function describeCheckboxGroup(els, doc, ref) {
+    const first = els[0];
+    const groupLabel = sectionFor(first);
+    return {
+      ref,
+      tag: "input",
+      type: "checkbox-group",
+      name: scrub(first.getAttribute("name") || ""),
+      id: "",
+      label: groupLabel,
+      labelSource: "section-heading",
+      section: groupLabel,
+      selector: `input[name="${cssEscape(first.getAttribute("name") || "")}"]`,
+      placeholder: "",
+      required: els.some((e) => e.required === true),
+      disabled: els.every((e) => e.disabled === true),
+      readOnly: false,
+      maxLength: null,
+      visible: els.some(isVisible),
+      options: buildOptions(els.map((e) => rawLabelFor(e, doc).text)),
+      hasValue: els.some((e) => e.checked === true),
+    };
+  }
+
   function collectControls(doc) {
     const nodes = Array.from(
       doc.querySelectorAll("input, select, textarea, [contenteditable='true']")
@@ -451,6 +487,7 @@
     // ignores this; the filler is the only caller that wants it.
     const elements = new Map();
     const radioGroups = new Map();
+    const checkboxGroups = new Map();
     let skippedPassword = 0;
     let counter = 0;
 
@@ -472,6 +509,15 @@
         }
       }
 
+      if (type === "checkbox") {
+        const name = el.getAttribute("name") || "";
+        if (name) {
+          if (!checkboxGroups.has(name)) checkboxGroups.set(name, []);
+          checkboxGroups.get(name).push(el);
+          continue;
+        }
+      }
+
       counter += 1;
       controls.push(describe(el, doc, `c${counter}`));
       elements.set(`c${counter}`, el);
@@ -482,6 +528,19 @@
       controls.push(describeRadioGroup(els, doc, `c${counter}`));
       // A radio group is one question over several elements, so the whole
       // set is kept — the filler picks the member matching the value.
+      elements.set(`c${counter}`, els);
+    }
+
+    for (const els of checkboxGroups.values()) {
+      counter += 1;
+      if (els.length < 2) {
+        // A single named checkbox is a yes/no toggle, not a question with
+        // options. Emit it as the plain control it is.
+        controls.push(describe(els[0], doc, `c${counter}`));
+        elements.set(`c${counter}`, els[0]);
+        continue;
+      }
+      controls.push(describeCheckboxGroup(els, doc, `c${counter}`));
       elements.set(`c${counter}`, els);
     }
 

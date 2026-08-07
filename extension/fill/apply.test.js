@@ -389,3 +389,103 @@ describe("applyPlan", () => {
     expect(clicked).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Checkbox questions whose answer is an option, not a boolean.
+ *
+ * All three of these failed before 2026-08-06 and each failed differently:
+ * the value comparison was case-sensitive, an unrecognised value fell through
+ * to `false` and UNTICKED, and a set of checkboxes was never one question.
+ */
+describe("checkbox answers", () => {
+  function box(checked = false) {
+    document.body.innerHTML = `<input type="checkbox" id="b" ${checked ? "checked" : ""}>`;
+    return document.getElementById("b");
+  }
+
+  test("a capitalised Yes ticks the box", () => {
+    const el = box(false);
+    // "Yes" is exactly what an options list supplies. The old check was
+    // `value === "yes"`, so this arrived as "do not tick".
+    expect(apply.applyOne(el, "Yes").status).toBe("filled");
+    expect(el.checked).toBe(true);
+  });
+
+  test.each(["YES", "true", "On", "1", "y"])("%s is understood as a tick", (v) => {
+    const el = box(false);
+    apply.applyOne(el, v);
+    expect(el.checked).toBe(true);
+  });
+
+  test.each(["No", "FALSE", "off", "0"])("%s is understood as an untick", (v) => {
+    const el = box(true);
+    apply.applyOne(el, v);
+    expect(el.checked).toBe(false);
+  });
+
+  test("an unrecognised value never unticks what the doctor already ticked", () => {
+    // The bug this replaces: any value that was not exactly "true"/"yes"
+    // computed `wanted = false`, so a real answer silently cleared the box.
+    const el = box(true);
+    const result = apply.applyOne(el, "Ward B1");
+    expect(result.status).toBe("skipped");
+    expect(el.checked).toBe(true);
+  });
+
+  test("an unrecognised value on an empty box writes nothing and says so", () => {
+    const el = box(false);
+    expect(apply.applyOne(el, "Emergency").status).toBe("skipped");
+    expect(el.checked).toBe(false);
+  });
+});
+
+describe("checkbox groups", () => {
+  function group(checkedIndex) {
+    document.body.innerHTML = `
+      <input type="checkbox" name="admit" id="a" value="Emergency">
+      <input type="checkbox" name="admit" id="b" value="Elective">
+      <input type="checkbox" name="admit" id="c" value="Day surgery">`;
+    const els = Array.from(document.querySelectorAll("input[name=admit]"));
+    if (checkedIndex != null) els[checkedIndex].checked = true;
+    return els;
+  }
+
+  test("several checkboxes sharing a name become one question", () => {
+    document.body.innerHTML = `
+      <fieldset><legend>How was the patient admitted?</legend>
+        <input type="checkbox" name="admit" id="a"><label for="a">Emergency</label>
+        <input type="checkbox" name="admit" id="b"><label for="b">Elective</label>
+      </fieldset>`;
+    const { controls } = learn.collectControls(document);
+    expect(controls).toHaveLength(1);
+    expect(controls[0].type).toBe("checkbox-group");
+    expect(controls[0].label).toBe("How was the patient admitted?");
+    expect(controls[0].options.values).toEqual(["Emergency", "Elective"]);
+  });
+
+  test("a lone named checkbox stays a plain toggle, not a one-option group", () => {
+    document.body.innerHTML = `
+      <fieldset><legend>Consent</legend>
+        <input type="checkbox" name="consent" id="c"><label for="c">I agree</label>
+      </fieldset>`;
+    const { controls } = learn.collectControls(document);
+    expect(controls).toHaveLength(1);
+    expect(controls[0].type).toBe("checkbox");
+  });
+
+  test("the matching member is ticked and the others are left alone", () => {
+    const els = group(null);
+    expect(apply.applyOne(els, "Elective").status).toBe("filled");
+    expect(els.map((e) => e.checked)).toEqual([false, true, false]);
+  });
+
+  test("a conflicting tick is reported rather than overwritten or doubled", () => {
+    // Checkboxes do not clear their siblings the way radios do. Ticking ours
+    // would leave two ticked on a single-answer question; unticking theirs
+    // would overwrite the doctor. Neither is done.
+    const els = group(0);
+    const result = apply.applyOne(els, "Elective");
+    expect(result.status).toBe("skipped");
+    expect(els.map((e) => e.checked)).toEqual([true, false, false]);
+  });
+});

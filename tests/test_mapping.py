@@ -649,3 +649,69 @@ def test_the_aia_schema_and_the_prompt_no_longer_disagree():
     assert dated, "expected date fields on the AIA form"
     for field in dated:
         assert "DD/MM/YY" in (field.description or ""), f"{field.id} states no date format"
+
+
+# ---------------------------------------------------------------------------
+# Options win over type
+# ---------------------------------------------------------------------------
+#
+# `_coerce_answer` used to check `field.type == "checkbox"` first and demand
+# "true"/"false", which made `options` unreachable on a checkbox field: the
+# model answered with the option's own wording and every answer collapsed to
+# missing. That is the common insurer shape — a question answered by ticking
+# one box out of several, where the answer is the box's wording, not a boolean.
+
+CHECKBOX_OPTION_SCHEMA = FormSchema.model_validate(
+    {
+        "form_id": "checkbox_options_v1",
+        "fill_mode": "web",
+        "fields": [
+            {
+                "id": "admission_type",
+                "type": "checkbox",
+                "source": "llm",
+                "description": "How the patient was admitted",
+                "options": ["Emergency", "Elective", "Day surgery"],
+            },
+            {
+                "id": "consent_given",
+                "type": "checkbox",
+                "source": "llm",
+                "description": "Whether the patient consented",
+            },
+        ],
+    }
+)
+
+
+def _checkbox_answer(field_id: str, value: str):
+    reply = {"fields": [{"id": field_id, "value": value, "status": "extracted", "source": "s"}]}
+    return map_fields(
+        CHECKBOX_OPTION_SCHEMA, "notes", client=FakeClient(json.dumps(reply))
+    )[field_id]
+
+
+def test_a_checkbox_field_with_options_is_answered_with_an_option():
+    answer = _checkbox_answer("admission_type", "Emergency")
+    assert answer.status == "extracted"
+    assert answer.value == "Emergency"
+
+
+def test_a_checkbox_option_keeps_the_forms_own_wording():
+    # Case and surrounding space are forgiven; what survives is the string the
+    # control actually offers, because that is what applyOption matches on.
+    assert _checkbox_answer("admission_type", "  day SURGERY ").value == "Day surgery"
+
+
+def test_an_off_list_checkbox_answer_is_missing_not_a_boolean():
+    answer = _checkbox_answer("admission_type", "true")
+    assert answer.status == "missing"
+    assert answer.value is None
+
+
+def test_a_checkbox_without_options_is_still_a_boolean():
+    # The old behaviour has to survive for a plain tick box, which is what a
+    # lone named checkbox still is.
+    assert _checkbox_answer("consent_given", "true").value is True
+    assert _checkbox_answer("consent_given", "false").value is False
+    assert _checkbox_answer("consent_given", "Emergency").status == "missing"

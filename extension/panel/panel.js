@@ -770,11 +770,12 @@ function renderRow(row) {
   }
 
   let input;
-  if (row.field_type === "checkbox") {
-    input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = valueOf(row) === true;
-  } else if (row.options && row.options.length) {
+  // Options are checked FIRST, and the order matters. A checkbox question that
+  // declares options is answered with one of them, not with true/false — so
+  // rendering it as a tick box would show the doctor a control that cannot
+  // represent the answer, and `valueOf(row) === true` would read every option
+  // string as unticked.
+  if (row.options && row.options.length) {
     // The form's own choices, so a doctor correcting this picks something the
     // control will actually accept. Retyping it as free text is how the value
     // gets refused again at fill time, which is the failure this whole path
@@ -794,6 +795,10 @@ function renderRow(row) {
       input.append(el);
     }
     input.value = row.options.includes(valueOf(row)) ? valueOf(row) : "";
+  } else if (row.field_type === "checkbox") {
+    input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = valueOf(row) === true;
   } else {
     input = document.createElement("textarea");
     input.rows = String(Math.min(4, Math.max(1, String(valueOf(row) ?? "").length / 44 + 1)) | 0);

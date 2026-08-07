@@ -22,6 +22,15 @@ export interface MappedField {
    * the doctor there is nothing to check, which is the opposite of true.
    */
   recheck: string | null;
+  /**
+   * The answers this field accepts, verbatim as the form words them. Empty for
+   * free text.
+   *
+   * Rendered as a dropdown, and checked BEFORE `field_type`: a checkbox
+   * question that declares options is answered with one of them rather than
+   * with true/false, so a tick box cannot represent its answer.
+   */
+  options: string[];
 }
 
 /**

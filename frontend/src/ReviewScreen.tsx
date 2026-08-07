@@ -94,7 +94,13 @@ export default function ReviewScreen({ claim, busy, error, onApprove, onDiscard 
   const approve = () => {
     const values: Record<string, string | boolean | null> = {};
     for (const row of rows) {
-      if (row.field_type === "checkbox") {
+      // Options before type: a checkbox question that declares options is
+      // answered with one of them as a string, so coercing it to a boolean
+      // here would send `false` for every real answer.
+      if (row.options && row.options.length > 0) {
+        const text = typeof row.value === "string" ? row.value.trim() : "";
+        values[row.field_id] = text === "" ? null : text;
+      } else if (row.field_type === "checkbox") {
         values[row.field_id] = row.value === true;
       } else {
         const text = typeof row.value === "string" ? row.value.trim() : "";
@@ -219,7 +225,27 @@ function Row({
       </div>
 
       <div className="row-value">
-        {row.field_type === "checkbox" ? (
+        {row.options && row.options.length > 0 ? (
+          // Options before type, for the same reason as in approve(): a
+          // checkbox question with options is answered with one of them, and a
+          // tick box cannot represent that answer.
+          <select
+            id={row.field_id}
+            value={
+              typeof row.value === "string" && row.options.includes(row.value)
+                ? row.value
+                : ""
+            }
+            onChange={(e) => setRow(row.field_id, { value: e.target.value, confirmed: true })}
+          >
+            <option value="">— leave blank —</option>
+            {row.options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        ) : row.field_type === "checkbox" ? (
           <label className="inline-check">
             <input
               id={row.field_id}

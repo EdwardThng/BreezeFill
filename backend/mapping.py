@@ -50,7 +50,9 @@ like [PATIENT] or [NRIC]. Return a JSON object with a "fields" array holding \
 exactly one entry per form field id. Each entry has:
 - id: the form field id
 - value: the answer as a string, formatted per the field type (text: plain \
-string; date: DD/MM/YYYY; checkbox: "true" or "false")
+string; date: DD/MM/YYYY; checkbox: "true" or "false" — UNLESS the field lists \
+"options", in which case answer with one of those options for every field \
+type, checkbox included)
 - status: "extracted" (directly stated in the notes) | "inferred" (a \
 reasonable clinical inference from the notes) | "missing" (not determinable)
 - source: the verbatim snippet from the notes that supports the value, or \
@@ -425,12 +427,18 @@ def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
     if status not in ("extracted", "inferred") or not isinstance(value, str) or value == "":
         return missing
     parsed: str | bool = value
-    if field.type == "checkbox":
-        flag = value.strip().lower()
-        if flag not in ("true", "false"):
-            return missing
-        parsed = flag == "true"
-    elif field.options:
+    # OPTIONS WIN OVER TYPE, and the order here is the whole of that rule.
+    #
+    # It used to be the other way round, which made `options` unreachable on a
+    # checkbox field: the type branch demanded "true"/"false", the model
+    # answered "Ward B1" or "Emergency", and every such answer collapsed to
+    # missing without the option list ever being consulted. That is wrong for
+    # the common insurer shape — a question answered by ticking one box out of
+    # several, where the answer is the box's own wording and not a boolean.
+    #
+    # A checkbox with no options is still a plain yes/no toggle and still
+    # coerces to a bool below.
+    if field.options:
         # An off-list answer is treated exactly like a malformed one, which is
         # the same thing it is: the model was given the permitted set and
         # returned something outside it, so what it returned is not an answer
@@ -439,6 +447,11 @@ def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
         if canonical is None:
             return missing
         parsed = canonical
+    elif field.type == "checkbox":
+        flag = value.strip().lower()
+        if flag not in ("true", "false"):
+            return missing
+        parsed = flag == "true"
     elif field.type == "date":
         parsed = _apply_date_format(field, value)
     source = item.get("source")
