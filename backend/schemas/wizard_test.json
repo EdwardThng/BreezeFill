@@ -1,0 +1,75 @@
+{
+  "form_id": "wizard_test_v1",
+  "display_name": "Two-step wizard test page (testing only)",
+  "insurer": "Test",
+  "internal": true,
+  "fill_mode": "web",
+  "hosts": ["localhost"],
+  "fields": [
+    {
+      "id": "ward_class",
+      "label": "Ward class the patient was admitted to",
+      "type": "text",
+      "source": "llm",
+      "step": "Admission details",
+      "description": "The ward class the patient was actually admitted to for THIS admission, not the class their policy entitles them to. Answer with one of the listed options exactly as worded.",
+      "options": [
+        "A (single room, air-conditioned)",
+        "B1 (4-bedded, air-conditioned)",
+        "B2 (6-bedded)",
+        "C (open ward)",
+        "Day surgery"
+      ]
+    },
+    {
+      "id": "emergency_admission",
+      "label": "Was this an emergency admission?",
+      "type": "text",
+      "source": "llm",
+      "step": "Admission details",
+      "description": "Whether the patient was admitted through the emergency department or as an unplanned admission. A planned or elective admission is No. If the notes do not say either way, leave this missing rather than assuming.",
+      "options": ["Yes", "No"]
+    },
+    {
+      "id": "institution",
+      "label": "Name of hospital or medical institution",
+      "type": "text",
+      "source": "llm",
+      "step": "Admission details",
+      "description": "The full name of the hospital or medical institution the patient was admitted to. Not the clinic that referred them, and not the doctor's own practice."
+    },
+    {
+      "id": "diagnosis_category",
+      "label": "Primary diagnosis category",
+      "type": "text",
+      "source": "llm",
+      "step": "Patient diagnosis",
+      "description": "The body system the PRINCIPAL diagnosis belongs to — the condition that caused this admission, not an incidental or historical one. Answer with one of the listed options exactly as worded.",
+      "options": [
+        "Cardiovascular",
+        "Respiratory",
+        "Gastrointestinal",
+        "Infectious disease",
+        "Musculoskeletal",
+        "Other"
+      ]
+    },
+    {
+      "id": "pre_existing",
+      "label": "Is this condition related to a pre-existing illness?",
+      "type": "text",
+      "source": "llm",
+      "step": "Patient diagnosis",
+      "description": "Whether this condition arises from, or is a complication of, an illness the patient had before this admission. This drives whether an insurer pays, so answer Yes or No only where the notes state the prior illness; otherwise leave it missing for the doctor.",
+      "options": ["Yes", "No"]
+    },
+    {
+      "id": "clinical_findings",
+      "label": "Principal diagnosis and clinical findings",
+      "type": "text",
+      "source": "llm",
+      "step": "Patient diagnosis",
+      "description": "The principal diagnosis in the doctor's own clinical wording, with the examination and investigation findings that support it. Free text; quote the note rather than paraphrasing it."
+    }
+  ]
+}
