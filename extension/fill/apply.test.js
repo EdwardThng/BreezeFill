@@ -645,3 +645,120 @@ describe("an empty checkbox group", () => {
     expect(apply.applyOne(els, "Yes").status).toBe("filled");
   });
 });
+
+/**
+ * Repeating dropdown questions.
+ *
+ * A question the doctor may answer several times renders as several selects,
+ * one per instance, created by clicking the form's own "add another" button.
+ * BreezeFill never clicks that button — creating an instance is the doctor
+ * using the form. It fills the instances that already exist, and it must never
+ * put the same option in two of them.
+ */
+describe("a repeating dropdown question", () => {
+  const OPTS = ["", "Diabetes", "Hypertension", "Asthma"];
+
+  function instances(n) {
+    document.body.innerHTML = Array.from({ length: n })
+      .map(
+        (_, i) =>
+          `<select id="dx${i}" name="dx[${i}]">${OPTS.map(
+            (o) => `<option value="${o}">${o || "— Select —"}</option>`
+          ).join("")}</select>`
+      )
+      .join("");
+    return Array.from(document.querySelectorAll("select"));
+  }
+
+  /** The shape applyPlan wants: a matched report plus a ref->element map. */
+  function planFor(els, values) {
+    const elements = new Map();
+    const results = els.map((el, i) => {
+      elements.set(`c${i}`, el);
+      return { fieldId: `dx_${i}`, status: "matched", control: { ref: `c${i}` } };
+    });
+    return [{ safeToFill: true, results }, elements, values];
+  }
+
+  test("two instances never receive the same option", () => {
+    const els = instances(2);
+    // The model answered both instances with the same condition.
+    const [report, elements, values] = planFor(els, {
+      dx_0: "Diabetes",
+      dx_1: "Diabetes",
+    });
+    const out = apply.applyPlan(report, elements, values);
+
+    expect(out.applied[0].status).toBe("filled");
+    expect(out.applied[1].status).toBe("skipped");
+    expect(out.applied[1].reason).toMatch(/already chosen/);
+    expect(els[0].value).toBe("Diabetes");
+    expect(els[1].value).toBe("");
+  });
+
+  test("different options in different instances both fill", () => {
+    const els = instances(2);
+    const [report, elements, values] = planFor(els, {
+      dx_0: "Diabetes",
+      dx_1: "Asthma",
+    });
+    const out = apply.applyPlan(report, elements, values);
+
+    expect(out.filled).toBe(2);
+    expect(els.map((e) => e.value)).toEqual(["Diabetes", "Asthma"]);
+  });
+
+  test("an option the doctor already chose by hand is not reused", () => {
+    // Their choice occupies that option as firmly as one of ours, and the
+    // instance they answered is left alone by the never-overwrite rule.
+    const els = instances(2);
+    els[0].value = "Hypertension";
+    const [report, elements, values] = planFor(els, {
+      dx_0: "Diabetes",
+      dx_1: "Hypertension",
+    });
+    const out = apply.applyPlan(report, elements, values);
+
+    expect(out.applied[0].reason).toBe("already answered");
+    expect(out.applied[1].reason).toMatch(/already chosen/);
+    expect(els.map((e) => e.value)).toEqual(["Hypertension", ""]);
+  });
+
+  test("unrelated dropdowns with different option lists are not grouped", () => {
+    document.body.innerHTML = `
+      <select id="a"><option value=""></option><option>Diabetes</option><option>Asthma</option></select>
+      <select id="b"><option value=""></option><option>Diabetes</option><option>Ward B1</option></select>`;
+    const els = Array.from(document.querySelectorAll("select"));
+    const [report, elements, values] = planFor(els, { dx_0: "Diabetes", dx_1: "Diabetes" });
+    const out = apply.applyPlan(report, elements, values);
+
+    // Same value, but two different questions — both are legitimate.
+    expect(out.filled).toBe(2);
+  });
+});
+
+describe("none-of-the-above synonyms", () => {
+  function groupWith(noneLabel) {
+    document.body.innerHTML = `<fieldset><legend>Complications</legend>
+      <input type="checkbox" name="c" id="a" value="Bleeding"><label for="a">Bleeding</label>
+      <input type="checkbox" name="c" id="b" value="${noneLabel}"><label for="b">${noneLabel}</label>
+      </fieldset>`;
+    return Array.from(document.querySelectorAll("input[name=c]"));
+  }
+  const labelOf = (el) => document.querySelector(`label[for="${el.id}"]`)?.textContent ?? "";
+
+  test.each([
+    "None of the above", "None", "NONE OF THESE", "Not applicable", "N/A", "n.a.",
+    "Nil", "Neither", "Does not apply", "Not relevant", "None apply",
+  ])("%s is recognised as a way of saying none", (none) => {
+    expect(apply.applyOne(groupWith(none), "Bleeding", { labelOf }).status).toBe("filled");
+  });
+
+  test.each([
+    "No known allergies", "No complications", "Normal", "None detected on imaging",
+  ])("%s is an answer, not a refusal of the list", (label) => {
+    // A miss here is safe: the group reads as ambiguous and is left for the
+    // doctor. A false match would invite a tick on a question nobody answered.
+    expect(apply.applyOne(groupWith(label), "Bleeding", { labelOf }).status).toBe("skipped");
+  });
+});

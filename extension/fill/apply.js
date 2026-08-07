@@ -224,15 +224,56 @@
     return { status: "filled" };
   }
 
-  // An option that lets the doctor say "none of these apply" explicitly.
-  // Deliberately narrow: it must look like a refusal of the whole list, not
-  // merely contain the word "no" (which would match "No known allergies").
-  const NONE_OF_THE_ABOVE =
-    /^\s*(none(\s+of\s+the\s+above)?|not\s+applicable|n\.?\/?a\.?|no\s+(other|further)\b.*)\s*$/i;
+  /**
+   * Ways a form lets the doctor say "none of these apply".
+   *
+   * Forms word this differently — "Not applicable", "N/A", "Nil", "None of the
+   * above" — so matching the exact phrase would miss most of them. This is a
+   * list of known synonyms rather than an understanding of the words, so
+   * extend it when a form uses a wording that is not here.
+   *
+   * A MISS IS SAFE and a false match is not, which is why the list is exact
+   * rather than fuzzy. Missing a real none-option makes an empty group read as
+   * ambiguous, so BreezeFill leaves it for the doctor — the same outcome as
+   * before this rule existed. Matching a substantive answer by mistake would
+   * make an ambiguous group look answerable and invite a wrong tick. So
+   * anything carrying a clinical noun stays out: "No known allergies" and "No
+   * complications" are answers to a question, not refusals of a list.
+   */
+  const NONE_PHRASES = new Set([
+    "none",
+    "none of the above",
+    "none of these",
+    "none of them",
+    "none of the options",
+    "none apply",
+    "none applies",
+    "none applicable",
+    "none of the above apply",
+    "not applicable",
+    "not applicable na",
+    "does not apply",
+    "do not apply",
+    "not relevant",
+    "not any of the above",
+    "not any of these",
+    "nil",
+    "neither",
+    "na",
+    "n a",
+  ]);
+
+  /** Lowercased, punctuation stripped, whitespace collapsed. */
+  function normaliseOption(text) {
+    return String(text == null ? "" : text)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
 
   function isNoneOption(el, labelOf) {
     const text = String(labelOf ? labelOf(el) : "") || String(el.value || "");
-    return NONE_OF_THE_ABOVE.test(text);
+    return NONE_PHRASES.has(normaliseOption(text));
   }
 
   /**
@@ -388,6 +429,52 @@
    * Idempotent by construction, so it can be re-run as a wizard advances:
    * re-applying an already-correct value is a no-op.
    */
+  /**
+   * A key identifying which repeating question a <select> belongs to.
+   *
+   * A question the doctor can answer several times renders as several selects,
+   * one per instance, created by clicking the form's own "add another" button.
+   * Each instance offers the SAME option list, and that list is what
+   * identifies them as one question — far more stable than a name attribute,
+   * which frameworks index (`dx[0]`, `dx[1]`) or regenerate per render.
+   *
+   * Null for anything that is not a select with real options, so nothing else
+   * is ever grouped by accident.
+   */
+  function repeatKey(target) {
+    if (Array.isArray(target) || !target) return null;
+    if (String(target.tagName || "").toLowerCase() !== "select") return null;
+    const texts = Array.from(target.options || [])
+      .map((o) => normaliseOption(o.textContent))
+      .filter((t) => t !== "");
+    if (texts.length < 2) return null;
+    return texts.join("|");
+  }
+
+  /**
+   * Options each repeating question has already used, seeded from the page.
+   *
+   * Seeded rather than started empty because the doctor may have answered one
+   * instance by hand before asking for a fill, and their choice occupies that
+   * option just as firmly as one of ours would.
+   */
+  function takenOptions(elements) {
+    const taken = new Map();
+    for (const target of elements.values()) {
+      const key = repeatKey(target);
+      if (!key) continue;
+      const chosen = normaliseOption(
+        target.selectedIndex >= 0 && target.options[target.selectedIndex]
+          ? target.options[target.selectedIndex].textContent
+          : ""
+      );
+      if (!chosen) continue;
+      if (!taken.has(key)) taken.set(key, new Set());
+      taken.get(key).add(chosen);
+    }
+    return taken;
+  }
+
   function applyPlan(report, elements, values, options) {
     if (!report || !report.safeToFill) {
       return {
@@ -398,6 +485,9 @@
       };
     }
 
+    // Options already spoken for, per repeating question. See takenOptions.
+    const taken = takenOptions(elements);
+
     const applied = [];
     for (const result of report.results) {
       if (result.status !== "matched") {
@@ -405,7 +495,28 @@
         continue;
       }
       const target = elements.get(result.control.ref);
-      const outcome = applyOne(target, values[result.fieldId], options);
+      const value = values[result.fieldId];
+
+      // A HARD RULE: never pick an option this question has already used.
+      const key = repeatKey(target);
+      if (key && typeof value === "string") {
+        const used = taken.get(key);
+        if (used && used.has(normaliseOption(value))) {
+          applied.push({
+            fieldId: result.fieldId,
+            ref: result.control.ref,
+            status: "skipped",
+            reason: "this option is already chosen in another instance of the question",
+          });
+          continue;
+        }
+      }
+
+      const outcome = applyOne(target, value, options);
+      if (outcome.status === "filled" && key && typeof value === "string") {
+        if (!taken.has(key)) taken.set(key, new Set());
+        taken.get(key).add(normaliseOption(value));
+      }
       applied.push({ fieldId: result.fieldId, ref: result.control.ref, ...outcome });
     }
 
