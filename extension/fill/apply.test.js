@@ -151,11 +151,16 @@ describe("checkboxes", () => {
 
   test("does not touch a box that is already correct", () => {
     // Clicking an already-correct checkbox toggles it to wrong.
+    //
+    // The status is now "skipped/already answered" rather than "unchanged":
+    // a ticked box is an answer, so the never-overwrite rule catches it before
+    // the value is even compared. What this test guards — that the box is not
+    // clicked and not toggled — is unchanged.
     const el = document.querySelector("input[name='preExisting']");
     el.checked = true;
     const spy = vi.spyOn(el, "click");
 
-    expect(apply.applyOne(el, true).status).toBe("unchanged");
+    expect(apply.applyOne(el, true).status).toBe("skipped");
     expect(spy).not.toHaveBeenCalled();
     expect(el.checked).toBe(true);
   });
@@ -290,11 +295,23 @@ describe("guards", () => {
   });
 
   test("an empty string is still a value the doctor can mean", () => {
-    // Absent and empty are different. Only the former is refused.
+    // Absent and empty are different. Only the former is refused — an empty
+    // string still writes, into a control that has no answer yet.
     const el = document.querySelector("#icd");
-    apply.applyOne(el, "K35.80");
+    expect(el.value).toBe("");
     expect(apply.applyOne(el, "").status).toBe("filled");
     expect(el.value).toBe("");
+  });
+
+  test("an empty string no longer clears an answer that is already there", () => {
+    // This inverts what this file asserted before 2026-08-06, and the reversal
+    // is deliberate. Writing "" over an existing answer is a clearance, and a
+    // clearance is exactly what the never-overwrite rule exists to stop —
+    // whether the emptying value arrives as absent or as "".
+    const el = document.querySelector("#icd");
+    apply.applyOne(el, "K35.80");
+    expect(apply.applyOne(el, "").status).toBe("skipped");
+    expect(el.value).toBe("K35.80");
   });
 
   test("a plan whose values drifted fills nothing rather than blanking", () => {
@@ -418,14 +435,20 @@ describe("checkbox answers", () => {
   });
 
   test.each(["No", "FALSE", "off", "0"])("%s is understood as an untick", (v) => {
-    const el = box(true);
-    apply.applyOne(el, v);
+    // Asserted on an EMPTY box, because a ticked one is an answer and the
+    // never-overwrite rule stops before the value is read. What this checks is
+    // the parsing: these values mean "not ticked", so the box stays clear and
+    // nothing is reported as filled.
+    const el = box(false);
+    expect(apply.applyOne(el, v).status).toBe("unchanged");
     expect(el.checked).toBe(false);
   });
 
   test("an unrecognised value never unticks what the doctor already ticked", () => {
-    // The bug this replaces: any value that was not exactly "true"/"yes"
-    // computed `wanted = false`, so a real answer silently cleared the box.
+    // Two rules now stop this, and either alone is enough: the box is already
+    // answered, and "Ward B1" says nothing about a tick. Before 2026-08-06
+    // neither existed and the value computed `wanted = false`, so a real
+    // answer silently cleared the box.
     const el = box(true);
     const result = apply.applyOne(el, "Ward B1");
     expect(result.status).toBe("skipped");
@@ -479,13 +502,83 @@ describe("checkbox groups", () => {
     expect(els.map((e) => e.checked)).toEqual([false, true, false]);
   });
 
-  test("a conflicting tick is reported rather than overwritten or doubled", () => {
-    // Checkboxes do not clear their siblings the way radios do. Ticking ours
-    // would leave two ticked on a single-answer question; unticking theirs
-    // would overwrite the doctor. Neither is done.
+  test("a group with something already ticked is left alone", () => {
     const els = group(0);
     const result = apply.applyOne(els, "Elective");
     expect(result.status).toBe("skipped");
+    expect(result.reason).toBe("already answered");
     expect(els.map((e) => e.checked)).toEqual([true, false, false]);
+  });
+});
+
+/**
+ * The doctor's own answer outranks ours, on every question type.
+ *
+ * A control that already carries an answer has been settled — by the doctor,
+ * or by the insurer pre-populating the form. Writing over it would replace a
+ * human decision with a model's, after the review step has already passed.
+ */
+describe("an answer already in the control is never overwritten", () => {
+  test("a text box the doctor typed into keeps its text", () => {
+    document.body.innerHTML = `<input type="text" id="t" value="Mount Elizabeth">`;
+    const el = document.getElementById("t");
+    const result = apply.applyOne(el, "Raffles Hospital");
+    expect(result).toEqual({ status: "skipped", reason: "already answered" });
+    expect(el.value).toBe("Mount Elizabeth");
+  });
+
+  test("a textarea with existing findings keeps them", () => {
+    document.body.innerHTML = `<textarea id="t">Acute appendicitis</textarea>`;
+    const el = document.getElementById("t");
+    expect(apply.applyOne(el, "Gastroenteritis").status).toBe("skipped");
+    expect(el.value).toBe("Acute appendicitis");
+  });
+
+  test("a select with a real choice keeps it", () => {
+    document.body.innerHTML = `<select id="s">
+      <option value="">— Select —</option><option>B1 (4-bedded)</option><option>C (open ward)</option></select>`;
+    const el = document.getElementById("s");
+    el.value = "C (open ward)";
+    expect(apply.applyOne(el, "B1 (4-bedded)").status).toBe("skipped");
+    expect(el.value).toBe("C (open ward)");
+  });
+
+  test("but a select still showing its placeholder is fillable", () => {
+    // "" is not an answer — otherwise every untouched dropdown would be
+    // treated as settled and nothing would ever fill.
+    document.body.innerHTML = `<select id="s">
+      <option value="">— Select —</option><option>B1 (4-bedded)</option></select>`;
+    const el = document.getElementById("s");
+    expect(apply.applyOne(el, "B1 (4-bedded)").status).toBe("filled");
+    expect(el.value).toBe("B1 (4-bedded)");
+  });
+
+  test("a radio group with a selection keeps it", () => {
+    document.body.innerHTML = `
+      <input type="radio" name="r" id="a" value="Yes"><input type="radio" name="r" id="b" value="No">`;
+    const els = Array.from(document.querySelectorAll("input[name=r]"));
+    els[1].checked = true;
+    expect(apply.applyOne(els, "Yes").status).toBe("skipped");
+    expect(els.map((e) => e.checked)).toEqual([false, true]);
+  });
+
+  test("a ticked checkbox is never cleared, but an empty one still fills", () => {
+    document.body.innerHTML = `<input type="checkbox" id="c" checked>`;
+    expect(apply.applyOne(document.getElementById("c"), "No").status).toBe("skipped");
+    expect(document.getElementById("c").checked).toBe(true);
+
+    document.body.innerHTML = `<input type="checkbox" id="d">`;
+    expect(apply.applyOne(document.getElementById("d"), "Yes").status).toBe("filled");
+    expect(document.getElementById("d").checked).toBe(true);
+  });
+
+  test("a second fill of the same step writes nothing", () => {
+    // Idempotency now comes from this rule rather than from re-writing the
+    // same value, which matters because the panel re-fills as a wizard moves.
+    document.body.innerHTML = `<input type="text" id="t">`;
+    const el = document.getElementById("t");
+    expect(apply.applyOne(el, "Raffles Hospital").status).toBe("filled");
+    expect(apply.applyOne(el, "Raffles Hospital").status).toBe("skipped");
+    expect(el.value).toBe("Raffles Hospital");
   });
 });

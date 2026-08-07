@@ -225,6 +225,25 @@
   }
 
   /**
+   * Is this control already answered?
+   *
+   * "Answered" is deliberately asymmetric for a lone checkbox: ticked is an
+   * answer, unticked is indistinguishable from unanswered, so an untouched box
+   * stays fillable while a ticked one is never cleared. That matches the rule
+   * everywhere else here — never leave a control emptier than it was found.
+   *
+   * A <select> showing its placeholder reads as "" and is therefore unanswered,
+   * which is what makes "— Select —" fillable.
+   */
+  function hasExistingAnswer(target) {
+    if (Array.isArray(target)) return target.some((el) => el.checked === true);
+    if (!target) return false;
+    const type = String(target.type || "").toLowerCase();
+    if (type === "checkbox" || type === "radio") return target.checked === true;
+    return String(target.value == null ? "" : target.value).trim() !== "";
+  }
+
+  /**
    * One question spread over several inputs — a radio group, or a set of
    * checkboxes sharing a name. Click the member whose label matches the value.
    * No match means no selection — never "pick the first one".
@@ -243,20 +262,11 @@
     if (!match) return { status: "skipped", reason: "no matching option" };
     if (match.checked) return { status: "unchanged" };
 
-    // Checkboxes do not clear their siblings the way radios do, so a group of
-    // them can end up with two ticked — and two ticked on a single-answer
-    // question is a wrong answer that reads as a considered one.
-    //
-    // Ticking ours and unticking theirs is not the fix: that overwrites an
-    // answer the doctor gave by hand. So neither is done. The conflict is
-    // reported and the group is left exactly as found, which is the same call
-    // `applyOne`'s absent-vs-empty guard makes.
-    const conflicting = els.some(
-      (el) => el !== match && el.type === "checkbox" && el.checked === true
-    );
-    if (conflicting) {
-      return { status: "skipped", reason: "another option is already ticked" };
-    }
+    // No conflict check is needed here any more: `applyOne` refuses any group
+    // with a member already selected, so reaching this point means nothing in
+    // the group was answered. Kept as a note rather than a guard because the
+    // two used to be separate and a future caller reaching applyOption
+    // directly would want to know the check lives upstream.
 
     match.click();
     if (!match.checked) {
@@ -290,12 +300,29 @@
       return { status: "skipped", reason: "no value" };
     }
 
+    if (!Array.isArray(target)) {
+      if (!target) return { status: "skipped", reason: "no target" };
+      if (target.disabled || target.readOnly) {
+        return { status: "skipped", reason: "not writable" };
+      }
+    }
+
+    // AN ANSWER ALREADY IN THE CONTROL OUTRANKS OURS, on every question type.
+    //
+    // A question that already carries an answer has been settled — by the
+    // doctor, or by the insurer pre-populating the form before they ever saw
+    // it. Writing over it replaces a human decision with a model's, silently,
+    // after the review step has passed. So a control that is already answered
+    // is left exactly as found and the filler moves to the next question.
+    //
+    // This also makes a re-run genuinely inert: the second pass over a step
+    // finds its own values in place and writes nothing.
+    if (hasExistingAnswer(target)) {
+      return { status: "skipped", reason: "already answered" };
+    }
+
     if (Array.isArray(target)) {
       return applyOption(target, value, opts.labelOf);
-    }
-    if (!target) return { status: "skipped", reason: "no target" };
-    if (target.disabled || target.readOnly) {
-      return { status: "skipped", reason: "not writable" };
     }
 
     const tag = target.tagName ? target.tagName.toLowerCase() : "";
