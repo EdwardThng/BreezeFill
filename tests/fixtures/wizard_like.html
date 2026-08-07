@@ -1,0 +1,237 @@
+<!--
+  Synthetic two-step insurer wizard, for exercising the wizard support that is
+  built but has never met a real multi-step form.
+
+  Modelled on the AIA ClaimEZ structure described by the owner: a JS-rendered
+  wizard whose URL does NOT change as the doctor advances. That single property
+  is why `activeTab` survives the whole flow and why no host permission is
+  needed — so this fixture is careful to move between steps WITHOUT touching
+  location, history, or the hash. Do not "improve" it with routing.
+
+  What each part is here to test:
+
+    - Two <fieldset> steps named by <legend>. `sectionFor()` reads the nearest
+      legend, so the outer one is the step name and a nested one is a radio
+      group's question. That nesting is the shape describeRadioGroup() expects.
+    - Three question types per step: <select>, a side-by-side radio group, and
+      free text — the three the owner named.
+    - Per-step scoring (`locateSteps`): with one step in the DOM, a schema
+      spanning both should still fill the visible one instead of refusing at
+      MIN_MATCH_RATE.
+    - Step re-identification: the MutationObserver in content/fill.js should
+      notice the shape change on Next and tell the panel to re-detect.
+
+  THE MOUNT/UNMOUNT TOGGLE ANSWERS AN OPEN QUESTION. CLAUDE.md records that
+  `isFillable` in locate.js checks disabled and readOnly but NOT visibility, so
+  on a wizard that keeps every step in the DOM behind `display:none`, every
+  step scores as present and the filler would write into steps the doctor
+  cannot see. Nobody knows which shape ClaimEZ uses. The button at the bottom
+  switches this fixture between the two so the question can be settled by
+  observation rather than guessed:
+
+    "unmount"  — inactive step removed from the DOM   (default; safe)
+    "hide"     — inactive step kept, display:none     (the suspected trap)
+
+  No patient data appears anywhere. The form is empty because the doctor is the
+  one who fills it, which also keeps this fixture trivially free of PHI.
+
+  Serve it over http rather than opening the file directly — Chrome extensions
+  cannot touch file:// URLs without a permission most installs do not have:
+
+    python3 -m http.server 8080 --directory tests/fixtures
+    open http://localhost:8080/wizard_like.html
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claim submission — attending physician's statement</title>
+    <style>
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: #eef1f4;
+        color: #1b1f23;
+      }
+      .shell { max-width: 46rem; margin: 2rem auto; padding: 0 1rem 4rem; }
+      .card { background: #fff; border-radius: 8px; padding: 1.5rem 1.75rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      h1 { font-size: 1.15rem; margin: 0 0 .25rem; }
+      .sub { color: #5d6b79; font-size: .875rem; margin: 0 0 1.5rem; }
+
+      .steps { display: flex; gap: .5rem; margin-bottom: 1.5rem; font-size: .8rem; }
+      .steps span { padding: .3rem .7rem; border-radius: 999px; background: #e3e8ed; color: #5d6b79; }
+      .steps span.on { background: #0f6f5c; color: #fff; }
+
+      fieldset { border: 0; padding: 0; margin: 0; }
+      fieldset > legend { font-weight: 600; font-size: 1rem; padding: 0; margin: 0 0 1.1rem; }
+
+      .q { margin-bottom: 1.4rem; }
+      .q > label { display: block; margin-bottom: .35rem; font-weight: 500; }
+      select, input[type="text"], textarea {
+        width: 100%; padding: .5rem .6rem; border: 1px solid #c3ccd5;
+        border-radius: 4px; font: inherit; background: #fff; box-sizing: border-box;
+      }
+      textarea { min-height: 5.5rem; resize: vertical; }
+
+      /* Side-by-side options: a nested fieldset, so the group's question comes
+         from its own <legend> rather than from a neighbouring div. */
+      .opts { border: 0; padding: 0; margin: 0 0 1.4rem; }
+      .opts > legend { font-weight: 500; font-size: 1rem; margin-bottom: .4rem; }
+      .row { display: flex; gap: 1.75rem; align-items: center; }
+      .row label { font-weight: 400; }
+
+      .nav { display: flex; justify-content: space-between; margin-top: 1.75rem; }
+      button {
+        font: inherit; padding: .5rem 1.1rem; border-radius: 4px; cursor: pointer;
+        border: 1px solid #0f6f5c; background: #0f6f5c; color: #fff;
+      }
+      button.ghost { background: #fff; color: #0f6f5c; }
+      button:disabled { opacity: .4; cursor: default; }
+
+      .mode { max-width: 46rem; margin: 1rem auto 0; padding: 0 1rem; font-size: .8rem; color: #5d6b79; }
+      .mode button { background: #fff; color: #33414f; border-color: #c3ccd5; padding: .25rem .6rem; }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="card">
+        <h1>Attending physician's statement</h1>
+        <p class="sub">Reference 4471902 · complete all steps before submitting</p>
+
+        <div class="steps">
+          <span id="pip-1" class="on">1. Admission details</span>
+          <span id="pip-2">2. Patient diagnosis</span>
+        </div>
+
+        <form id="claim-wizard">
+          <!-- ============================ STEP 1 ============================ -->
+          <fieldset id="step-1" data-step="1">
+            <legend>Admission details</legend>
+
+            <div class="q">
+              <label for="ward-class">Ward class the patient was admitted to</label>
+              <select id="ward-class" name="wardClass">
+                <option value="">— Select —</option>
+                <option>A (single room, air-conditioned)</option>
+                <option>B1 (4-bedded, air-conditioned)</option>
+                <option>B2 (6-bedded)</option>
+                <option>C (open ward)</option>
+                <option>Day surgery</option>
+              </select>
+            </div>
+
+            <fieldset class="opts">
+              <legend>Was this an emergency admission?</legend>
+              <div class="row">
+                <span><input type="radio" id="emg-yes" name="emergencyAdmission" value="Yes" />
+                  <label for="emg-yes">Yes</label></span>
+                <span><input type="radio" id="emg-no" name="emergencyAdmission" value="No" />
+                  <label for="emg-no">No</label></span>
+              </div>
+            </fieldset>
+
+            <div class="q">
+              <label for="institution">Name of hospital or medical institution</label>
+              <input type="text" id="institution" name="institution" autocomplete="off" />
+            </div>
+          </fieldset>
+
+          <!-- ============================ STEP 2 ============================ -->
+          <fieldset id="step-2" data-step="2">
+            <legend>Patient diagnosis</legend>
+
+            <div class="q">
+              <label for="diagnosis-category">Primary diagnosis category</label>
+              <select id="diagnosis-category" name="diagnosisCategory">
+                <option value="">— Select —</option>
+                <option>Cardiovascular</option>
+                <option>Respiratory</option>
+                <option>Gastrointestinal</option>
+                <option>Infectious disease</option>
+                <option>Musculoskeletal</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <fieldset class="opts">
+              <legend>Is this condition related to a pre-existing illness?</legend>
+              <div class="row">
+                <span><input type="radio" id="pre-yes" name="preExisting" value="Yes" />
+                  <label for="pre-yes">Yes</label></span>
+                <span><input type="radio" id="pre-no" name="preExisting" value="No" />
+                  <label for="pre-no">No</label></span>
+              </div>
+            </fieldset>
+
+            <div class="q">
+              <label for="clinical-findings">Principal diagnosis and clinical findings</label>
+              <textarea id="clinical-findings" name="clinicalFindings"></textarea>
+            </div>
+          </fieldset>
+
+          <div class="nav">
+            <button type="button" id="back" class="ghost" disabled>Back</button>
+            <button type="button" id="next">Next</button>
+          </div>
+        </form>
+      </div>
+
+      <p class="mode">
+        Step rendering:
+        <strong id="mode-name">unmount (inactive step removed from the DOM)</strong>
+        <button type="button" id="mode-toggle">switch</button>
+        — see the comment at the top of this file for why this toggle exists.
+      </p>
+    </div>
+
+    <script>
+      // Deliberately no routing. A real ClaimEZ wizard leaves the URL alone
+      // until the final review step, and that is the property that keeps
+      // activeTab alive across the whole flow. Nothing here touches
+      // location, history.pushState, or the hash.
+      (function () {
+        var steps = [document.getElementById("step-1"), document.getElementById("step-2")];
+        var pips = [document.getElementById("pip-1"), document.getElementById("pip-2")];
+        var placeholders = [document.createComment("step-1"), document.createComment("step-2")];
+        var parent = document.getElementById("claim-wizard");
+        var current = 0;
+        var unmount = true; // false => keep in DOM behind display:none
+
+        function render() {
+          steps.forEach(function (fs, i) {
+            var active = i === current;
+            if (unmount) {
+              fs.style.display = "";
+              if (active && !fs.isConnected) parent.replaceChild(fs, placeholders[i]);
+              else if (!active && fs.isConnected) parent.replaceChild(placeholders[i], fs);
+            } else {
+              if (!fs.isConnected) parent.replaceChild(fs, placeholders[i]);
+              fs.style.display = active ? "" : "none";
+            }
+            pips[i].className = active ? "on" : "";
+          });
+          document.getElementById("back").disabled = current === 0;
+          document.getElementById("next").textContent =
+            current === steps.length - 1 ? "Review" : "Next";
+        }
+
+        document.getElementById("next").addEventListener("click", function () {
+          if (current < steps.length - 1) { current += 1; render(); }
+        });
+        document.getElementById("back").addEventListener("click", function () {
+          if (current > 0) { current -= 1; render(); }
+        });
+        document.getElementById("mode-toggle").addEventListener("click", function () {
+          unmount = !unmount;
+          document.getElementById("mode-name").textContent = unmount
+            ? "unmount (inactive step removed from the DOM)"
+            : "hide (inactive step kept, display:none)";
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
