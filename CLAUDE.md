@@ -22,18 +22,21 @@ said `claimfill` — the Fly app and the `DEFAULT_API_BASE` that pointed at it.
 Both are gone as of 2026-08-05: Fly is destroyed and the default backend is
 `https://api.breezefill.com` (2026-08-06 — see "the domain"). Nothing
 user-facing carries an old name any more, and a check for one is cheap:
-`git ls-files | xargs grep -il claimfill` — the git remote was the last holdout
-and was repointed on 2026-08-06, GitHub having silently redirected pushes until
-then. `FORMFILL_*`
+`git ls-files -z | xargs -0 grep -il claimfill`, which should name only this
+file. **Use the `-z`/`-0` form** — the plain `git ls-files | xargs grep` written
+here until 2026-08-08 breaks on the design docs, whose filenames contain
+spaces, and reports a pile of "No such file or directory" instead of an answer.
+The git remote was the last holdout and was repointed on 2026-08-06, GitHub
+having silently redirected pushes until then. `FORMFILL_*`
 environment variables also survive from the first name and have **not** been
 swept; renaming them means touching every command in these docs plus anything
 set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-04 (HEAD `f31242e`)
+## Status as of 2026-08-08
 
-**498 tests pass**: 209 backend (1 skipped), 242 extension, 47 website.
+**504 tests pass**: 215 backend (1 skipped), 242 extension, 47 website.
 
 | Piece | State |
 |---|---|
@@ -48,14 +51,14 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 | Repeating entries, checkbox/option handling | **Built 2026-08-06, fixture-tested only.** Entry grouping from DOM shape (`instanceIndexOf`), options-beat-type coercion, never-overwrite, none-of-the-above, no-duplicate-option. Every one of these was designed from a verbal account of ClaimEZ — see the warning at the top of "The AIA form" |
 | Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
-| Vercel **production** | **Live (2026-08-05)**, region `sin1`, plan **Pro since 2026-08-06**. Reachable at `https://breezefill-livid.vercel.app` and — once DNS is added — at `breezefill.com` / `api.breezefill.com`. Publicly reachable — unlike a preview, production carries no SSO wall: landing page, `/health` (7 forms), `/forms` and the extension download all answer to plain `curl`. **`POST /map` returns 503**, because `ANTHROPIC_API_KEY` is Preview-scoped; it needs `vercel env add ANTHROPIC_API_KEY production` **and then a redeploy**, since an env change does not reach an already-deployed function |
-| Vercel migration | **Done (2026-08-05).** Preview and production both verified end to end: `/health` reports 7 forms, `/forms` and the extension download answer, and `POST /map` returns real review rows from a live model call. Production is public; **previews are behind Deployment Protection**, so only `vercel curl` reaches them and the extension cannot. `DEFAULT_API_BASE` points at production |
+| Vercel **production** | **Live**, region `sin1`, plan **Pro since 2026-08-06**. Re-verified 2026-08-08 against `api.breezefill.com` with plain `curl`, no SSO wall: `/health` returns `{"status":"ok","forms_loaded":8}`, `/forms` answers, `/download/breezefill-extension.zip` returns 86 KB of `application/zip`, and **`POST /map` returns real review rows from a live model call**. An earlier row here said `/map` 503s on a Preview-scoped key; that was fixed on 2026-08-05 and the row was never updated |
+| Vercel migration | **Done (2026-08-05).** Production is public; **previews are behind Deployment Protection**, so only `vercel curl` reaches them and the extension cannot. `DEFAULT_API_BASE` points at production |
 | AIA GHS claim (24 fields) + Great Eastern GHS claim (15 fields) | Live, smoke-tested end to end with a real LLM call |
 | Website: landing page + interactive demo | Working, 35 frontend tests. `#/` is a marketing landing page, `#/demo` walks one synthetic claim with no backend at all, `#/app` is the old 3-step PDF claim UI — kept and working, because the five PDF forms have no other interface |
 | `GET /download/breezefill-extension.zip` | Working, 8 tests. Zipped from the source tree per request, so a download can never be older than the server serving it. `extension/` is now in the Docker image |
 | Single-origin serving (FastAPI serves `frontend/dist`) | Working locally, verified |
 | `ANTHROPIC_API_KEY` | **Set as a Vercel environment variable**, Preview and Production, and confirmed working — a live `POST /map` returns real review rows, which exercises the sweep too. Not set in any local shell, so local `uvicorn` still needs it exported, or `FORMFILL_DISABLE_SWEEP=1`. Changing it does not reach an already-deployed function; redeploy after |
-| **Demoable?** | **Blocked on one DNS record (2026-08-06).** `DEFAULT_API_BASE` is now `https://api.breezefill.com`, which does **not resolve yet** — until `vercel domains add` is run, a fresh install reports "could not reach the backend" and the only way out is Advanced → Backend URL. Point it at `https://breezefill-livid.vercel.app` to demo before then; that host is still live and still holds the key. Once DNS exists this returns to **yes — no terminal, no key**: load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
+| **Demoable?** | **Yes — no terminal, no key (unblocked 2026-08-08).** The DNS record landed: `api.breezefill.com` and `breezefill.com` both resolve to Vercel (`216.150.1.193`) and both answer. Load the extension, click the icon on an insurer's form, paste, Map, Fill. **Exception: the RoboForm test route still needs localhost**, because `roboform_test_v1` is `internal: true` and `FORMFILL_SHOW_INTERNAL` is deliberately unset in production — point Advanced → Backend URL at `http://localhost:8000` for that one. See "the demo failure" below for what broke the first attempt, all of which is now fixed and tested |
 
 Note: a commit title is not evidence of a deploy — `ec7c09c` is named "full
 deployment on fly.io" and only adds a static mount. Verify deploy state with
@@ -376,12 +379,19 @@ inference — without touching extensions already in browsers. The site itself
 needed no change at all, being same-origin throughout (`api.ts` resolves
 `API_BASE` to `""` in production, `DOWNLOAD_URL` is relative).
 
-*Why not announce.* Three of the four blockers stand: no privacy policy exists
-at any URL, inference is still not SG-region so the product's own rule is
-synthetic notes only, and the install is still "download a zip, enable
-Developer Mode" — which a GP will not complete, so an announced site cannot do
-its one job. Only the fourth cleared: the plan is Pro, so commercial use is
-permitted.
+*Why not announce.* Written 2026-08-06, when three of four blockers stood.
+**Two have since cleared** and the count is now one: the plan is Pro
+(2026-08-06), and the privacy policy is live at `/privacy.html` (2026-08-08).
+Inference is still not SG-region, but that stopped being an announce blocker
+when the owner put real notes in scope on 2026-08-06 — the policy discloses the
+transfer instead of forbidding the data.
+
+**The one that remains is the install**, and it is the whole argument: "download
+a zip, enable Developer Mode" is not something a GP will complete, so an
+announced site cannot do its one job. That is why next steps 2b — the Chrome
+Web Store listing — is the thing standing between here and announcing, and why
+the owner chose on 2026-08-08 to submit before the product is otherwise
+finished.
 
 *How it is kept out of search, and why not the obvious way.* An
 `X-Robots-Tag: noindex, nofollow` header on `/(.*)` in `vercel.json`.
@@ -395,13 +405,18 @@ therefore allows crawling on purpose and says why.
 **To announce: delete the `headers` block from `vercel.json` and redeploy.**
 Nothing else changes. `robots.txt` stays as it is.
 
-*State as of 2026-08-06.* Both `breezefill.com` and `api.breezefill.com` are
-**attached to the `breezefill` project** under the `breeze-fill` team
-(`vercel domains ls`). **DNS is not configured** — the registrar is a third
-party and `dig` returns nothing for either name, so neither resolves. Each
-needs an `A` record to `76.76.21.21`, or the nameservers moved to
-`ns1/ns2.vercel-dns.com`. Until that lands the extension's default backend
-points at a host that does not exist; see the "Demoable?" row.
+*State as of 2026-08-08 — **DNS is live**.* Both `breezefill.com` and
+`api.breezefill.com` resolve to Vercel (`216.150.1.193` / `216.150.16.193`) and
+both answer: `/health`, `/forms`, `/privacy.html`, the extension download and
+`POST /map` were all exercised over plain `curl`. The extension's default
+backend now points at a host that exists, which is what unblocked the
+"Demoable?" row.
+
+Note for anyone re-checking the records: the address above is **not**
+`76.76.21.21`, which is what the older Vercel docs and the previous version of
+this paragraph name. Vercel's anycast range moved. Take the target from
+`vercel domains inspect breezefill.com --scope breeze-fill` rather than from
+memory or from this file.
 
 *A correction to the reasoning above, worth keeping because it was nearly
 recorded wrong.* `breezefill-livid.vercel.app` did **not** rot when the project
@@ -417,11 +432,24 @@ extension cannot be edited when they do. Do not restate the domain rationale as
 served at `/privacy.html`, linked from the landing footer. Static HTML rather
 than a `#/` route on purpose — it is the document a Chrome Web Store reviewer
 and a regulator have to be able to read, so it must not depend on the React
-bundle rendering. Two things in it are claims about the world rather than about
-this repo, and both need to stay true: the contact address
-`privacy@breezefill.com` **has no mailbox yet**, and the "synthetic notes only"
-restriction is the public form of the SG-region guardrail — lift it there only
-when inference actually moves.
+bundle rendering. **Live and serving 200 as of 2026-08-08**, once DNS landed.
+
+One thing in it is a claim about the world rather than about this repo, and it
+is not true yet: the contact address `privacy@breezefill.com` **has no mailbox**.
+That is now a Chrome Web Store blocker as well as a correctness one — see next
+steps 2b.
+
+An earlier version of this paragraph said the policy carried a "synthetic notes
+only" restriction. **It does not, and must not** — it was rewritten after the
+owner's 2026-08-06 override, and now carries a *Real consultation notes*
+section saying plainly that there is no test mode and no expectation that the
+doctor anonymises anything first. What the policy does instead of forbidding the
+data is **disclose the transfer**: a section stating that de-identified clinical
+text leaves Singapore, that the PDPA expects a comparable-protection agreement
+for an overseas transfer, and that **no such agreement is currently in place**.
+Do not soften that paragraph. It is the one that makes the rest of the document
+credible, and it is also the one a store reviewer will weigh against the data
+disclosures.
 
 `vercel.json` carries no `comment` key next to that block, though it wants one:
 an unknown property risks `Invalid vercel.json`, and a config that fails to
@@ -648,6 +676,39 @@ A label is now read **anywhere in a line**, kept safe by two constraints:
 
 Two candidates behind one label still yields neither, exactly as unlabelled
 prose does. The refusals are unchanged; only the reach is wider.
+
+**A shape has to be a whole token, not the tail of one (2026-08-08).** The
+collision this fixes: `Policy GHS-88213004` came back with the policy number
+*and* a phone number of `88213004`. Eight digits opening with an 8 is a valid
+Singapore mobile, so the unlabelled-prose pass claimed the policy number's
+tail — a wrong value in a shaped field, and the worst kind, because
+demographics are copied onto the form deterministically and so bypass both the
+model and the review confirm. It fires on any note with one such policy number
+and no phone, which is an ordinary note.
+
+The rule is `PHONE_IN_TEXT`: a phone must be delimited by something that is not
+identifier material — no letter, no digit, none of the connectors (`-` `/` `#`)
+that bind a reference together. Read the whole token first; if the digits are
+only part of it, they are not a phone number.
+
+Two things about it that look like inconsistencies and are not:
+
+- **`SG_PHONE_PATTERN` in `redaction.py` is deliberately left blunt.** It
+  guards only against a longer *digit* run, which is all redaction needs:
+  redaction blanks what it matches, so over-matching there costs nothing and
+  under-matching is a leak. Only the module that *assigns a value to a field*
+  needs the stricter question. Do not "unify" the two patterns.
+- **It is not applied to `NRIC_PATTERN`.** A phone number is never embedded in
+  a reference, but an NRIC in one (`REF-S8012345D`) is still the patient's, and
+  refusing it would lose a correct value to avoid a collision that does not
+  happen. `test_an_nric_inside_a_reference_is_still_the_nric` pins it.
+
+Why three suites never saw it: the fixtures use `GHS-4471902` (seven digits)
+and `GE-88213` (five), and the panel's own sample note happens to carry two
+policy variants, so the sole-match saw three candidates and refused. It was
+masked everywhere it was exercised. A useful generalisation — **a refusal is
+not evidence of a working rule.** Both of these look identical from a test that
+only asserts `is None`.
 
 **One paste box, and the split is done by patterns — never by a model.** The
 owner's call (2026-08-03): seven inputs and a note box collapse into a single
@@ -1101,6 +1162,16 @@ somebody pressed the button.
 Whenever the sample note changes, run it through the parser rather than reading
 it: `parse_demographics(SAMPLE_NOTE)` in `backend/demographics.py`.
 
+**What it actually yields today, so nobody reads the list above as a
+promise: `nric` and `dob`, and nothing else.** That is correct and deliberate.
+The sample deliberately writes two phone numbers (`9123 4567 / 6123 4567`) and
+two policy variants (`GHS-88213004 or GH-88213004`), so both fields hit the
+two-candidates refusal — the sample demonstrates the refusals as much as the
+finds, and `test_two_values_behind_one_label_yields_neither` asserts it. The
+name is never guessed from anything and the doctor typed it at step 1. So the
+required pair is satisfied and the flow completes; the four values named in the
+paragraph above are what the *design spec* shows, not what the parser returns.
+
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
@@ -1513,22 +1584,44 @@ Developer Mode" is not something a GP will do. Chrome also blocks self-hosted
 discoverable, same review either way. It also solves the stale-build problem in
 Traps, because the store auto-updates every install.
 
-Before submitting: ~~a **privacy policy**~~ — **written 2026-08-06**
-(`frontend/public/privacy.html`), but it is only half done until it is *live*:
-that needs the DNS records and a production deploy, plus a working mailbox at
-the address it publishes. **Listing assets** (screenshot, description, data
-disclosures) are still outstanding, and the data disclosures must agree with
-the policy — the store form asks the same questions and a mismatch is a
-rejection. Drop `optional_host_permissions: ["https://*/*"]`, which is never
-requested anywhere in the code and only buys a slower review. Icons are
-done. Expect weeks rather than days — health data plus a permissions story
-means manual review, and a rejection restarts the clock.
+**The owner's call, 2026-08-08: submit now and keep refining while the review
+runs.** Review takes weeks, so the queue time is free if the work continues in
+parallel — and an unlisted item can be updated after approval. What this
+decision accepts, explicitly, is that **the extension has still never filled a
+real insurer form** (next steps item 1), so the first version in the store is
+one whose core path is proven only against RoboForm and synthetic fixtures.
 
-Two things that outrank the listing: **the extension has still never filled a
-real insurer form**, and inference is not SG-region, so the product's own rule
-is synthetic notes only — which twenty doctors with a one-click install will
-not honour. The Vercel plan is no longer one of them: **Pro since 2026-08-06**,
-so commercial use is permitted and the pricing page is unblocked.
+Before submitting: ~~a **privacy policy**~~ — written 2026-08-06 and **live as
+of 2026-08-08** at `https://breezefill.com/privacy.html` (verified 200, and it
+is static HTML so it does not depend on the React bundle rendering). Still
+outstanding, in the order they block:
+
+1. **A working mailbox at `privacy@breezefill.com`.** The policy publishes it
+   and the store form asks for a contact address; publishing one that bounces
+   is the kind of thing that gets found.
+2. **Listing assets** — at least one 1280×800 screenshot, a short and a long
+   description, and the **data-safety disclosures**. The disclosures must agree
+   with `privacy.html` line for line: the store asks the same questions and a
+   mismatch is a rejection, not a query.
+3. **Drop `optional_host_permissions: ["https://*/*"]` from
+   `manifest.json`.** Still declared, still never requested anywhere in the
+   code — verified 2026-08-08. A host permission for all of HTTPS is the single
+   biggest thing that turns a fast review into a slow one, and this one buys
+   nothing: the wizard question it was reserved for was answered No.
+4. **A justification string for every permission**, `activeTab`, `scripting`
+   and `sidePanel`, plus the single-purpose statement. Write these from the
+   refusals — "fills in place, never submits" is the honest description and it
+   is also the one that survives review.
+
+Icons are done. Expect weeks rather than days: health data plus a permissions
+story means manual review, and a rejection restarts the clock.
+
+One thing that no longer blocks it: **the Vercel plan is Pro since
+2026-08-06**, so commercial use is permitted and the pricing page is unblocked.
+And note that the "synthetic notes only" rule that used to be listed here was
+**overridden by the owner on 2026-08-06** — real consultation notes are in
+scope, and the privacy policy discloses the out-of-region transfer rather than
+forbidding the data. See the guardrail; do not reinstate the old rule here.
 
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
