@@ -17,7 +17,7 @@ from one pasted block to values in the page. No insurer portal yet, and
 RoboForm is plain HTML, so nothing there says anything about a
 framework-rendered field.
 
-160 tests pass against jsdom and a synthetic fixture. Running it in a browser
+242 tests pass against jsdom and a synthetic fixture. Running it in a browser
 has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
