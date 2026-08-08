@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@400;500;600&family=Manrope:wght@400;500;600&family=Onest:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #E9E9E7; }
+  a { color: #1D1D1F; }
+  a:hover { color: #6E6E73; }
+  @keyframes pf-spin { to { transform: rotate(360deg); } }
+  @keyframes pf-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes pf-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+  @keyframes pf-tick { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: #D8D8D4; border-radius: 999px; border: 3px solid #F5F5F4; }
+</style>
+</helmet>
+
+<div style="font-family: Figtree, system-ui, sans-serif; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; gap: 28px; padding: 32px 24px 60px;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 6px; width: 250px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #86868B;">BreezeFill · one step at a time</div>
+    <div style="font-size: 13px; line-height: 1.65; color: #6E6E73; text-wrap: pretty;">The panel asks for one thing, waits, then asks for the next. Finished steps fold into a single line at the top and can be reopened; nothing below the current step is shown until it is earned.</div>
+    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 12px; border-top: 1px solid #DCDCD8;">
+      <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Typeface</div>
+      <sc-for list="{{ fonts }}" as="fnt" hint-placeholder-count="5">
+        <button onClick="{{ fnt.pick }}" style="{{ fnt.style }}">{{ fnt.name }}</button>
+      </sc-for>
+    </div>
+    <button onClick="{{ reset }}" style="align-self: flex-start; margin-top: 8px; font-family: inherit; font-size: 12.5px; color: #6E6E73; background: none; border: none; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color .18s ease;" style-hover="color: #1D1D1F;">Start over</button>
+  </div>
+
+  <div style="{{ panelStyle }}">
+
+    <div style="flex: none; display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #E7E7E4;">
+      <div style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #FCFCFB; border: 1px solid #E3E3E0; display: flex; align-items: center; justify-content: center;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="16" rx="3.5" stroke="#1D1D1F" stroke-width="2"></rect><rect x="9" y="2.5" width="6" height="4" rx="2" fill="#1D1D1F"></rect><path d="M8 12.5h8" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round"></path></svg>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+        <div style="font-size: 15px; font-weight: 500; color: #1D1D1F; letter-spacing: -0.015em; line-height: 1.25;">BreezeFill</div>
+        <div style="font-size: 11.5px; color: #86868B; line-height: 1.3;">Fills the form in place. Never submits it.</div>
+      </div>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #86868B;">{{ stepCounter }}</span>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.55; color: #1D1D1F;">
+
+      <sc-for list="{{ done }}" as="d" hint-placeholder-count="2">
+        <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; animation: pf-rise .26s ease both; overflow: hidden;">
+          <button onClick="{{ d.toggle }}" style="width: 100%; box-sizing: border-box; font-family: inherit; text-align: left; background: none; border: none; padding: 10px 12px; display: flex; align-items: center; gap: 9px; cursor: pointer; transition: background .18s ease;" style-hover="background: #F7F7F6;">
+            <span style="width: 15px; height: 15px; flex: none; border-radius: 999px; background: #157553; color: #FFFFFF; font-size: 9px; display: inline-flex; align-items: center; justify-content: center;">✓</span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;">
+              <span style="font-size: 11px; color: #86868B;">{{ d.title }}</span>
+              <span style="font-size: 13px; font-weight: 500; color: #1D1D1F; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ d.summary }}</span>
+            </span>
+            <span style="{{ d.caretStyle }}">›</span>
+          </button>
+          <sc-if value="{{ d.open }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 0 12px 11px 36px; display: flex; flex-direction: column; gap: 7px; animation: pf-rise .22s ease both;">
+              <sc-for list="{{ d.lines }}" as="ln" hint-placeholder-count="3">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;">
+                  <span style="color: #86868B;">{{ ln.label }}</span>
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #1D1D1F; text-align: right; overflow: hidden; text-overflow: ellipsis;">{{ ln.value }}</span>
+                </div>
+              </sc-for>
+              <button onClick="{{ d.edit }}" style="align-self: flex-start; margin-top: 2px; font-family: inherit; font-size: 12px; font-weight: 500; color: #1D1D1F; background: #F5F5F4; border: 1px solid #E0E0DC; border-radius: 7px; padding: 6px 11px; cursor: pointer; transition: background .18s ease, border-color .18s ease;" style-hover="background: #EDEDEA; border-color: #D5D5D1;">Change this</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <sc-if value="{{ isName }}" hint-placeholder-val="{{ true }}">
+        <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: pf-rise .3s ease both;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 15px; font-weight: 500;">Who is this claim for?</div>
+            <div style="font-size: 12.5px; color: #86868B; text-wrap: pretty;">Type the patient's name yourself. BreezeFill never guesses this one.</div>
+          </div>
+          <input onInput="{{ onName }}" value="{{ name }}" placeholder="Full name as it appears on the policy" autofocus="{{ true }}" style="font-family: inherit; font-size: 14px; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 9px; padding: 11px 12px; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);">
+          <button onClick="{{ nextFromName }}" disabled="{{ nameEmpty }}" style="{{ nameBtnStyle }}" style-hover="{{ nameBtnHover }}" style-active="{{ nameBtnActive }}">Continue</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isNote }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: pf-rise .3s ease both;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 15px; font-weight: 500;">Paste the consultation</div>
+            <div style="font-size: 12.5px; color: #86868B; text-wrap: pretty;">Exactly as it sits in your CMS — demographics header and clinical note together. Messy is fine.</div>
+          </div>
+          <textarea onInput="{{ onNote }}" value="{{ note }}" spellcheck="false" rows="10" placeholder="Paste here." style="font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.6; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 10px; padding: 11px; resize: vertical; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);"></textarea>
+          <button onClick="{{ sample }}" style="align-self: flex-start; font-family: inherit; font-size: 12px; color: #6E6E73; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color .18s ease;" style-hover="color: #1D1D1F;">Use a sample note</button>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button onClick="{{ findDetails }}" disabled="{{ noteEmpty }}" style="{{ findBtnStyle }}" style-hover="{{ findBtnHover }}" style-active="{{ findBtnActive }}">
+              <sc-if value="{{ finding }}" hint-placeholder-val="{{ false }}">
+                <span style="width: 12px; height: 12px; border-radius: 999px; border: 1.6px solid rgba(252,252,251,.35); border-top-color: #FCFCFB; display: inline-block; animation: pf-spin .7s linear infinite;"></span>
+              </sc-if>
+              <span>{{ findLabel }}</span>
+            </button>
+            <div style="font-size: 11.5px; color: #86868B; text-wrap: pretty;">Pattern matching on your machine. No model, no network, no cost.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isVerify }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px; animation: pf-rise .3s ease both;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 15px; font-weight: 500;">Check what was found</div>
+            <div style="font-size: 12.5px; color: #86868B; text-wrap: pretty;">These values are the dictionary the note is redacted against. Nothing is sent to the model until this reads correctly.</div>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; padding: 9px 11px; background: #F7F7F6; border: 1px solid #EAEAE7; border-radius: 9px;">
+            <sc-for list="{{ legend }}" as="l" hint-placeholder-count="3">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #6E6E73;">
+                <span style="{{ l.dotStyle }}"></span>{{ l.label }}
+              </span>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{ fields }}" as="fl" hint-placeholder-count="6">
+              <div style="{{ fl.cardStyle }}">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #86868B;">{{ fl.caption }}</span>
+                  <span style="{{ fl.stateStyle }}">{{ fl.stateLabel }}</span>
+                </div>
+                <input onInput="{{ fl.onEdit }}" value="{{ fl.value }}" placeholder="{{ fl.placeholder }}" style="{{ fl.inputStyle }}">
+                <sc-if value="{{ fl.hint }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 11.5px; color: #8A6A28; text-wrap: pretty;">{{ fl.hint }}</span>
+                </sc-if>
+                <sc-if value="{{ fl.showConfirm }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ fl.onConfirm }}" style="align-self: flex-start; font-family: inherit; font-size: 12.5px; font-weight: 500; border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; border-radius: 7px; padding: 7px 13px; cursor: pointer; transition: background .18s ease, transform .12s ease;" style-hover="background: #35353A;" style-active="transform: scale(.97);">This is right</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button onClick="{{ clearGate }}" disabled="{{ gateBlocked }}" style="{{ gateBtnStyle }}" style-hover="{{ gateBtnHover }}" style-active="{{ gateBtnActive }}">Details are correct — continue</button>
+            <div style="font-size: 11.5px; color: #86868B; text-wrap: pretty;">{{ gateHint }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isMap }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: pf-rise .3s ease both;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 15px; font-weight: 500;">Answer the clinical questions</div>
+            <div style="font-size: 12.5px; color: #86868B; text-wrap: pretty;">24 questions read off this page. The redacted note goes to the model; your patient's identifiers do not.</div>
+          </div>
+          <button onClick="{{ map }}" disabled="{{ mapping }}" style="{{ mapBtnStyle }}" style-hover="{{ mapBtnHover }}" style-active="{{ mapBtnActive }}">
+            <sc-if value="{{ mapping }}" hint-placeholder-val="{{ false }}">
+              <span style="width: 12px; height: 12px; border-radius: 999px; border: 1.6px solid rgba(252,252,251,.35); border-top-color: #FCFCFB; display: inline-block; animation: pf-spin .7s linear infinite;"></span>
+            </sc-if>
+            <span>{{ mapLabel }}</span>
+          </button>
+          <sc-if value="{{ mapping }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 9px; animation: pf-rise .26s ease both;">
+              <div style="font-size: 12.5px;">{{ mapStepText }}</div>
+              <div style="height: 3px; border-radius: 999px; background: #EDEDEA; overflow: hidden; position: relative;">
+                <div style="position: absolute; inset: 0; width: 30%; border-radius: 999px; background: linear-gradient(90deg, rgba(29,29,31,0), #1D1D1F, rgba(29,29,31,0)); animation: pf-sweep 1.5s ease-in-out infinite;"></div>
+              </div>
+              <div style="font-size: 11.5px; color: #86868B;">Usually 10–30 seconds. Nothing is written to the page while this runs.</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px; animation: pf-rise .3s ease both;">
+          <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 7px;">
+            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+              <span style="font-size: 15px; font-weight: 500;">{{ reviewTitle }}</span>
+              <span style="font-size: 12px; color: #86868B;">{{ reviewRight }}</span>
+            </div>
+            <div style="height: 3px; border-radius: 999px; background: #E7E7E4; overflow: hidden;">
+              <div style="{{ reviewBarStyle }}"></div>
+            </div>
+            <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">{{ reviewNote }}</div>
+          </div>
+
+          <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;">
+            <button onClick="{{ toggleQuiet }}" style="display: flex; align-items: center; gap: 8px; font-family: inherit; text-align: left; background: none; border: none; padding: 0; cursor: pointer; color: #1D1D1F; transition: color .18s ease;" style-hover="color: #6E6E73;">
+              <span style="{{ quietCaretStyle }}">▶</span>
+              <span style="width: 7px; height: 7px; flex: none; border-radius: 999px; background: #157553;"></span>
+              <span style="font-size: 12.5px; flex: 1;">{{ quietLabel }}</span>
+            </button>
+            <sc-if value="{{ quietOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; gap: 7px; animation: pf-rise .26s ease both;">
+                <sc-for list="{{ quietRows }}" as="q" hint-placeholder-count="2">
+                  <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;">
+                    <span style="color: #6E6E73;">{{ q.label }}</span>
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #1D1D1F; text-align: right;">{{ q.value }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-for list="{{ reviewRows }}" as="row" hint-placeholder-count="3">
+            <div style="{{ row.cardStyle }}">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span style="{{ row.badgeStyle }}">{{ row.badge }}</span>
+                <sc-if value="{{ row.written }}" hint-placeholder-val="{{ false }}">
+                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #157553; animation: pf-tick .3s ease both;">
+                    <span style="width: 13px; height: 13px; border-radius: 999px; background: #157553; color: #FFFFFF; font-size: 9px; display: inline-flex; align-items: center; justify-content: center;">✓</span>Written
+                  </span>
+                </sc-if>
+              </div>
+              <div style="font-size: 14px; font-weight: 500;">{{ row.label }}</div>
+              <sc-if value="{{ row.help }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size: 12px; line-height: 1.55; color: #86868B; text-wrap: pretty;">{{ row.help }}</div>
+              </sc-if>
+              <sc-if value="{{ row.isText }}" hint-placeholder-val="{{ true }}">
+                <textarea onInput="{{ row.onEdit }}" value="{{ row.value }}" spellcheck="false" rows="{{ row.rows }}" style="display: block; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; line-height: 1.5; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px; resize: vertical; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);"></textarea>
+              </sc-if>
+              <sc-if value="{{ row.isSelect }}" hint-placeholder-val="{{ false }}">
+                <select onChange="{{ row.onEdit }}" value="{{ row.value }}" style="display: block; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px; outline: none; cursor: pointer; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);">
+                  <sc-for list="{{ row.options }}" as="opt" hint-placeholder-count="3">
+                    <option value="{{ opt }}">{{ opt }}</option>
+                  </sc-for>
+                </select>
+              </sc-if>
+              <sc-if value="{{ row.showConfirm }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ row.onConfirm }}" style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; border-radius: 7px; padding: 8px 14px; cursor: pointer; transition: background .18s ease, transform .12s ease;" style-hover="background: #35353A;" style-active="transform: scale(.97);">Confirm</button>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <button onClick="{{ toFill }}" disabled="{{ reviewBlocked }}" style="{{ reviewBtnStyle }}" style-hover="{{ reviewBtnHover }}" style-active="{{ reviewBtnActive }}">{{ reviewBtnLabel }}</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFill }}" hint-placeholder-val="{{ false }}">
+        <div style="background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: pf-rise .3s ease both;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 15px; font-weight: 500;">Write it onto the page</div>
+            <div style="font-size: 12.5px; color: #86868B; text-wrap: pretty;">BreezeFill has no access to any page until you grant it here, one site at a time. It fills; it never submits.</div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button onClick="{{ fill }}" disabled="{{ filling }}" style="{{ fillBtnStyle }}" style-hover="{{ fillBtnHover }}" style-active="{{ fillBtnActive }}">
+              <sc-if value="{{ filling }}" hint-placeholder-val="{{ false }}">
+                <span style="width: 12px; height: 12px; border-radius: 999px; border: 1.6px solid rgba(255,255,255,.4); border-top-color: #FFFFFF; display: inline-block; animation: pf-spin .7s linear infinite;"></span>
+              </sc-if>
+              <span>{{ fillLabel }}</span>
+            </button>
+            <button onClick="{{ check }}" style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; border-radius: 9px; padding: 10px 17px; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .12s ease;" style-hover="background: #F0F0EE; border-color: #C6C6C1;" style-active="transform: scale(.98);">Check this page</button>
+          </div>
+          <sc-if value="{{ checkStatus }}" hint-placeholder-val="{{ false }}">
+            <div role="status" style="background: #F7F7F6; border: 1px solid #E7E7E4; border-radius: 9px; padding: 10px 12px; font-size: 12.5px; animation: pf-rise .26s ease both;">{{ checkStatus }}</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ filled }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 10px; animation: pf-rise .3s ease both;">
+          <div role="status" style="background: #F1F7F3; border: 1px solid #CFE3D6; border-radius: 11px; padding: 12px; display: flex; gap: 9px; align-items: flex-start;">
+            <span style="width: 15px; height: 15px; flex: none; margin-top: 1px; border-radius: 999px; background: #157553; color: #FFFFFF; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; animation: pf-tick .32s ease both;">✓</span>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 13.5px; font-weight: 500; color: #12603F;">{{ fillHeadline }}</span>
+              <span style="font-size: 12.5px; color: #2C6B4E;">Check each one on the form, then submit it yourself.</span>
+            </div>
+          </div>
+          <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Written to this page</div>
+            <sc-for list="{{ writtenRows }}" as="w" hint-placeholder-count="3">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;">
+                <span>{{ w.label }}</span>
+                <span style="color: #86868B; font-family: 'Geist Mono', monospace; font-size: 11.5px; text-align: right;">{{ w.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-left: 3px solid #8A6A28; border-radius: 10px; padding: 12px 12px 12px 13px; display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 12.5px; font-weight: 500; color: #8A6A28;">2 fields belong to a later step</div>
+            <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">Move to that step of the form and press Fill again. Requested fees, Admission date.</div>
+          </div>
+          <div style="background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 12.5px; font-weight: 500;">Fill these yourself</div>
+            <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">Referring clinic address · Accident date · (unlabelled select)</div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:740,&quot;height&quot;:880}}">
+const FONTS = [
+  { name: "Schibsted Grotesk", stack: "'Schibsted Grotesk', system-ui, sans-serif" },
+  { name: "Figtree", stack: "Figtree, system-ui, sans-serif" },
+  { name: "Instrument Sans", stack: "'Instrument Sans', system-ui, sans-serif" },
+  { name: "Manrope", stack: "Manrope, system-ui, sans-serif" },
+  { name: "Onest", stack: "Onest, system-ui, sans-serif" },
+];
+const PANEL = "width: 400px; height: 780px; box-sizing: border-box; flex: none; background: #F5F5F4; border: 1px solid #E3E3E0; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.06); font-family: ";
+const FONT_BTN = "font-family: inherit; text-align: left; font-size: 12.5px; border-radius: 8px; padding: 7px 11px; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease;";
+const CTA = "width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; font-size: 14px; font-weight: 500; border-radius: 10px; padding: 12px 18px; transition: background .18s ease, border-color .18s ease, color .18s ease, transform .12s ease; ";
+const CTA_ON = "border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; cursor: pointer;";
+const CTA_OFF = "border: 1px solid #E0E0DC; background: #EFEFEC; color: #A5A5A0; cursor: not-allowed;";
+const CTA_BLUE = "border: 1px solid #0071E3; background: #0071E3; color: #FFFFFF; cursor: pointer;";
+const CARD = "background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: background .24s ease, border-color .24s ease, border-left-color .24s ease;";
+const FIELD_INPUT = "font-family: inherit; font-size: 13.5px; color: #1D1D1F; background: #FFFFFF; border-radius: 7px; padding: 9px 11px; outline: none; transition: border-color .2s ease, box-shadow .2s ease; border: 1px solid ";
+
+const SAMPLE = `Tan Wei Ling, F, 47
+NRIC S8012345D  DOB 14/03/1978
+HP 9123 4567 / 6123 4567
+Policy GHS-88213004 or GH-88213004 (AIA Singapore)
+Blk 118 Bishan St 12 #07-21, S570118
+
+Seen 02/08/2026. 3 days sore throat, fever 38.4, odynophagia.
+O/E tonsils enlarged with exudate, tender cervical nodes.
+Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
+First consult for this episode 31/07/2026. MC 2 days.`;
+
+const FOUND = [
+  { key: "nric", caption: "NRIC", required: true, value: "S8012345D", state: "confident" },
+  { key: "dob", caption: "Date of birth", required: true, value: "14/03/1978", state: "confident" },
+  { key: "insurer", caption: "Insurer", required: true, value: "AIA Singapore", state: "confident" },
+  { key: "phone", caption: "Phone", required: false, value: "9123 4567", state: "check", hint: "Two numbers in the note — 9123 4567 and 6123 4567." },
+  { key: "policy", caption: "Policy number", required: true, value: "GHS-88213004", state: "check", hint: "Written two ways in the note. Pick the one on the policy." },
+  { key: "address", caption: "Address", required: false, value: "Blk 118 Bishan St 12 #07-21, S570118", state: "confident" },
+  { key: "occupation", caption: "Occupation", required: false, value: "", state: "empty", placeholder: "Not in the note" },
+];
+
+const CLINICAL = [
+  { id: "dx", label: "Principal diagnosis", status: "extracted", type: "text", value: "Acute tonsillitis" },
+  { id: "rx", label: "Treatment given", status: "extracted", type: "text", value: "Oral amoxicillin 500mg TDS for 7 days" },
+  { id: "icd", label: "ICD-10 code", status: "inferred", type: "text", value: "J03.90", help: "Inferred from the diagnosis wording — the note does not state a code." },
+  { id: "first", label: "7. When did the patient first consult you", status: "inferred", type: "text", value: "31/07/2026", help: "The date the patient FIRST consulted this doctor for this condition, not the latest visit." },
+  { id: "ward", label: "Ward class", status: "missing", type: "select", value: "", options: ["— leave blank —", "A1 (single)", "B1 (4-bedded)", "B2 (6-bedded)", "C (8-bedded)"] },
+];
+
+const STEPS = ["name", "note", "verify", "map", "review", "fill"];
+
+class Component extends DCLogic {
+  state = {
+    step: "name", name: "", note: "", finding: false, found: false,
+    fieldVals: {}, acked: {}, mapping: false, mapStep: 0, mapped: false,
+    values: {}, confirmed: {}, filling: false, filled: false, checkStatus: "", font: 0, quietOpen: false, openDone: {},
+  };
+
+  componentWillUnmount() { clearInterval(this.stepTimer); clearTimeout(this.t1); clearTimeout(this.t2); }
+
+  fieldVal(f) { const v = this.state.fieldVals[f.key]; return v === undefined ? f.value : v; }
+  fieldState(f) {
+    const v = this.fieldVal(f);
+    if (!String(v).trim()) return f.required ? "empty" : "optional";
+    if (f.state === "check" && !this.state.acked[f.key]) return "check";
+    return "confident";
+  }
+  rowValue(r) { const v = this.state.values[r.id]; return v === undefined ? r.value : v; }
+  isPending(r) { return r.status === "inferred" && !this.state.confirmed[r.id] && String(this.rowValue(r)).trim() !== ""; }
+
+  go(step) { this.setState({ step }); }
+
+  renderVals() {
+    const s = this.state;
+    const idx = STEPS.indexOf(s.step);
+
+    const fieldsResolved = FOUND.map(f => ({ ...f, v: this.fieldVal(f), st: this.fieldState(f) }));
+    const blockers = fieldsResolved.filter(f => f.st === "check" || f.st === "empty");
+    const pending = CLINICAL.filter(r => this.isPending(r)).length;
+    const ready = CLINICAL.filter(r => r.status !== "missing" && !this.isPending(r) && String(this.rowValue(r)).trim() !== "").length;
+
+    const raw = [];
+    if (idx > 0) raw.push({ key: "name", title: "Patient", summary: s.name, step: "name",
+      lines: [{ label: "Name", value: s.name }] });
+    if (idx > 1) raw.push({ key: "note", title: "Consultation note", summary: s.note.trim().split(/\s+/).length + " words pasted", step: "note",
+      lines: [{ label: "First line", value: s.note.trim().split("\n")[0] }, { label: "Characters", value: String(s.note.trim().length) }] });
+    if (idx > 2) raw.push({ key: "verify", title: "Patient details", summary: fieldsResolved.filter(f => f.st === "confident").length + " of 7 verified", step: "verify",
+      lines: fieldsResolved.filter(f => String(f.v).trim()).map(f => ({ label: f.caption, value: String(f.v) })) });
+    if (idx > 3) raw.push({ key: "map", title: "Clinical questions", summary: "24 questions mapped", step: "map",
+      lines: [{ label: "Questions read", value: "24" }, { label: "Answered", value: String(CLINICAL.length) }] });
+    if (idx > 4) raw.push({ key: "review", title: "Review", summary: ready + " values confirmed", step: "review",
+      lines: CLINICAL.filter(r => String(this.rowValue(r)).trim()).map(r => ({ label: r.label.replace(/^\d+\.\s*/, ""), value: String(this.rowValue(r)) })) });
+    const done = raw.map(d => ({
+      ...d,
+      open: !!s.openDone[d.key],
+      toggle: () => this.setState(st => ({ openDone: { ...st.openDone, [d.key]: !st.openDone[d.key] } })),
+      edit: () => this.go(d.step),
+      caretStyle: "flex: none; font-size: 17px; line-height: 1; color: #A5A5A0; display: inline-block; transition: transform .22s ease; transform: rotate(" + (s.openDone[d.key] ? 90 : 0) + "deg);",
+    }));
+
+    const rows = CLINICAL.map(r => {
+      const pendingRow = this.isPending(r);
+      const val = this.rowValue(r);
+      const written = s.filled && r.status !== "missing" && !pendingRow && String(val).trim() !== "";
+      let cardStyle = CARD;
+      if (pendingRow) cardStyle = CARD + " border-left: 3px solid #8A6A28; padding-left: 13px;";
+      else if (r.status === "missing") cardStyle = "background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: background .24s ease, border-color .24s ease;";
+      else if (written) cardStyle = CARD + " border-left: 3px solid #157553; padding-left: 13px;";
+      const badge = r.status === "extracted" ? "Extracted from the note"
+        : r.status === "inferred" ? (pendingRow ? "Inferred — check this" : "Inferred — confirmed by you")
+        : "Not found — fill by hand";
+      const color = r.status === "missing" ? "#86868B" : pendingRow ? "#8A6A28" : "#157553";
+      return {
+        ...r, value: val, written, badge, cardStyle,
+        badgeStyle: "font-size: 12px; font-weight: 500; transition: color .2s ease; color: " + color + ";",
+        isText: r.type === "text", isSelect: r.type === "select",
+        rows: String(val).length > 44 ? 3 : 1,
+        showConfirm: pendingRow,
+        onConfirm: () => this.setState(st => ({ confirmed: { ...st.confirmed, [r.id]: true } })),
+        onEdit: e => this.setState(st => ({ values: { ...st.values, [r.id]: e.target.value }, confirmed: { ...st.confirmed, [r.id]: true } })),
+      };
+    });
+
+    const nameEmpty = !s.name.trim();
+    const noteEmpty = !s.note.trim();
+
+    return {
+      panelStyle: PANEL + FONTS[s.font].stack + ";",
+      fonts: FONTS.map((ft, i) => ({
+        name: ft.name,
+        pick: () => this.setState({ font: i }),
+        style: FONT_BTN + (i === s.font
+          ? " background: #1D1D1F; border: 1px solid #1D1D1F; color: #FCFCFB; font-weight: 500;"
+          : " background: #FFFFFF; border: 1px solid #E0E0DC; color: #1D1D1F; font-weight: 400;"),
+      })),
+      reset: () => { clearInterval(this.stepTimer); this.setState({ step: "name", name: "", note: "", found: false, finding: false, fieldVals: {}, acked: {}, mapping: false, mapped: false, values: {}, confirmed: {}, filled: false, filling: false, checkStatus: "" }); },
+
+      stepCounter: "Step " + (idx + 1) + " of 6",
+      done,
+      isName: s.step === "name", isNote: s.step === "note", isVerify: s.step === "verify",
+      isMap: s.step === "map", isReview: s.step === "review", isFill: s.step === "fill",
+
+      name: s.name,
+      onName: e => this.setState({ name: e.target.value }),
+      nameEmpty,
+      nameBtnStyle: CTA + (nameEmpty ? CTA_OFF : CTA_ON),
+      nameBtnHover: nameEmpty ? "" : "background: #35353A;",
+      nameBtnActive: nameEmpty ? "" : "transform: scale(.99);",
+      nextFromName: () => { if (!nameEmpty) this.go("note"); },
+
+      note: s.note,
+      onNote: e => this.setState({ note: e.target.value }),
+      noteEmpty: noteEmpty || s.finding,
+      sample: () => this.setState({ note: SAMPLE }),
+      finding: s.finding,
+      findLabel: s.finding ? "Reading the note…" : "Find patient details",
+      findBtnStyle: CTA + ((noteEmpty || s.finding) ? CTA_OFF : CTA_ON),
+      findBtnHover: (noteEmpty || s.finding) ? "" : "background: #35353A;",
+      findBtnActive: (noteEmpty || s.finding) ? "" : "transform: scale(.99);",
+      findDetails: () => {
+        if (noteEmpty || s.finding) return;
+        this.setState({ finding: true });
+        this.t1 = setTimeout(() => this.setState({ finding: false, found: true, step: "verify" }), 550);
+      },
+
+      legend: [
+        { label: "Confident", dotStyle: "width: 7px; height: 7px; border-radius: 999px; background: #157553;" },
+        { label: "Needs checking", dotStyle: "width: 7px; height: 7px; border-radius: 999px; background: #8A6A28;" },
+        { label: "Nothing found", dotStyle: "width: 7px; height: 7px; border-radius: 999px; background: #86868B;" },
+      ],
+      fields: fieldsResolved.map(f => {
+        const st = f.st;
+        const border = st === "check" ? "#D9C9A8" : st === "empty" ? "#DCDCD8" : "#E3E3E0";
+        let cardStyle = CARD;
+        if (st === "check") cardStyle = CARD + " border-left: 3px solid #8A6A28; padding-left: 13px;";
+        else if (st === "empty") cardStyle = "background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+        else if (st === "confident") cardStyle = CARD + " border-left: 3px solid #157553; padding-left: 13px;";
+        const stateLabel = st === "check" ? "Needs checking" : st === "empty" ? "Required — type it in" : st === "optional" ? "Optional — nothing found" : "Confident";
+        const stateColor = st === "check" ? "#8A6A28" : st === "confident" ? "#157553" : "#86868B";
+        return {
+          caption: f.caption, value: f.v, placeholder: f.placeholder || "",
+          hint: st === "check" ? f.hint : "",
+          showConfirm: st === "check",
+          onConfirm: () => this.setState(st2 => ({ acked: { ...st2.acked, [f.key]: true } })),
+          cardStyle,
+          stateLabel, stateStyle: "font-size: 11px; font-weight: 500; transition: color .2s ease; color: " + stateColor + ";",
+          inputStyle: FIELD_INPUT + border + ";",
+          onEdit: e => this.setState(st2 => ({ fieldVals: { ...st2.fieldVals, [f.key]: e.target.value }, acked: { ...st2.acked, [f.key]: true } })),
+        };
+      }),
+      gateBlocked: blockers.length > 0,
+      gateBtnStyle: CTA + (blockers.length ? CTA_OFF : CTA_ON),
+      gateBtnHover: blockers.length ? "" : "background: #35353A;",
+      gateBtnActive: blockers.length ? "" : "transform: scale(.99);",
+      gateHint: blockers.length
+        ? blockers.length + (blockers.length === 1 ? " field still needs you: " : " fields still need you: ") + blockers.map(b => b.caption.toLowerCase()).join(", ") + ". Press “This is right” on each, or type the value in."
+        : "Nothing has been sent anywhere yet. Continuing sends the note, redacted against these values.",
+      clearGate: () => { if (!blockers.length) this.go("map"); },
+
+      mapping: s.mapping,
+      mapLabel: s.mapping ? "Mapping…" : s.mapped ? "Map again" : "Map fields",
+      mapStepText: ["Reading the questions on this page…", "Redacting the note…", "Matching the note to 24 questions…"][s.mapStep],
+      mapBtnStyle: CTA + (s.mapping ? CTA_ON + " opacity: .65; cursor: default;" : CTA_ON),
+      mapBtnHover: s.mapping ? "" : "background: #35353A;",
+      mapBtnActive: s.mapping ? "" : "transform: scale(.99);",
+      map: () => {
+        if (s.mapping) return;
+        this.setState({ mapping: true, mapStep: 0 });
+        clearInterval(this.stepTimer);
+        this.stepTimer = setInterval(() => this.setState(st => ({ mapStep: Math.min(2, st.mapStep + 1) })), 900);
+        this.t2 = setTimeout(() => { clearInterval(this.stepTimer); this.setState({ mapping: false, mapped: true, step: "review" }); }, 2800);
+      },
+
+      reviewTitle: pending ? pending + (pending === 1 ? " value to confirm" : " values to confirm") : "Everything confirmed",
+      reviewRight: ready + " of " + CLINICAL.length + " ready",
+      reviewBarStyle: "height: 3px; border-radius: 999px; background: #1D1D1F; transition: width .45s cubic-bezier(.22,.7,.3,1); width: " + Math.round((ready / CLINICAL.length) * 100) + "%;",
+      reviewNote: pending
+        ? "Only what needs you is listed: inferred values to confirm, and questions with no answer in the note."
+        : "Nothing left to confirm. Fields with no answer stay for you to complete by hand.",
+      rows,
+      reviewRows: rows.filter(r => r.status !== "extracted"),
+      quietRows: rows.filter(r => r.status === "extracted").map(r => ({ label: r.label, value: String(r.value) })),
+      quietLabel: rows.filter(r => r.status === "extracted").length + " values taken straight from the note",
+      quietOpen: s.quietOpen,
+      toggleQuiet: () => this.setState(st => ({ quietOpen: !st.quietOpen })),
+      quietCaretStyle: "font-size: 9px; color: #86868B; display: inline-block; transition: transform .22s ease; transform: rotate(" + (s.quietOpen ? 90 : 0) + "deg);",
+      reviewBlocked: pending > 0,
+      reviewBtnLabel: pending ? "Confirm the amber rows to continue" : "Continue to fill",
+      reviewBtnStyle: CTA + (pending ? CTA_OFF : CTA_ON),
+      reviewBtnHover: pending ? "" : "background: #35353A;",
+      reviewBtnActive: pending ? "" : "transform: scale(.99);",
+      toFill: () => { if (!pending) this.go("fill"); },
+
+      filling: s.filling,
+      filled: s.filled,
+      fillLabel: s.filling ? "Filling…" : s.filled ? "Fill again" : "Fill this page",
+      fillBtnStyle: CTA + (s.filling ? CTA_BLUE + " opacity: .7; cursor: default;" : CTA_BLUE) + " width: auto;",
+      fillBtnHover: s.filling ? "" : "background: #0062C4; border-color: #0062C4;",
+      fillBtnActive: s.filling ? "" : "transform: scale(.98);",
+      fill: () => {
+        if (this.state.filling) return;
+        this.setState({ filling: true, checkStatus: "" });
+        this.t1 = setTimeout(() => this.setState({ filling: false, filled: true }), 1100);
+      },
+      check: () => this.setState({ checkStatus: "Matched " + ready + " of 11 fields on claimez.aia.com.sg." }),
+      checkStatus: s.checkStatus,
+      fillHeadline: "Filled " + ready + " fields on claimez.aia.com.sg.",
+      writtenRows: rows.filter(r => r.written).map(r => ({ label: r.label.replace(/^\d+\.\s*/, ""), value: String(r.value) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,15 +1,15 @@
 /*
   BreezeFill side panel — visual system.
 
-  Implements the redesign specified in docs/design/pastefill-panel/README.md.
+  Implements the redesign specified in docs/design/breezefill-panel/README.md.
   Every colour, size, radius and easing below is taken from that spec; where
   this file departs from it, the departure is commented and says why.
 
   Two departures, both deliberate:
 
-  1. NAME. The spec is branded "PasteFill". This product is BreezeFill and owns
-     breezefill.com, so the wordmark stays. Nothing else about the design
-     depends on the name.
+  1. NAME. The spec was authored under a different working name; every
+     occurrence of it has been renamed to BreezeFill, here and in the design
+     docs. Nothing about the design depends on the name.
 
   2. FONTS. The spec bundles Schibsted Grotesk and Geist Mono as local .woff2
      (correct for MV3 — a CDN font is a network request the panel must not

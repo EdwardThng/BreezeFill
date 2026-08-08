@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@400;500;600&family=Manrope:wght@400;500;600&family=Onest:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #E9E9E7; }
+  a { color: #1D1D1F; }
+  a:hover { color: #6E6E73; }
+  @keyframes pf-spin { to { transform: rotate(360deg); } }
+  @keyframes pf-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes pf-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+  @keyframes pf-tick { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: #D8D8D4; border-radius: 999px; border: 3px solid #F5F5F4; }
+</style>
+</helmet>
+
+<div style="font-family: Figtree, system-ui, sans-serif; min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; gap: 28px; padding: 32px 24px 60px;">
+
+  <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 6px; width: 260px;">
+    <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #86868B;">BreezeFill · side panel</div>
+    <div style="font-size: 13px; line-height: 1.65; color: #6E6E73; text-wrap: pretty;">Live at the real 400px width. Paste anything into the note box, then press Map fields — the wait, the review pass, confirming a row and filling the page are all wired, with the transitions they would ship with.</div>
+    <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 12px; border-top: 1px solid #DCDCD8;">
+      <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Typeface</div>
+      <sc-for list="{{ fonts }}" as="fnt" hint-placeholder-count="5">
+        <button onClick="{{ fnt.pick }}" style="{{ fnt.style }}">{{ fnt.name }}</button>
+      </sc-for>
+    </div>
+    <button onClick="{{ demo }}" style="align-self: flex-start; margin-top: 4px; font-family: inherit; font-size: 12.5px; font-weight: 500; color: #1D1D1F; background: #FFFFFF; border: 1px solid #D5D5D1; border-radius: 8px; padding: 8px 13px; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .12s ease;" style-hover="background: #F5F5F4; border-color: #C6C6C1;" style-active="transform: scale(.97);">Paste a sample note</button>
+    <button onClick="{{ reset }}" style="align-self: flex-start; font-family: inherit; font-size: 12.5px; color: #6E6E73; background: none; border: none; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color .18s ease;" style-hover="color: #1D1D1F;">Reset the panel</button>
+  </div>
+
+  <div style="{{ panelStyle }}">
+
+    <div style="flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; background: #F5F5F4; border-bottom: 1px solid #E7E7E4;">
+      <div style="width: 30px; height: 30px; flex: none; border-radius: 8px; background: #FCFCFB; border: 1px solid #E3E3E0; display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="16" rx="3.5" stroke="#1D1D1F" stroke-width="2"></rect><rect x="9" y="2.5" width="6" height="4" rx="2" fill="#1D1D1F"></rect><path d="M8 12.5h8" stroke="#1D1D1F" stroke-width="2" stroke-linecap="round"></path></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1px; flex: 1;">
+        <div style="font-size: 16px; font-weight: 500; color: #1D1D1F; letter-spacing: -0.015em; line-height: 1.25;">BreezeFill</div>
+        <div style="font-size: 12px; color: #86868B; line-height: 1.35;">Fills the form in place. Never submits it.</div>
+      </div>
+    </div>
+
+    <sc-if value="{{ mapped }}" hint-placeholder-val="{{ true }}">
+      <div style="flex: none; padding: 10px 16px 11px; background: #FCFCFB; border-bottom: 1px solid #E7E7E4; display: flex; flex-direction: column; gap: 7px; animation: pf-rise .3s ease both;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 12.5px; font-weight: 500; color: #1D1D1F;">{{ progressLabel }}</span>
+          <span style="font-size: 12px; color: #86868B;">{{ progressRight }}</span>
+        </div>
+        <div style="height: 3px; border-radius: 999px; background: #E7E7E4; overflow: hidden;">
+          <div style="{{ progressBarStyle }}"></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 22px; font-size: 13.5px; line-height: 1.55; color: #1D1D1F;">
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 18px; height: 18px; border-radius: 999px; background: #1D1D1F; color: #FCFCFB; font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;">1</span>
+          <span style="font-size: 14px; font-weight: 500;">Patient and note</span>
+        </div>
+
+        <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Insurer form</div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: #157553; flex: none;"></span>
+            <span style="font-size: 13.5px; font-weight: 500;">AIA — GHS Claim Form</span>
+          </div>
+          <button onClick="{{ noop }}" style="align-self: flex-start; font-family: inherit; font-size: 12px; color: #6E6E73; background: none; border: none; padding: 2px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color .18s ease;" style-hover="color: #1D1D1F;">Choose a different form</button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Paste the consultation</div>
+          <textarea onInput="{{ onNote }}" value="{{ note }}" spellcheck="false" placeholder="Paste the patient's details and the clinical note together." rows="9" style="font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.6; color: #1D1D1F; background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 10px; padding: 11px; resize: vertical; outline: none; transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06); background: #FFFFFF;"></textarea>
+        </div>
+
+        <div style="border-top: 1px solid #EAEAE7; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <button onClick="{{ toggleNotes }}" style="display: flex; align-items: center; gap: 7px; font-family: inherit; background: none; border: none; padding: 0; cursor: pointer; color: #86868B; transition: color .18s ease;" style-hover="color: #1D1D1F;">
+            <span style="{{ notesCaretStyle }}">▶</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;">Other notes (optional)</span>
+          </button>
+          <sc-if value="{{ notesOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 7px; animation: pf-rise .26s ease both;">
+              <textarea spellcheck="false" placeholder="Anything the form asks for that is not in the consultation note — admission references, ward class, billing details." rows="4" style="font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.6; color: #1D1D1F; background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 10px; padding: 11px; resize: vertical; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);"></textarea>
+              <div style="font-size: 12px; color: #86868B;">Redacted with the note, and read for identifiers the same way.</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="border-top: 1px solid #EAEAE7; padding-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+          <button onClick="{{ toggleDetails }}" style="display: flex; align-items: center; gap: 7px; font-family: inherit; background: none; border: none; padding: 0; cursor: pointer; text-align: left; color: #1D1D1F; transition: color .18s ease;" style-hover="color: #6E6E73;">
+            <span style="{{ detailsCaretStyle }}">▶</span>
+            <span style="font-size: 13px; font-weight: 500;">Patient details</span>
+            <span style="font-size: 12.5px; color: #86868B;">{{ detailsSummary }}</span>
+          </button>
+          <sc-if value="{{ detailsOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; animation: pf-rise .26s ease both;">
+              <sc-for list="{{ details }}" as="d" hint-placeholder-count="6">
+                <label style="display: flex; flex-direction: column; gap: 4px;">
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #86868B;">{{ d.caption }}</span>
+                  <input value="{{ d.value }}" placeholder="{{ d.placeholder }}" style="{{ d.inputStyle }}" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);">
+                </label>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="font-size: 12px; line-height: 1.6; color: #6E6E73; background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 11px 12px; text-wrap: pretty;">Names and identifiers are found by pattern, never by a model. They are what the paste is redacted against before any of it is sent to one, and they are written onto the form directly.</div>
+
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <button onClick="{{ map }}" disabled="{{ mapping }}" style="{{ mapBtnStyle }}" style-hover="{{ mapBtnHover }}" style-active="transform: scale(.98);">
+            <sc-if value="{{ mapping }}" hint-placeholder-val="{{ false }}">
+              <span style="width: 12px; height: 12px; border-radius: 999px; border: 1.6px solid rgba(252,252,251,.35); border-top-color: #FCFCFB; display: inline-block; animation: pf-spin .7s linear infinite;"></span>
+            </sc-if>
+            <span>{{ mapLabel }}</span>
+          </button>
+
+          <sc-if value="{{ mapping }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 11px 12px; display: flex; flex-direction: column; gap: 9px; animation: pf-rise .26s ease both;">
+              <div style="font-size: 12.5px; color: #1D1D1F;">{{ mapStepText }}</div>
+              <div style="height: 3px; border-radius: 999px; background: #EDEDEA; overflow: hidden; position: relative;">
+                <div style="position: absolute; inset: 0; width: 30%; border-radius: 999px; background: linear-gradient(90deg, rgba(29,29,31,0), #1D1D1F, rgba(29,29,31,0)); animation: pf-sweep 1.5s ease-in-out infinite;"></div>
+              </div>
+              <div style="font-size: 12px; color: #86868B;">Usually 10–30 seconds. Nothing is written to the page while this runs.</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ mapError }}" hint-placeholder-val="{{ false }}">
+            <div role="status" style="background: #FDF2F1; border: 1px solid #EBCFCC; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: #9A2B22; animation: pf-rise .26s ease both;">{{ mapError }}</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <sc-if value="{{ mapped }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 12px; animation: pf-rise .32s ease both;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 18px; height: 18px; border-radius: 999px; background: #1D1D1F; color: #FCFCFB; font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;">2</span>
+            <span style="font-size: 14px; font-weight: 500;">Review</span>
+          </div>
+          <div style="font-size: 12.5px; color: #6E6E73;">{{ reviewSummary }}</div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <sc-for list="{{ rows }}" as="row" hint-placeholder-count="4">
+              <div style="{{ row.cardStyle }}">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                  <span style="{{ row.badgeStyle }}">{{ row.badge }}</span>
+                  <sc-if value="{{ row.written }}" hint-placeholder-val="{{ false }}">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #157553; animation: pf-tick .3s ease both;">
+                      <span style="width: 13px; height: 13px; border-radius: 999px; background: #157553; color: #FFFFFF; font-size: 9px; display: inline-flex; align-items: center; justify-content: center;">✓</span>
+                      Written
+                    </span>
+                  </sc-if>
+                </div>
+                <div style="font-size: 14px; font-weight: 500;">{{ row.label }}</div>
+                <sc-if value="{{ row.help }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size: 12px; line-height: 1.55; color: #86868B; text-wrap: pretty;">{{ row.help }}</div>
+                </sc-if>
+
+                <sc-if value="{{ row.isText }}" hint-placeholder-val="{{ true }}">
+                  <textarea onInput="{{ row.onEdit }}" value="{{ row.value }}" spellcheck="false" rows="{{ row.rows }}" style="font-family: inherit; font-size: 13px; line-height: 1.5; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px; resize: vertical; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);"></textarea>
+                </sc-if>
+                <sc-if value="{{ row.isSelect }}" hint-placeholder-val="{{ false }}">
+                  <select onChange="{{ row.onEdit }}" value="{{ row.value }}" style="font-family: inherit; font-size: 13px; color: #1D1D1F; background: #FFFFFF; border: 1px solid #E3E3E0; border-radius: 7px; padding: 9px 11px; outline: none; cursor: pointer; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);">
+                    <sc-for list="{{ row.options }}" as="opt" hint-placeholder-count="3">
+                      <option value="{{ opt }}">{{ opt }}</option>
+                    </sc-for>
+                  </select>
+                </sc-if>
+                <sc-if value="{{ row.isCheck }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ row.onToggle }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; font-family: inherit; font-size: 13px; color: #1D1D1F; background: none; border: none; padding: 2px 0; cursor: pointer;">
+                    <span style="{{ row.checkStyle }}">✓</span>
+                    <span>{{ row.checkLabel }}</span>
+                  </button>
+                </sc-if>
+
+                <sc-if value="{{ row.showConfirm }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ row.onConfirm }}" style="align-self: flex-start; font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; border-radius: 7px; padding: 8px 14px; cursor: pointer; transition: background .18s ease, transform .12s ease;" style-hover="background: #35353A;" style-active="transform: scale(.97);">Confirm</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 18px; height: 18px; border-radius: 999px; background: #1D1D1F; color: #FCFCFB; font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;">3</span>
+          <span style="font-size: 14px; font-weight: 500;">Fill this page</span>
+        </div>
+        <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">BreezeFill has no access to any page until you grant it here, one site at a time.</div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <button onClick="{{ fill }}" disabled="{{ fillDisabled }}" style="{{ fillBtnStyle }}" style-hover="{{ fillBtnHover }}" style-active="{{ fillBtnActive }}">
+            <sc-if value="{{ filling }}" hint-placeholder-val="{{ false }}">
+              <span style="width: 12px; height: 12px; border-radius: 999px; border: 1.6px solid rgba(255,255,255,.4); border-top-color: #FFFFFF; display: inline-block; animation: pf-spin .7s linear infinite;"></span>
+            </sc-if>
+            <span>{{ fillLabel }}</span>
+          </button>
+          <button onClick="{{ check }}" style="font-family: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; border-radius: 9px; padding: 10px 17px; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .12s ease;" style-hover="background: #F0F0EE; border-color: #C6C6C1;" style-active="transform: scale(.98);">Check this page</button>
+        </div>
+
+        <sc-if value="{{ fillHint }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size: 12px; color: #86868B;">{{ fillHint }}</div>
+        </sc-if>
+
+        <sc-if value="{{ checkStatus }}" hint-placeholder-val="{{ false }}">
+          <div role="status" style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: #1D1D1F; animation: pf-rise .26s ease both;">{{ checkStatus }}</div>
+        </sc-if>
+
+        <sc-if value="{{ filled }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 10px; animation: pf-rise .3s ease both;">
+            <div role="status" style="background: #F1F7F3; border: 1px solid #CFE3D6; border-radius: 10px; padding: 11px 12px; display: flex; gap: 9px; align-items: flex-start;">
+              <span style="width: 15px; height: 15px; flex: none; margin-top: 1px; border-radius: 999px; background: #157553; color: #FFFFFF; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; animation: pf-tick .32s ease both;">✓</span>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 13px; font-weight: 500; color: #12603F;">{{ fillHeadline }}</span>
+                <span style="font-size: 12.5px; color: #2C6B4E;">Check each one on the form, then submit it yourself.</span>
+              </div>
+            </div>
+
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Written to this page</div>
+              <sc-for list="{{ writtenRows }}" as="w" hint-placeholder-count="3">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px;">
+                  <span style="color: #1D1D1F;">{{ w.label }}</span>
+                  <span style="color: #86868B; font-family: 'Geist Mono', monospace; font-size: 11.5px; text-align: right;">{{ w.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="background: #FCFCFB; border: 1px solid #E7E7E4; border-left: 3px solid #8A6A28; border-radius: 10px; padding: 12px 12px 12px 13px; display: flex; flex-direction: column; gap: 5px;">
+              <div style="font-size: 12.5px; font-weight: 500; color: #8A6A28;">2 fields belong to a later step</div>
+              <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">Move to that step of the form and press Fill again. Requested fees, Admission date.</div>
+            </div>
+
+            <div style="background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 12.5px; font-weight: 500; color: #1D1D1F;">Fill these yourself</div>
+              <div style="font-size: 12.5px; color: #6E6E73; text-wrap: pretty;">Referring clinic address · Accident date · (unlabelled select)</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="border-top: 1px solid #E7E7E4; padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+        <button onClick="{{ toggleAdv }}" style="display: flex; align-items: center; gap: 7px; font-family: inherit; background: none; border: none; padding: 0; cursor: pointer; color: #86868B; transition: color .18s ease;" style-hover="color: #1D1D1F;">
+          <span style="{{ advCaretStyle }}">▶</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;">Advanced</span>
+        </button>
+        <sc-if value="{{ advOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 7px; animation: pf-rise .26s ease both;">
+            <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #86868B;">Backend URL</div>
+            <input value="https://breezefill.vercel.app" style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #1D1D1F; background: #FCFCFB; border: 1px solid #E3E3E0; border-radius: 8px; padding: 9px 11px; outline: none; transition: border-color .2s ease, box-shadow .2s ease;" style-focus="border-color: #B9B9B4; box-shadow: 0 0 0 3px rgba(29,29,31,.06);">
+            <div style="font-size: 12px; line-height: 1.6; color: #86868B; text-wrap: pretty;">Held in memory for this session only. BreezeFill requests no storage permission, so nothing here — and no part of the note — is written to disk.</div>
+          </div>
+        </sc-if>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:880}}">
+const SAMPLE = `Tan Wei Ling, F, 47
+NRIC S8012345D  DOB 14/03/1978
+Policy GHS-88213004 (AIA)  HP 9123 4567
+Blk 118 Bishan St 12 #07-21, S570118
+
+Seen 02/08/2026. 3 days sore throat, fever 38.4, odynophagia.
+O/E tonsils enlarged with exudate, tender cervical nodes.
+Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
+First consult for this episode 31/07/2026. MC 2 days.`;
+
+const BASE_ROWS = [
+  { id: "name", label: "Patient name", status: "demographic", type: "text", value: "Tan Wei Ling" },
+  { id: "policy", label: "Policy number", status: "demographic", type: "text", value: "GHS-88213004" },
+  { id: "dx", label: "Principal diagnosis", status: "extracted", type: "text", value: "Acute tonsillitis" },
+  { id: "rx", label: "Treatment given", status: "extracted", type: "text", value: "Oral amoxicillin 500mg TDS for 7 days" },
+  { id: "icd", label: "ICD-10 code", status: "inferred", type: "text", value: "J03.90",
+    help: "Inferred from the diagnosis wording — the note does not state a code." },
+  { id: "first", label: "7. When did the patient first consult you", status: "inferred", type: "text", value: "31/07/2026",
+    help: "The date the patient FIRST consulted this doctor for this condition, not the latest visit." },
+  { id: "referred", label: "Referred by another doctor", status: "inferred", type: "check", value: false,
+    checkLabel: "No referral stated in the note" },
+  { id: "ward", label: "Ward class", status: "missing", type: "select", value: "",
+    options: ["— leave blank —", "A1 (single)", "B1 (4-bedded)", "B2 (6-bedded)", "C (8-bedded)"] },
+];
+
+const DETAILS = [
+  { caption: "Full name *", key: "name", placeholder: "" },
+  { caption: "NRIC *", key: "nric", placeholder: "" },
+  { caption: "Date of birth *", key: "dob", placeholder: "dd/mm/yyyy" },
+  { caption: "Insurer *", key: "insurer", placeholder: "" },
+  { caption: "Phone", key: "phone", placeholder: "" },
+  { caption: "Policy number", key: "policy", placeholder: "" },
+];
+
+const FONTS = [
+  { name: "Figtree", stack: "Figtree, system-ui, sans-serif" },
+  { name: "Instrument Sans", stack: "'Instrument Sans', system-ui, sans-serif" },
+  { name: "Schibsted Grotesk", stack: "'Schibsted Grotesk', system-ui, sans-serif" },
+  { name: "Manrope", stack: "Manrope, system-ui, sans-serif" },
+  { name: "Onest", stack: "Onest, system-ui, sans-serif" },
+];
+const PANEL = "width: 400px; height: 780px; box-sizing: border-box; flex: none; background: #F5F5F4; border: 1px solid #E3E3E0; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.06); transition: font-family .2s ease; font-family: ";
+const FONT_BTN = "font-family: inherit; text-align: left; font-size: 12.5px; border-radius: 8px; padding: 7px 11px; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease;";
+const BTN = "align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; font-family: inherit; font-size: 13.5px; font-weight: 500; border-radius: 9px; padding: 10px 17px; transition: background .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease, transform .12s ease; ";
+const CARET = "font-size: 9px; display: inline-block; transition: transform .22s ease; ";
+const PARSED = { name: "Tan Wei Ling", nric: "S8012345D", dob: "14/03/1978", insurer: "AIA", phone: "9123 4567", policy: "GHS-88213004" };
+
+class Component extends DCLogic {
+  state = {
+    note: "", mapping: false, mapStep: 0, mapped: false, mapError: "",
+    values: {}, confirmed: {}, filling: false, filled: false,
+    notesOpen: false, detailsOpen: false, advOpen: false, checkStatus: "", font: 0,
+  };
+
+  componentWillUnmount() { clearInterval(this.stepTimer); clearTimeout(this.mapTimer); clearTimeout(this.fillTimer); }
+
+  rowValue(r) { const v = this.state.values[r.id]; return v === undefined ? r.value : v; }
+
+  isPending(r) {
+    if (r.status !== "inferred") return false;
+    if (this.state.confirmed[r.id]) return false;
+    const v = this.rowValue(r);
+    return r.type === "check" ? true : String(v).trim() !== "";
+  }
+
+  readyRows() { return BASE_ROWS.filter(r => r.status !== "missing" && !this.isPending(r) && (r.type === "check" || String(this.rowValue(r)).trim() !== "")); }
+
+  setV(id, v) { this.setState(s => ({ values: { ...s.values, [id]: v }, confirmed: { ...s.confirmed, [id]: true } })); }
+
+  renderVals() {
+    const s = this.state;
+    const pending = BASE_ROWS.filter(r => this.isPending(r)).length;
+    const ready = this.readyRows().length;
+    const parsed = s.note.trim() ? PARSED : {};
+
+    const rows = BASE_ROWS.map(r => {
+      const pendingRow = this.isPending(r);
+      const val = this.rowValue(r);
+      const written = s.filled && !pendingRow && r.status !== "missing" && (r.type === "check" || String(val).trim() !== "");
+      const base = "background: #FCFCFB; border: 1px solid #E7E7E4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: background .24s ease, border-color .24s ease, border-left-color .24s ease, box-shadow .24s ease;";
+      let cardStyle = base;
+      if (pendingRow) cardStyle = base + " border-left: 3px solid #8A6A28; padding-left: 13px;";
+      else if (r.status === "missing") cardStyle = "background: #F7F7F6; border: 1px dashed #DEDEDB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: background .24s ease, border-color .24s ease;";
+      else if (written) cardStyle = base + " border-left: 3px solid #157553; padding-left: 13px;";
+
+      const badge = r.status === "extracted" ? "Extracted from the note"
+        : r.status === "demographic" ? "From the details you entered"
+        : r.status === "inferred" ? (pendingRow ? "Inferred — check this" : "Inferred — confirmed by you")
+        : "Not found — fill by hand";
+      const badgeColor = r.status === "missing" ? "#86868B" : pendingRow ? "#8A6A28" : "#157553";
+
+      return {
+        ...r, value: val, written, badge,
+        badgeStyle: "font-size: 12px; font-weight: 500; transition: color .2s ease; color: " + badgeColor + ";",
+        cardStyle,
+        isText: r.type === "text", isSelect: r.type === "select", isCheck: r.type === "check",
+        rows: String(val).length > 44 ? 3 : 1,
+        checkLabel: r.checkLabel,
+        checkStyle: "width: 17px; height: 17px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; transition: background .2s ease, border-color .2s ease, color .2s ease; " + (val
+          ? "background: #1D1D1F; border: 1px solid #1D1D1F; color: #FCFCFB;"
+          : "background: #FFFFFF; border: 1px solid #C9C9C4; color: transparent;"),
+        showConfirm: pendingRow,
+        onConfirm: () => this.setState(st => ({ confirmed: { ...st.confirmed, [r.id]: true } })),
+        onEdit: e => this.setV(r.id, e.target.value),
+        onToggle: () => this.setV(r.id, !val),
+      };
+    });
+
+    const pct = Math.round((ready / BASE_ROWS.length) * 100);
+
+    return {
+      panelStyle: PANEL + FONTS[s.font].stack + ";",
+      fonts: FONTS.map((ft, i) => ({
+        name: ft.name,
+        pick: () => this.setState({ font: i }),
+        style: FONT_BTN + (i === s.font
+          ? " background: #1D1D1F; border: 1px solid #1D1D1F; color: #FCFCFB; font-weight: 500;"
+          : " background: #FFFFFF; border: 1px solid #E0E0DC; color: #1D1D1F; font-weight: 400;"),
+      })),
+      note: s.note,
+      onNote: e => this.setState({ note: e.target.value, mapError: "" }),
+      demo: () => this.setState({ note: SAMPLE, mapError: "", detailsOpen: true }),
+      reset: () => { clearInterval(this.stepTimer); this.setState({ note: "", mapping: false, mapped: false, mapError: "", values: {}, confirmed: {}, filled: false, filling: false, checkStatus: "", detailsOpen: false, notesOpen: false, advOpen: false }); },
+      noop: () => {},
+
+      notesOpen: s.notesOpen, detailsOpen: s.detailsOpen, advOpen: s.advOpen,
+      toggleNotes: () => this.setState(st => ({ notesOpen: !st.notesOpen })),
+      toggleDetails: () => this.setState(st => ({ detailsOpen: !st.detailsOpen })),
+      toggleAdv: () => this.setState(st => ({ advOpen: !st.advOpen })),
+      notesCaretStyle: CARET + "transform: rotate(" + (s.notesOpen ? 90 : 0) + "deg);",
+      detailsCaretStyle: CARET + "color: #86868B; transform: rotate(" + (s.detailsOpen ? 90 : 0) + "deg);",
+      advCaretStyle: CARET + "transform: rotate(" + (s.advOpen ? 90 : 0) + "deg);",
+
+      detailsSummary: !s.note.trim() ? "— nothing pasted yet" : "— 6 of 7 found",
+      details: DETAILS.map(d => ({
+        ...d,
+        value: parsed[d.key] || "",
+        inputStyle: "font-family: inherit; font-size: 13px; color: #1D1D1F; background: #FCFCFB; border-radius: 8px; padding: 8px 10px; outline: none; transition: border-color .2s ease, box-shadow .2s ease; border: 1px solid " + (d.caption.includes("*") && !parsed[d.key] ? "#D9C9A8" : "#E3E3E0") + ";",
+      })),
+
+      mapping: s.mapping,
+      mapped: s.mapped,
+      mapError: s.mapError,
+      mapLabel: s.mapping ? "Mapping…" : s.mapped ? "Map again" : "Map fields",
+      mapStepText: ["Reading the questions on this page…", "Redacting the note…", "Matching the note to 24 questions…"][s.mapStep],
+      mapBtnStyle: BTN + (s.mapping
+        ? "border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; opacity: .6; cursor: default;"
+        : s.mapped
+          ? "border: 1px solid #D5D5D1; background: #FCFCFB; color: #1D1D1F; cursor: pointer;"
+          : "border: 1px solid #1D1D1F; background: #1D1D1F; color: #FCFCFB; cursor: pointer;"),
+      mapBtnHover: s.mapping ? "" : s.mapped ? "background: #F0F0EE; border-color: #C6C6C1;" : "background: #35353A;",
+      map: () => {
+        if (s.mapping) return;
+        if (!s.note.trim()) { this.setState({ mapError: "Paste the consultation first." }); return; }
+        this.setState({ mapping: true, mapStep: 0, mapError: "", filled: false, checkStatus: "" });
+        clearInterval(this.stepTimer);
+        this.stepTimer = setInterval(() => this.setState(st => ({ mapStep: Math.min(2, st.mapStep + 1) })), 900);
+        this.mapTimer = setTimeout(() => { clearInterval(this.stepTimer); this.setState({ mapping: false, mapped: true, values: {}, confirmed: {} }); }, 2800);
+      },
+
+      progressLabel: pending ? pending + (pending === 1 ? " value to confirm" : " values to confirm") : "Ready to fill",
+      progressRight: ready + " of " + BASE_ROWS.length + " ready",
+      progressBarStyle: "height: 3px; border-radius: 999px; background: #1D1D1F; transition: width .45s cubic-bezier(.22,.7,.3,1); width: " + pct + "%;",
+      reviewSummary: pending
+        ? pending + (pending === 1 ? " value still to confirm. Nothing is written until you do." : " values still to confirm. Nothing is written until you do.")
+        : ready + " of " + BASE_ROWS.length + " fields ready to write. The rest are for you to complete by hand.",
+      rows,
+
+      filling: s.filling,
+      filled: s.filled,
+      fillDisabled: !s.mapped || s.filling || pending > 0 || ready === 0,
+      fillLabel: s.filling ? "Filling…" : s.filled ? "Fill again" : "Fill",
+      fillHint: !s.mapped ? "Map a note first — there is nothing to write yet."
+        : pending > 0 ? "Confirm the " + pending + " highlighted " + (pending === 1 ? "value" : "values") + " to enable Fill."
+        : s.filled ? "Pressing Fill again rewrites the same values; it never submits." : "",
+      fillBtnStyle: BTN + ((!s.mapped || s.filling || pending > 0 || ready === 0)
+        ? "border: 1px solid #E0E0DC; background: #EFEFEC; color: #A5A5A0; cursor: not-allowed;"
+        : "border: 1px solid #0071E3; background: #0071E3; color: #FFFFFF; cursor: pointer;"),
+      fillBtnHover: (!s.mapped || s.filling || pending > 0 || ready === 0) ? "" : "background: #0062C4; border-color: #0062C4;",
+      fillBtnActive: (!s.mapped || s.filling || pending > 0 || ready === 0) ? "" : "transform: scale(.98);",
+      fill: () => {
+        if (this.state.filling) return;
+        this.setState({ filling: true });
+        this.fillTimer = setTimeout(() => this.setState({ filling: false, filled: true, checkStatus: "" }), 1200);
+      },
+      check: () => this.setState({
+        checkStatus: s.mapped
+          ? "Matched " + ready + " of 11 fields on claimez.aia.com.sg."
+          : "Connected to claimez.aia.com.sg. Found 24 fillable fields. Map a note to see which ones match.",
+      }),
+      fillHeadline: "Filled " + ready + " fields on claimez.aia.com.sg.",
+      writtenRows: rows.filter(r => r.written).map(r => ({
+        label: r.label.replace(/^\d+\.\s*/, ""),
+        value: r.type === "check" ? (r.value ? "Yes" : "No") : String(r.value),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>
