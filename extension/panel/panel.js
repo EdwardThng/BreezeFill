@@ -89,7 +89,21 @@ const DEMOGRAPHIC_FIELDS = {
 // Without these there is no claim: the first four are required by the form
 // schemas, and full_name doubly so — it is the only identifier redaction
 // cannot find by shape, so an absent name is a name left in the text.
-const REQUIRED_FIELDS = ["full-name", "nric", "dob", "insurer"];
+// Insisted on, and each for its own reason rather than because a form happens
+// to have a box for it.
+//
+// `full_name` because a name has no shape: `redaction.py` pass 1 can only
+// remove it because the doctor typed it, and pass 2 finds identifiers by
+// pattern. `dob` because there is no pattern rule for a bare date either, so a
+// missing one stays in the text sent to the model.
+//
+// NRIC, phone and policy number are all shaped and are caught by pass 2 even
+// when absent here, so they are wanted rather than required. `insurer` was on
+// this list and should not have been: it plays NO part in redaction — pass 1
+// never reads it — and exists only because some forms have a box for it.
+// Blocking a doctor over an insurer their form does not ask about is asking
+// for something the product does not need.
+const REQUIRED_FIELDS = ["full-name", "dob"];
 
 const state = {
   forms: [],
@@ -104,6 +118,8 @@ const state = {
    * wizard, and the doctor has not gone backwards by pressing it.
    */
   filled: false,
+  /** Which step the panel is showing. Presentation only. */
+  step: "name",
   /** field_id -> doctor's value, when they have changed one. */
   edited: new Map(),
   /** field_ids the doctor has explicitly confirmed. */
@@ -686,7 +702,7 @@ async function onMap() {
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
-    $("step-review").hidden = false;
+    showStep("review");
     $("step-fill").hidden = false;
     setStatus(status, "");
   } catch (error) {
@@ -855,31 +871,117 @@ function renderRow(row) {
   return wrap;
 }
 
-/**
- * Where the doctor is, and what the header says about it.
- *
- * Presentation only — it reads the same state the steps already render from
- * and writes nothing back. The panel still shows every reachable step rather
- * than hiding the ones ahead: on this flow the note and the page checks are
- * genuinely usable out of order, and "Check this page" answering "can
- * BreezeFill see this form at all" is worth being able to ask before anything
- * has been pasted.
- */
-function updateProgress() {
-  const counter = $("step-counter");
-  if (!counter) return;
+// ---------------------------------------------------------------------------
+// The progressive flow
+// ---------------------------------------------------------------------------
+//
+// One step is active; the ones behind it collapse to a summary row; the ones
+// ahead render nothing. Only VISIBILITY moves — every input stays in the DOM
+// throughout, so no value is lost by stepping forward or back, and the panel
+// can still be driven directly without walking the flow.
 
-  const TOTAL = 4;
-  let current = 1;
-  if (state.rows.length) current = 2;
-  if (state.rows.length && readyRows().length && !state.rows.some(
-    (r) => r.needs_review && hasValue(r) && !state.confirmed.has(r.field_id)
-  )) {
-    current = 3;
+const STEPS = [
+  { key: "name", section: "step-name", title: "Patient" },
+  { key: "note", section: "step-note", title: "Consultation note" },
+  { key: "extra", section: "step-extra", title: "Other notes" },
+  { key: "details", section: "step-details", title: "Patient details" },
+  { key: "review", section: "step-review", title: "Review" },
+  { key: "fill", section: "step-fill", title: "Fill" },
+];
+
+/** A one-line summary of a finished step, for its collapsed row. */
+function summaryOf(key) {
+  if (key === "name") return $("full-name").value.trim() || "—";
+  if (key === "note") {
+    const words = $("paste").value.trim().split(/\s+/).filter(Boolean).length;
+    return `${words} word${words === 1 ? "" : "s"} pasted`;
   }
-  if (state.filled) current = 4;
+  if (key === "extra") {
+    const text = $("other-notes").value.trim();
+    return text ? `${text.split(/\s+/).filter(Boolean).length} words added` : "Nothing added";
+  }
+  if (key === "details") {
+    const found = Object.keys(DEMOGRAPHIC_FIELDS).filter((id) => $(id).value.trim()).length;
+    return `${found} of ${Object.keys(DEMOGRAPHIC_FIELDS).length} found`;
+  }
+  if (key === "review") {
+    return `${readyRows().length} value${readyRows().length === 1 ? "" : "s"} confirmed`;
+  }
+  return "";
+}
 
-  counter.textContent = `Step ${current} of ${TOTAL}`;
+/**
+ * Show one step, collapse everything behind it, hide everything ahead.
+ *
+ * `step-fill` is deliberately exempt from the "hide what is ahead" rule:
+ * "Check this page" answers "can BreezeFill see this form at all", which is a
+ * different question from "did the model produce good values" and is worth
+ * being able to ask before anything has been pasted.
+ */
+function showStep(key) {
+  state.step = key;
+  const index = STEPS.findIndex((s) => s.key === key);
+
+  for (const [i, step] of STEPS.entries()) {
+    const el = $(step.section);
+    if (!el) continue;
+    if (step.key === "fill") continue; // always reachable, see above
+    el.hidden = i !== index;
+  }
+
+  const done = $("done-rows");
+  done.replaceChildren(
+    ...STEPS.slice(0, index)
+      .filter((s) => s.key !== "fill")
+      .map((s) => doneRow(s))
+  );
+
+  $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
+  // Not scrollIntoView: on a panel this narrow it fights the user's own
+  // scrolling. Setting the container's scrollTop puts the new step where the
+  // last one was without hijacking anything.
+  const scroll = $("scroll");
+  if (scroll) scroll.scrollTop = 0;
+}
+
+/** A finished step, as a row that reopens it. */
+function doneRow(step) {
+  const wrap = document.createElement("div");
+  wrap.className = "done-row";
+
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "done-head";
+
+  const tick = document.createElement("span");
+  tick.className = "done-tick";
+  tick.textContent = "✓";
+
+  const label = document.createElement("span");
+  label.className = "done-label";
+  const title = document.createElement("span");
+  title.className = "done-title";
+  title.textContent = step.title;
+  const summary = document.createElement("span");
+  summary.className = "done-summary";
+  summary.textContent = summaryOf(step.key);
+  label.append(title, summary);
+
+  const chevron = document.createElement("span");
+  chevron.className = "done-chevron";
+  chevron.textContent = "›";
+
+  head.append(tick, label, chevron);
+  // The chevron is the affordance; reopening a step keeps everything already
+  // entered, and every later step stays reachable from its own row.
+  head.addEventListener("click", () => showStep(step.key));
+  wrap.append(head);
+  return wrap;
+}
+
+function updateProgress() {
+  const index = STEPS.findIndex((s) => s.key === state.step);
+  if (index >= 0) $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
 }
 
 function renderRows() {
@@ -1201,6 +1303,24 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
     updateFound();
   });
 }
+// Advance only on an explicit click — never on typing, and never because the
+// insurer's page changed shape underneath.
+$("name-next").addEventListener("click", () => {
+  if (!$("full-name").value.trim()) {
+    $("full-name").focus();
+    return;
+  }
+  showStep("note");
+});
+$("note-next").addEventListener("click", () => {
+  if (!$("paste").value.trim()) {
+    $("paste").focus();
+    return;
+  }
+  showStep("extra");
+});
+$("extra-next").addEventListener("click", () => showStep("details"));
+
 $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);

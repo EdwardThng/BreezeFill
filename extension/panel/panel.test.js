@@ -311,12 +311,31 @@ describe("reading the paste", () => {
     const panel = loadPanel();
     await settle();
 
-    // No insurer in PARSED, so the doctor has to supply one.
+    // Date of birth is required and this response has none: there is no
+    // pattern rule for a bare date, so a missing one stays in the text sent
+    // to the model. A name is the same case for the same reason.
+    routes["/parse"] = () => respond({ ...PARSED, dob: null });
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
     expect($("found").open).toBe(true);
-    expect($("found-summary").textContent).toContain("insurer");
+    expect($("found-summary").textContent).toContain("date of birth");
+  });
+
+  test("a missing insurer does not block — it plays no part in redaction", async () => {
+    // `insurer` was required and should not have been. redaction.py pass 1
+    // never reads it; it exists only because some forms have a box for it, and
+    // stopping a doctor over an insurer their form never asks about demands
+    // something the product does not need.
+    const panel = loadPanel();
+    await settle();
+
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("insurer").value).toBe("");
+    expect($("found-summary").textContent).not.toContain("Insurer");
+    expect(() => panel.patientRecord()).not.toThrow();
   });
 
   test("the drawer does not reopen itself once the doctor closes it", async () => {
