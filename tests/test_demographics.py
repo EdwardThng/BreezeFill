@@ -196,3 +196,68 @@ class TestParseDate:
     )
     def test_implausible_or_malformed_is_none(self, text: str) -> None:
         assert parse_date(text) is None
+
+
+class TestLabelsAnywhereInALine:
+    """Doctors do not write in one format.
+
+    The line-anchored rule needs `Label: value` at the start of a line. Real
+    notes put two fields on one line, drop the colon, or both. A label is
+    therefore read wherever it appears — but only for fields whose value has a
+    shape, and only when what follows actually has it.
+    """
+
+    SAMPLE = (
+        "Tan Wei Ling, F, 47\n"
+        "NRIC S8012345D  DOB 14/03/1978\n"
+        "HP 9123 4567 / 6123 4567\n"
+        "Policy GHS-88213004 or GH-88213004 (AIA Singapore)\n"
+        "\n"
+        "Seen 02/08/2026. Dx acute tonsillitis.\n"
+        "First consult for this episode 31/07/2026.\n"
+    )
+
+    def test_two_labels_on_one_line_without_colons(self) -> None:
+        parsed = parse_demographics(self.SAMPLE)
+        assert parsed.nric == "S8012345D"
+        assert parsed.dob == "1978-03-14"
+
+    def test_the_consultation_dates_are_not_mistaken_for_a_birth_date(self) -> None:
+        # The note carries three dates. Only the one behind a DOB label is
+        # taken; a date of birth is still never read out of loose prose.
+        assert parse_demographics(self.SAMPLE).dob == "1978-03-14"
+
+    def test_two_values_behind_one_label_yields_neither(self) -> None:
+        # "HP 9123 4567 / 6123 4567" names two numbers and nothing here can
+        # tell which the form wants. Same refusal as unlabelled prose.
+        assert parse_demographics(self.SAMPLE).phone is None
+        assert parse_demographics(self.SAMPLE).policy_number is None
+
+    def test_a_label_followed_by_the_wrong_shape_yields_nothing(self) -> None:
+        # The label says which field; the shape says whether the thing after it
+        # is really a value for it. Without that check this sentence would
+        # contribute a policy number.
+        assert parse_demographics("Policy discussed with patient.\n").policy_number is None
+
+    def test_a_qualified_label_is_not_the_patients(self) -> None:
+        # "Clinic tel" and "Next of kin phone" are labels for somebody else.
+        # The qualifying word in front is what says so, so a label has to open
+        # the line or follow a separator to count.
+        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        assert parse_demographics(text).phone is None
+
+    def test_a_label_after_a_separator_still_counts(self) -> None:
+        parsed = parse_demographics("Pt details, NRIC S8012345D, DOB 14/03/1978\n")
+        assert parsed.nric == "S8012345D"
+        assert parsed.dob == "1978-03-14"
+
+    def test_an_explicitly_labelled_line_still_wins(self) -> None:
+        # The line-anchored pass runs first; this one only fills what is empty.
+        parsed = parse_demographics("NRIC: S7211043C\nOther ref NRIC S8012345D\n")
+        assert parsed.nric == "S7211043C"
+        assert parsed.sources["nric"] == "labelled"
+
+    def test_a_name_is_still_never_guessed(self) -> None:
+        # Name and address have no shape, so there is nothing to confirm a
+        # guess against and they are excluded from this pass entirely.
+        assert parse_demographics(self.SAMPLE).full_name is None

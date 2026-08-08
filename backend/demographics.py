@@ -73,6 +73,16 @@ LABELLED_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z .#/]{0,23})\s*[:\-–]\s*(.+?)
 #   Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 · 18 Toa Payoh
 SEGMENT_SPLIT = re.compile(r"\s*[·|;]\s*|\s{2,}|\s+—\s+")
 
+# A date as it appears inside running text, in any of the renderings a note
+# uses. Only a candidate — `parse_date` still decides whether it is a plausible
+# birth date.
+DATE_IN_TEXT = re.compile(
+    r"\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b"
+    r"|\b\d{4}-\d{1,2}-\d{1,2}\b"
+    r"|\b\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}\b"
+)
+
+
 # Policy and member numbers: letters-dash-digits, or a long digit run. Kept
 # tighter than redaction.py's blunt digit rule because this one assigns a
 # value to a field rather than blanking it.
@@ -80,6 +90,20 @@ POLICY_PATTERN = re.compile(r"\b[A-Z]{2,5}[-/]?\d{4,}\b")
 
 # A Singapore postal code, which is what makes an address segment an address.
 POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d)")
+
+# The fields a label may introduce ANYWHERE in a line, each with the shape its
+# value has to take. Name, address and insurer are deliberately absent: they
+# have no shape, so there would be nothing to confirm a guess against.
+SHAPED_FIELDS = {
+    "nric": NRIC_PATTERN,
+    "phone": SG_PHONE_PATTERN,
+    "policy_number": POLICY_PATTERN,
+    "dob": DATE_IN_TEXT,
+}
+
+# Longest alias, in words: "date of birth".
+MAX_LABEL_WORDS = 3
+
 
 _MONTHS = {
     m: i + 1
@@ -218,6 +242,91 @@ def _logical_lines(text: str) -> list[str]:
     return lines
 
 
+def _label_positions(line: str) -> list[tuple[int, int, str]]:
+    """Every known label in a line, as (start, end, field).
+
+    Found by normalising 1–3 word windows rather than by matching a fixed
+    pattern, so "DOB", "D.O.B", "Date of Birth" and "dateOfBirth" all resolve
+    to the same field without the alias table carrying every spelling.
+    """
+    words = [(m.start(), m.end(), m.group(0)) for m in re.finditer(r"[A-Za-z]+", line)]
+    found: list[tuple[int, int, str]] = []
+    used_until = -1
+
+    for i in range(len(words)):
+        if words[i][0] < used_until:
+            continue
+        # A LABEL HAS TO START A FIELD, not sit in the middle of a phrase.
+        #
+        # Without this, "Clinic tel 62551234" reads as the patient's phone —
+        # the clinic's own number, under the doctor's signature, written onto
+        # a claim as the patient's. The qualifying word in front is exactly
+        # what says it is not theirs, and the same shape catches "Next of kin
+        # phone" and "Emergency contact".
+        #
+        # So the label must open the line or follow a separator: a comma, a
+        # bullet, a pipe, a bracket, or the two-space gap a doctor leaves when
+        # putting two fields on one line.
+        before = line[:words[i][0]]
+        if before and not re.search(r"(?:[,;·|(\[\t]|\s{2,}|^)\s*$", before):
+            continue
+        # Longest window first: "date of birth" must win over a bare "date".
+        for take in range(min(MAX_LABEL_WORDS, len(words) - i), 0, -1):
+            window = words[i : i + take]
+            field = _LABEL_LOOKUP.get(_normalise_label("".join(w[2] for w in window)))
+            if field and field in SHAPED_FIELDS:
+                found.append((window[0][0], window[-1][1], field))
+                used_until = window[-1][1]
+                break
+    return found
+
+
+def _labelled_anywhere(line: str) -> dict[str, str]:
+    """Fields introduced by a label sitting anywhere in the line.
+
+    Doctors do not write in one format. `NRIC S8012345D  DOB 14/03/1978` puts
+    two labels on one line with no colon after either; the line-anchored rule
+    sees neither, and the shape-only fallback cannot supply a date of birth
+    because a clinical note is full of dates. So a label is read wherever it
+    appears — but ONLY for fields whose value has a shape, and only when the
+    value that follows actually has it.
+
+    That is the whole safety argument. The label says which field; the shape
+    says whether the thing after it is really a value for that field. A label
+    followed by something of the wrong shape yields nothing rather than a
+    guess, so `Policy discussed with patient` contributes no policy number.
+
+    A region carrying MORE than one candidate yields nothing either, for the
+    same reason `_sole_match` refuses: `HP 9123 4567 / 6123 4567` names two
+    numbers and nothing here can tell which one the form wants.
+    """
+    labels = _label_positions(line)
+    found: dict[str, str] = {}
+
+    for index, (_, end, field) in enumerate(labels):
+        # The value runs to the next label, or to the end of the line.
+        stop = labels[index + 1][0] if index + 1 < len(labels) else len(line)
+        region = line[end:stop]
+
+        candidates = {m.group(0).strip() for m in SHAPED_FIELDS[field].finditer(region)}
+        if len(candidates) != 1:
+            continue
+        raw = candidates.pop()
+
+        if field == "nric":
+            cleaned = raw.replace(" ", "").upper()
+            if NRIC_PATTERN.fullmatch(cleaned):
+                found.setdefault(field, cleaned)
+        elif field == "dob":
+            iso = parse_date(raw)
+            if iso:
+                found.setdefault(field, iso)
+        else:
+            found.setdefault(field, raw)
+
+    return found
+
+
 def _sole_match(pattern: re.Pattern[str], text: str) -> str | None:
     """A shape found in unlabelled prose, but only when there is exactly one
     candidate. Two distinct phone numbers in a note (the patient's and the
@@ -266,6 +375,13 @@ def parse_demographics(text: str) -> ParsedDemographics:
                 record("nric", cleaned, "labelled")
             continue
         record(field, value, "labelled")
+
+    # Labels sitting mid-line, which the line-anchored rule above cannot see.
+    # Runs second so an explicitly labelled line always wins, and only ever
+    # fills fields still empty.
+    for line in _logical_lines(text):
+        for field, value in _labelled_anywhere(line).items():
+            record(field, value, "labelled-inline")
 
     # Whatever the labels did not supply, and only where a shape is unique.
     # Not the name (no shape), not the date of birth (a note is full of dates),
