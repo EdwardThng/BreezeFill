@@ -88,6 +88,34 @@ DATE_IN_TEXT = re.compile(
 # value to a field rather than blanking it.
 POLICY_PATTERN = re.compile(r"\b[A-Z]{2,5}[-/]?\d{4,}\b")
 
+# A phone number that is a phone number, and not the tail of something else.
+#
+# `SG_PHONE_PATTERN` guards against a longer DIGIT run — `(?<!\d)` and `(?!\d)`
+# — which is all redaction needs, because redaction blanks what it matches and
+# over-matching there costs nothing. This module assigns a value to a field, so
+# it has to answer a harder question: is this run a number in its own right, or
+# part of a larger token?
+#
+# `Policy GHS-88213004` is the case that matters. Its tail is eight digits
+# opening with an 8, so it is a valid Singapore mobile by shape, and the
+# unlabelled-prose pass below would have written the patient's policy number
+# into their phone box — deterministically, bypassing the model and the review
+# step, on any note carrying one such policy number and no phone.
+#
+# So a phone must be delimited by something that is not identifier material:
+# not a letter, not a digit, and not one of the connectors that bind a
+# reference together. Read the whole token first; if the digits are only part
+# of it, they are not a phone number.
+#
+# Deliberately NOT applied to `NRIC_PATTERN`, and the asymmetry is the point: a
+# phone number is never embedded inside a reference, but an NRIC inside one
+# (`REF-S8012345D`) is still the patient's NRIC, and refusing it would lose a
+# correct value to avoid a collision that does not happen.
+_TOKEN_CHAR = r"[A-Za-z0-9\-/#]"
+PHONE_IN_TEXT = re.compile(
+    rf"(?<!{_TOKEN_CHAR}){SG_PHONE_PATTERN.pattern}(?!{_TOKEN_CHAR})"
+)
+
 # A Singapore postal code, which is what makes an address segment an address.
 POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d)")
 
@@ -96,7 +124,7 @@ POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d
 # have no shape, so there would be nothing to confirm a guess against.
 SHAPED_FIELDS = {
     "nric": NRIC_PATTERN,
-    "phone": SG_PHONE_PATTERN,
+    "phone": PHONE_IN_TEXT,
     "policy_number": POLICY_PATTERN,
     "dob": DATE_IN_TEXT,
 }
@@ -391,7 +419,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
         if found:
             record("nric", found.replace(" ", "").upper(), "sole-match")
     if "phone" not in values:
-        found = _sole_match(SG_PHONE_PATTERN, text)
+        found = _sole_match(PHONE_IN_TEXT, text)
         if found:
             record("phone", found, "sole-match")
 
