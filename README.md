@@ -23,7 +23,7 @@ BreezeFill turns a pasted clinical note into a filled insurance claim in minutes
 - **The LLM only ever sees de-identified text.** The token→value mapping lives in server memory for the duration of the request flow and is never sent to any model or written to logs.
 - **Zero retention, literally.** Every endpoint is stateless: the server holds nothing between requests, so patient data exists only for the duration of the request that carried it in. There is no claim store, no session, no id, and no database.
 - **No silent guesses.** Every AI-proposed value carries its supporting quote or a `missing` flag, and nothing reaches a PDF without doctor approval. A redaction token can never leak into a generated PDF — it is blocked at three independent layers.
-- **No auto-submission.** The output is always a PDF that the doctor reviews, signs, and submits themselves.
+- **No auto-submission.** BreezeFill fills and stops. On a web form the approved values are written into the insurer's own page and the doctor submits it; on a PDF form the output is a file the doctor reviews, signs and submits. Nothing is ever sent to an insurer on their behalf.
 
 ---
 
