@@ -33,12 +33,12 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ## Status as of 2026-08-04 (HEAD `f31242e`)
 
-**479 tests pass**: 201 backend (1 skipped), 231 extension, 47 website.
+**498 tests pass**: 209 backend (1 skipped), 242 extension, 47 website.
 
 | Piece | State |
 |---|---|
 | Pipeline: redact → LLM map → doctor review → PDF fill | Working. **Stateless as of 2026-08-04** — `POST /map` then `POST /forms/{id}/pdf`, no claim id, nothing held between them |
-| Extension: manifest, side panel, service worker, dumper, matcher, value application, orchestrator | Built and green, 121 tests. **Runs in Chrome 150, and has filled a real form in a real browser** — RoboForm's 39-field test page, 2026-08-03, the whole path from one pasted block to values in the page. That is the first successful fill anywhere. Still not run on an insurer portal, and RoboForm is plain HTML, so the `_valueTracker` question is untouched by it |
+| Extension UI | **Redesigned 2026-08-08** to `docs/design/breezefill-panel/`. Progressive: one step at a time (name → note → other notes → check details → review → fill), finished steps fold into a summary row that reopens them, only visibility moves so every input stays in the DOM. Design tokens, a grey "Use a sample note" strip, and a fill report split into success / detail / deferred / fill-these-yourself |
 | One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
 | `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
@@ -77,7 +77,8 @@ possible at all, and it is a property to preserve rather than a Fly detail.
 | `backend/demographics.py` | One pasted block → demographic fields, **patterns only, never a model** |
 | `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly |
 | `backend/schemas/*.json` | The form bank. `fill_mode` is `acroform`, `overlay` or `web` |
-| `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists |
+| `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists. Progressive — `STEPS` and `showStep()` move visibility only, never the values |
+| `docs/design/breezefill-panel/` | The panel redesign: handoff, UI brief, logo mark, prototypes. Renamed from the working name it was authored under |
 | `extension/learn/dump.js` | Label resolution + the scrubber. Used by both learn mode and the filler. Also groups radios/checkboxes into one question, and derives repeating-entry indices from DOM shape |
 | `extension/fill/locate.js` | Joins schema fields to live controls by label. Also what identifies a form |
 | `extension/fill/apply.js` | Writes values. Never overwrites an existing answer, never repeats an option within a repeating question, never submits |
@@ -619,6 +620,35 @@ its boxes may overflow. Confirm before changing anything here.
 requires an explicit confirm click before the PDF can be generated. Editing a
 value counts as confirming it. Do not "helpfully" pre-confirm inferred fields.
 
+**The parser must not require a house style (2026-08-08).** The owner's call,
+and it corrects an assumption the code had quietly made: *"Doctors take notes
+in many different ways so the parser should be able to take the relevant
+details out of the notes regardless of the format."*
+
+Found by running the panel's own sample note through `parse_demographics` and
+getting back **one field**. `LABELLED_LINE` needs `Label: value` anchored to
+the start of a line; a real note writes `NRIC S8012345D  DOB 14/03/1978` — two
+fields on one line, no colon on either — and matched neither. The date of birth
+was unrecoverable, because a date is never taken from unlabelled prose (a
+clinical note is nothing but dates) and there was no label the rule could see.
+
+A label is now read **anywhere in a line**, kept safe by two constraints:
+
+- **The shape confirms the value.** Only fields with a shape take part — NRIC,
+  phone, policy number, date. The label says *which field*; the shape says
+  whether what follows is really one, so `Policy discussed with patient`
+  contributes nothing. Name and address are excluded from this pass entirely:
+  they have no shape, so there would be nothing to check a guess against.
+- **A label must open a field**, meaning it starts the line or follows a
+  separator. Without this, `Clinic tel 62551234` reads as the patient's phone
+  — the clinic's own number, under the doctor's signature, written onto a
+  claim as theirs. `test_two_phone_numbers_means_neither` caught exactly that
+  on the first attempt, which is the reason the rule exists. The same shape
+  covers `Next of kin phone`.
+
+Two candidates behind one label still yields neither, exactly as unlabelled
+prose does. The refusals are unchanged; only the reach is wider.
+
 **One paste box, and the split is done by patterns — never by a model.** The
 owner's call (2026-08-03): seven inputs and a note box collapse into a single
 textarea; the doctor pastes the consultation as it sits in the CMS.
@@ -1058,6 +1088,19 @@ together; a wizard shows one step at a time. Without that check, a form keeping
 its steps in the DOM behind `display:none` has every step read as an entry and
 every label pointlessly qualified.
 
+**A sample note that only parses in one format is a demo that fails in front
+of a doctor (2026-08-08).** The panel's "Use a sample note" strip carries the
+values the design spec shows as found — `S8012345D`, `14/03/1978`,
+`9123 4567`, `GHS-88213004`. Run through `parse_demographics` as originally
+written, it produced **one field**, and the one it could not produce was `dob`,
+which is required — so clicking the sample reached the details step and stopped
+there. The design assumed a parser that read labels mid-line; the parser wanted
+them anchored. Neither was wrong on its own, and nothing connected them until
+somebody pressed the button.
+
+Whenever the sample note changes, run it through the parser rather than reading
+it: `parse_demographics(SAMPLE_NOTE)` in `backend/demographics.py`.
+
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
 verify the page and rect, not just the name.
@@ -1172,6 +1215,16 @@ omission to "fix".
   back, put back what was there if the control refused it, and report `skipped`.
   A control that sanitises away what it was given must never be reported filled
   — and must never be left emptier than it was found.
+- **Only ask for what the product actually needs.** `REQUIRED_FIELDS` is
+  `full-name` and `dob`, and each earns it: neither has a shape pass 2 can
+  catch, so a missing one stays in the text sent to the model. NRIC, phone and
+  policy number are shaped and caught anyway — wanted, not required.
+  **`insurer` was on that list and should not have been**: `redaction.py` pass
+  1 never reads it, so it plays no part in the privacy model and exists only
+  because some forms have a box for it. Blocking a doctor over an insurer their
+  form never asks about demands something the product does not need. Do not add
+  a field to that list because a schema mentions it — the test is whether
+  redaction needs it.
 - **An answer already in a control is never overwritten** (2026-08-06). Every
   write in `applyOne` is gated by `hasExistingAnswer`. A filled control was
   filled by the doctor or by the insurer pre-populating the form, and writing

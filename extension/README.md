@@ -59,7 +59,7 @@ requests no storage permission, so there is nowhere to persist it).
 | `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`, no `storage`. Declares `icons` and `action.default_icon` from `icons/`. |
 | `icons/` | Generated — see `assets/logo/`, never hand-edited. The toolbar icon is the doctor's access grant, not decoration. |
 | `background.js` | Opens the side panel on action click. Nothing else, deliberately. |
-| `panel/` | The doctor's surface: one pasted block → `POST /parse` → `POST /map` → review → fill. Holds the claim in memory. |
+| `panel/` | The doctor's surface: name → note → other notes → check details → review → fill, one step at a time. Holds the claim in memory. `STEPS` and `showStep()` move visibility only — every input stays in the DOM, so stepping back loses nothing and the panel can still be driven directly. Design: `docs/design/breezefill-panel/`. |
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
 | `learn/dump.js` | Learn mode, plus the control collection and label scrubbing the filler reuses. |
 | `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. Also what identifies a form: the same measurement, read at a looser threshold. |
