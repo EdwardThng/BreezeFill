@@ -261,3 +261,51 @@ class TestLabelsAnywhereInALine:
         # Name and address have no shape, so there is nothing to confirm a
         # guess against and they are excluded from this pass entirely.
         assert parse_demographics(self.SAMPLE).full_name is None
+
+
+class TestAPolicyNumberIsNotAPhoneNumber:
+    """A digit run inside a larger token is not a number in its own right.
+
+    `GHS-88213004` ends in eight digits opening with an 8, which is a valid
+    Singapore mobile by shape. Reading only the digits wrote the patient's
+    policy number into their phone box — and demographics are copied onto the
+    form deterministically, so it bypassed the model and the review confirm
+    both.
+    """
+
+    def test_a_policy_number_does_not_become_a_phone(self) -> None:
+        parsed = parse_demographics("Policy GHS-88213004\n")
+        assert parsed.policy_number == "GHS-88213004"
+        assert parsed.phone is None
+
+    def test_the_same_holds_when_the_policy_line_is_labelled(self) -> None:
+        parsed = parse_demographics("Policy no: AIA-91234567\n")
+        assert parsed.policy_number == "AIA-91234567"
+        assert parsed.phone is None
+
+    def test_a_real_phone_beside_a_policy_number_is_still_found(self) -> None:
+        # And this is now BETTER than before the token rule: the policy tail
+        # used to count as a second phone candidate, so the sole-match refused
+        # a phone the note stated plainly.
+        parsed = parse_demographics(
+            "Tan Wei Ling\nPolicy GHS-88213004 (AIA)\nHP 9123 4567\n"
+        )
+        assert parsed.phone == "9123 4567"
+        assert parsed.policy_number == "GHS-88213004"
+
+    def test_a_reference_that_merely_contains_a_phone_shape_is_not_one(self) -> None:
+        assert parse_demographics("Ref 88213004-01 filed.\n").phone is None
+
+    def test_an_nric_inside_a_reference_is_still_the_nric(self) -> None:
+        # The asymmetry is deliberate. A phone number is never embedded in a
+        # reference; an NRIC in one is still the patient's, and refusing it
+        # would lose a correct value to avoid a collision that does not happen.
+        assert parse_demographics("Case REF-S8012345D\n").nric == "S8012345D"
+
+    def test_an_ordinary_phone_is_untouched(self) -> None:
+        for text, expected in (
+            ("HP 9123 4567\n", "9123 4567"),
+            ("Contactable on 91112233.\n", "91112233"),
+            ("Tel: +65 9123 4567\n", "+65 9123 4567"),
+        ):
+            assert parse_demographics(text).phone == expected
