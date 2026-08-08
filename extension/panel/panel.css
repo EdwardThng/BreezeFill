@@ -1,406 +1,800 @@
 /*
-  BreezeFill side panel.
+  BreezeFill side panel — visual system.
 
-  Constraints that shaped this: the panel is roughly 400px wide and sits
-  alongside a dense insurer form, so it competes for attention with the thing
-  the doctor is actually trying to read. It stays quiet — one accent colour,
-  used only for the two buttons that do something.
+  Implements the redesign specified in docs/design/pastefill-panel/README.md.
+  Every colour, size, radius and easing below is taken from that spec; where
+  this file departs from it, the departure is commented and says why.
 
-  The one place colour carries meaning is the status of a mapped value, and
-  that is deliberately not colour alone. Every row also states its status in
-  words, because roughly one in twelve men has a colour vision deficiency and
-  the difference between "extracted from the note" and "inferred" is the whole
-  reason the review step exists.
+  Two departures, both deliberate:
+
+  1. NAME. The spec is branded "PasteFill". This product is BreezeFill and owns
+     breezefill.com, so the wordmark stays. Nothing else about the design
+     depends on the name.
+
+  2. FONTS. The spec bundles Schibsted Grotesk and Geist Mono as local .woff2
+     (correct for MV3 — a CDN font is a network request the panel must not
+     make). They are not bundled yet, so the stacks below fall back to the
+     system UI face and the system mono. Dropping the files into
+     extension/fonts/ and adding @font-face is the only change needed; every
+     size, weight and tracking here is already the spec's.
+
+  Structure follows the spec's progressive model: one step is active, finished
+  steps collapse to a single summary row, and steps not yet reached render
+  nothing at all — so the primary action is always mid-panel rather than below
+  three screens of controls.
 */
 
 :root {
-  --bg: #ffffff;
-  --fg: #16191d;
-  --muted: #5d6470;
-  --line: #dfe3e8;
-  --field-bg: #ffffff;
-  --accent: #1a5fb4;
-  --accent-fg: #ffffff;
-  --extracted: #1f7a3d;
-  --inferred: #9a6100;
-  --missing: #737b87;
-  --danger: #b3261e;
-  --warn-bg: #fdf3e2;
-}
+  /* Surfaces */
+  --paper: #f5f5f4;
+  --surface: #fcfcfb;
+  --field: #ffffff;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1b1e23;
-    --fg: #e9ecf1;
-    --muted: #a3abb8;
-    --line: #333941;
-    --field-bg: #23272d;
-    --accent: #7aa9e9;
-    --accent-fg: #10131a;
-    --extracted: #6cc48a;
-    --inferred: #e0b25c;
-    --missing: #9aa2ae;
-    --danger: #f29b95;
-    --warn-bg: #33291a;
-  }
+  /* Ink */
+  --text: #1d1d1f;
+  --muted: #86868b;
+  --muted-strong: #6e6e73;
+
+  /* Hairlines — close in value to the fill they separate, so structure is
+     felt rather than seen. */
+  --line: #e7e7e4;
+  --line-strong: #e3e3e0;
+  --line-quiet: #eaeae7;
+  --line-dashed: #dedede;
+  --btn-line: #d5d5d1;
+
+  /* Status. Three colours, and every one of them is also stated in words:
+     roughly 1 in 12 men has a colour vision deficiency, and extracted versus
+     inferred is the entire reason the review step exists. */
+  --confident: #157553;
+  --confident-bg: #f1f7f3;
+  --confident-line: #cfe3d6;
+  --confident-ink: #12603f;
+  --confident-body: #2c6b4e;
+  --check: #8a6a28;
+  --check-line: #d9c9a8;
+  --missing: #86868b;
+
+  /* The one accent in the panel, and it is only ever the Fill button. */
+  --accent: #0071e3;
+  --accent-hover: #0062c4;
+
+  --disabled-bg: #efefec;
+  --disabled-line: #e0e0dc;
+  --disabled-ink: #a5a5a0;
+
+  --focus-ring: rgba(29, 29, 31, 0.06);
+  --focus-line: #b9b9b4;
+
+  --danger: #9a2b22;
+  --danger-bg: #fdf2f1;
+  --danger-line: #ebcfcc;
+
+  --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  padding: 12px 14px 32px;
-  background: var(--bg);
-  color: var(--fg);
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  /* 400px is the design target; the panel must survive 320 → 600. */
+  min-width: 320px;
 }
 
-/* Header ------------------------------------------------------------------ */
+/* ---------------------------------------------------------------- header  */
 
 .head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
-  margin-bottom: 14px;
 }
 
-h1 {
-  font-size: 15px;
+.head-chip {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  color: var(--text);
+}
+
+.head-chip svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+.head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.head h1 {
   margin: 0;
-  letter-spacing: 0.01em;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
 .tagline {
-  margin: 2px 0 0;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.3;
   color: var(--muted);
-  font-size: 12px;
 }
 
-/* Steps ------------------------------------------------------------------- */
+.step-counter {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- layout  */
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* --------------------------------------------------------- collapsed step */
+
+.done-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: pf-rise 0.26s ease both;
+}
+
+.done-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  transition: background 0.18s ease;
+}
+
+.done-head:hover {
+  background: #f7f7f6;
+}
+
+.done-tick {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--confident);
+  color: #fff;
+  font-size: 9px;
+  display: grid;
+  place-items: center;
+}
+
+.done-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.done-title {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.done-summary {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.done-chevron {
+  flex: none;
+  font-size: 17px;
+  color: var(--disabled-ink);
+  transition: transform 0.22s ease;
+}
+
+.done-row[data-open="true"] .done-chevron {
+  transform: rotate(90deg);
+}
+
+.done-body {
+  padding: 0 12px 11px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: pf-rise 0.22s ease both;
+}
+
+/* ------------------------------------------------------------ active step */
 
 .step {
-  margin-bottom: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: pf-rise 0.3s ease both;
 }
 
 .step[hidden] {
   display: none;
 }
 
-h2 {
-  font-size: 13px;
-  margin: 0 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.step h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
 }
 
+/* The spec drops the numbered bullets — the header's "Step N of 6" carries
+   position, so repeating it beside every title is noise. */
 .num {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 11px;
-  font-weight: 600;
+  display: none;
 }
 
-/* Fields ------------------------------------------------------------------ */
+.step-sub {
+  margin: -8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- fields  */
 
 .field {
-  display: block;
-  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .field > span {
-  display: block;
-  margin-bottom: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 input,
 select,
 textarea {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--field-bg);
-  color: inherit;
-  font: inherit;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 9px 11px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 textarea {
-  resize: vertical;
-  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-family: var(--mono);
   font-size: 12px;
+  line-height: 1.6;
+  border-radius: 10px;
+  padding: 11px;
+  resize: vertical;
 }
 
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--focus-line);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-/* Two columns for the short demographic fields; one for anything narrower. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
 }
 
-/* A checkbox reads as a choice, not as a field: label beside the box, both
-   on one line, no uppercase caption. */
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  font-size: 12px;
-}
-
-.checkbox input {
-  width: auto;
-  margin: 0;
-}
-
-.checkbox > span {
-  color: var(--muted);
-}
-
-/* The drafted schema. Monospace and roomy — it is JSON someone has to read
-   before committing it, not a status line. */
-#draft-json {
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-/* The optional second paste box. Reads as a drawer rather than a field, so
-   the common case still looks like one box to paste into. */
-.extra {
-  margin-bottom: 10px;
-}
-
-.extra summary {
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 8px;
-}
-
-/* Present for screen readers, invisible on screen: the drawer's summary is
-   the visible label, but the textarea still needs one of its own. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Buttons ----------------------------------------------------------------- */
+/* --------------------------------------------------------------- buttons  */
 
 button {
-  padding: 7px 12px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--field-bg);
-  color: inherit;
-  font: inherit;
+  font-family: inherit;
+  font-size: 13.5px;
   font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--btn-line);
+  border-radius: 9px;
+  padding: 10px 17px;
   cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+    transform 0.12s ease;
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: #f0f0ee;
+  border-color: #c6c6c1;
 }
 
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-fg);
+button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 button:disabled {
-  opacity: 0.5;
+  background: var(--disabled-bg);
+  border-color: var(--disabled-line);
+  color: var(--disabled-ink);
   cursor: not-allowed;
+}
+
+/* The step CTA: full width, black, the thing to press next. */
+.primary {
+  width: 100%;
+  font-size: 14px;
+  border-radius: 10px;
+  padding: 12px 18px;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.primary:hover:not(:disabled) {
+  background: #35353a;
+  border-color: #35353a;
+}
+
+.primary:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+/* The one accent element in the panel. */
+#fill-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#fill-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+#fill-btn:disabled {
+  background: var(--disabled-bg);
+  border-color: var(--disabled-line);
+  color: var(--disabled-ink);
 }
 
 .row-actions {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
-/* Text -------------------------------------------------------------------- */
+.row-actions .primary {
+  width: auto;
+}
+
+button.link,
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  width: auto;
+}
+
+button.link:hover {
+  background: none;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ text  */
 
 .note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--muted);
-  font-size: 11.5px;
-  margin: 8px 0;
 }
 
-/* The auto-detected form. Reads as a statement of fact, not a control —
-   there is nothing to do here when it is right. */
 .detected {
   margin: 0;
-  font-weight: 600;
-}
-
-.detected.unknown {
-  font-weight: 400;
-  color: var(--muted);
-}
-
-/* A secondary action that should not compete with "Map fields". */
-button.link {
-  padding: 0;
-  margin-top: 4px;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 11.5px;
-  text-decoration: underline;
-}
-
-button.link[hidden] {
-  display: none;
+  font-size: 12.5px;
+  color: var(--muted-strong);
 }
 
 .status {
-  margin: 8px 0 0;
-  font-size: 12px;
-  min-height: 1.2em;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  min-height: 1em;
 }
 
 .status.error {
   color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
+  border-radius: 9px;
+  padding: 10px 12px;
 }
 
-.status.busy {
+.status.busy::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 6px;
+  vertical-align: -2px;
+  border: 1.6px solid var(--line-strong);
+  border-top-color: var(--text);
+  border-radius: 999px;
+  animation: pf-spin 0.7s linear infinite;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------- legend + drawers */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #f7f7f6;
+  border: 1px solid var(--line-quiet);
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted-strong);
+}
+
+.legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.legend .is-confident {
+  color: var(--confident);
+}
+.legend .is-check {
+  color: var(--check);
+}
+.legend .is-missing {
+  color: var(--missing);
+}
+
+details.found,
+details.extra,
+details.advanced,
+details.quiet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+details.advanced {
+  margin: 0 16px 16px;
+}
+
+details > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted-strong);
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::before {
+  content: "▶";
+  display: inline-block;
+  font-size: 9px;
   color: var(--muted);
+  margin-right: 7px;
+  transition: transform 0.22s ease;
 }
 
-/* Review rows ------------------------------------------------------------- */
+details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details > *:not(summary) {
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------------- review + rows  */
+
+.progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress > i {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  border-radius: 999px;
+  transition: width 0.45s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
 
 .review-row {
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 9px 10px;
+  border-radius: 10px;
+  padding: 12px;
   margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: pf-rise 0.26s ease both;
+  transition: background 0.24s ease, border-color 0.24s ease,
+    border-left-color 0.24s ease;
 }
 
-/* Anything awaiting a confirm click is visibly unfinished, so a panel
-   scrolled past at speed does not read as ready. */
+/* State is a 3px left rule plus a word — never colour alone. */
 .review-row.pending {
-  background: var(--warn-bg);
-  border-color: var(--inferred);
+  border-left: 3px solid var(--check);
+  padding-left: 13px;
 }
 
-.review-row > .label {
-  font-weight: 600;
-  margin-bottom: 4px;
+.review-row.confirmed {
+  border-left: 3px solid var(--confident);
+  padding-left: 13px;
 }
 
-.review-row .help {
-  color: var(--muted);
-  font-size: 11.5px;
-  margin: 0 0 6px;
+.review-row .badge {
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.badge {
-  display: inline-block;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 5px;
-}
-
-.badge.extracted {
-  color: var(--extracted);
-}
+.badge.extracted,
 .badge.demographic {
-  color: var(--extracted);
+  color: var(--confident);
 }
+
 .badge.inferred {
-  color: var(--inferred);
+  color: var(--check);
 }
+
 .badge.missing {
   color: var(--missing);
 }
 
-/* The reason a row is held when its badge alone would not hold it. Carries
-   the warning colour rather than the muted one used by .help: this is the
-   sentence the doctor has to act on, not context for the question. */
-.review-row .recheck {
-  color: var(--inferred);
-  font-size: 11.5px;
-  font-weight: 600;
-  margin: 0 0 6px;
+.review-row .label {
+  font-size: 14px;
+  font-weight: 500;
 }
 
-/* The date in words, under its box. Quiet on purpose — it is the answer to
-   the warning above, not a second warning. */
-.review-row .date-hint {
+.review-row .help {
+  font-size: 12px;
   color: var(--muted);
+}
+
+/* Why this row is held when its badge alone would not hold it. Shown above
+   the value: the doctor needs to know what to look for before looking. */
+.review-row .recheck {
+  margin: 0;
   font-size: 11.5px;
-  margin: 5px 0 0;
+  color: var(--check);
 }
 
-.review-row .confirm {
-  margin-top: 7px;
+.review-row textarea {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 7px;
+  padding: 9px 11px;
 }
 
-.review-row.confirmed .confirm {
+.review-row.pending textarea,
+.review-row.pending select {
+  border-color: var(--check-line);
+}
+
+.date-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted-strong);
+}
+
+button.confirm {
+  align-self: flex-start;
+  font-size: 13px;
+  border-radius: 7px;
+  padding: 8px 14px;
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+button.confirm:hover:not(:disabled) {
+  background: #35353a;
+  border-color: #35353a;
+}
+
+button.confirm:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ------------------------------------------------------------ fill report */
+
+#fill-report:empty {
   display: none;
 }
 
-/* Fill report ------------------------------------------------------------- */
+.report-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 12px;
+  margin-top: 10px;
+  animation: pf-rise 0.26s ease both;
+}
 
-#fill-report ul {
-  margin: 8px 0 0;
+.report-block h3 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.report-block.is-success {
+  background: var(--confident-bg);
+  border-color: var(--confident-line);
+}
+
+.report-block.is-success h3 {
+  color: var(--confident-ink);
+}
+
+.report-block.is-success p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--confident-body);
+}
+
+/* A normal outcome on a multi-step portal, and it must not read as failure. */
+.report-block.is-deferred {
+  border-left: 3px solid var(--check);
+  padding-left: 13px;
+}
+
+.report-block.is-deferred h3 {
+  color: var(--check);
+}
+
+.report-block.is-manual {
+  background: #f7f7f6;
+  border: 1px dashed var(--line-dashed);
+}
+
+.report-block ul {
+  margin: 0;
   padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--muted-strong);
 }
 
-#fill-report li {
-  margin-bottom: 3px;
-  font-size: 12px;
+.report-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  padding: 3px 0;
 }
 
-#fill-report .unknown {
-  color: var(--muted);
+.report-row b {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-align: right;
 }
 
-/* Advanced ---------------------------------------------------------------- */
+/* ---------------------------------------------------------------- motion  */
 
-.advanced {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-  margin-top: 8px;
+@keyframes pf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.advanced summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 10px;
+@keyframes pf-tick {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .done-row,
+  .done-body,
+  .step,
+  .review-row,
+  .report-block {
+    animation: none;
+  }
+  .status.busy::after {
+    animation: none;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-line);
+  outline-offset: 2px;
 }

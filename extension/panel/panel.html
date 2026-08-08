@@ -20,14 +20,41 @@
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
+    <!--
+      The tagline is load-bearing product copy, not decoration: it is the one
+      line that states the guarantee the whole design exists to protect. Do
+      not cut it.
+    -->
     <header class="head">
-      <h1>BreezeFill</h1>
-      <p class="tagline">Fills the form in place. Never submits it.</p>
+      <span class="head-chip" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="4.5" y="4.5" width="15" height="16" rx="3.5"
+                stroke="currentColor" stroke-width="2" />
+          <rect x="9" y="2.5" width="6" height="4" rx="2" fill="currentColor" />
+          <path d="M8 11.5h8" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" />
+          <path d="M8 15h5" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" />
+        </svg>
+      </span>
+      <span class="head-text">
+        <h1>BreezeFill</h1>
+        <p class="tagline">Fills the form in place. Never submits it.</p>
+      </span>
+      <span class="step-counter" id="step-counter">Step 1 of 4</span>
     </header>
+
+    <div class="scroll" id="scroll">
+    <!-- Finished steps collapse into one-line rows here, newest last. -->
+    <div id="done-rows"></div>
 
     <!-- Step 1 ------------------------------------------------------------ -->
     <section class="step" id="step-patient" aria-labelledby="h-patient">
       <h2 id="h-patient"><span class="num">1</span> Patient and note</h2>
+      <p class="step-sub">
+        Paste the consultation exactly as it sits in your CMS — demographics
+        header and clinical note together. Messy is fine.
+      </p>
 
       <!--
         The schema is not optional — it is what supplies each field's meaning,
@@ -102,6 +129,18 @@
       <details class="found" id="found">
         <summary id="found-summary">Patient details</summary>
 
+        <!--
+          Three states, three colours, and each one is also a word. Roughly 1
+          in 12 men has a colour vision deficiency, and "found confidently"
+          versus "needs your eye" is the distinction this whole surface exists
+          to draw — so it may never rest on hue alone.
+        -->
+        <div class="legend">
+          <span class="is-confident"><i></i>Found</span>
+          <span class="is-check"><i></i>Needs checking</span>
+          <span class="is-missing"><i></i>Nothing found</span>
+        </div>
+
         <div class="grid">
           <label class="field">
             <span>Full name</span>
@@ -154,6 +193,12 @@
     <section class="step" id="step-review" aria-labelledby="h-review" hidden>
       <h2 id="h-review"><span class="num">2</span> Review</h2>
       <p class="note" id="review-summary"></p>
+      <!--
+        Readiness as a bar rather than a count alone: the doctor should be able
+        to see how much is left without reading. It never advances on its own —
+        only a confirm click or an edit moves it.
+      -->
+      <div class="progress" aria-hidden="true"><i id="review-progress" style="width:0%"></i></div>
       <div id="rows"></div>
     </section>
 
@@ -199,6 +244,7 @@
       <p class="status" id="draft-status" role="status"></p>
       <textarea id="draft-json" rows="14" spellcheck="false" readonly></textarea>
     </section>
+    </div>
 
     <details class="advanced">
       <summary>Advanced</summary>

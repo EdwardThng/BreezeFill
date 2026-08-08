@@ -97,6 +97,13 @@ const state = {
   formsFailed: false,
   /** Review rows from POST /map. */
   rows: [],
+  /**
+   * Whether a fill has landed on this page. Presentation only — it moves the
+   * header's step counter to its last position and nothing else reads it.
+   * Deliberately not reset by a second fill: "Fill again" is expected on a
+   * wizard, and the doctor has not gone backwards by pressing it.
+   */
+  filled: false,
   /** field_id -> doctor's value, when they have changed one. */
   edited: new Map(),
   /** field_ids the doctor has explicitly confirmed. */
@@ -848,6 +855,33 @@ function renderRow(row) {
   return wrap;
 }
 
+/**
+ * Where the doctor is, and what the header says about it.
+ *
+ * Presentation only — it reads the same state the steps already render from
+ * and writes nothing back. The panel still shows every reachable step rather
+ * than hiding the ones ahead: on this flow the note and the page checks are
+ * genuinely usable out of order, and "Check this page" answering "can
+ * BreezeFill see this form at all" is worth being able to ask before anything
+ * has been pasted.
+ */
+function updateProgress() {
+  const counter = $("step-counter");
+  if (!counter) return;
+
+  const TOTAL = 4;
+  let current = 1;
+  if (state.rows.length) current = 2;
+  if (state.rows.length && readyRows().length && !state.rows.some(
+    (r) => r.needs_review && hasValue(r) && !state.confirmed.has(r.field_id)
+  )) {
+    current = 3;
+  }
+  if (state.filled) current = 4;
+
+  counter.textContent = `Step ${current} of ${TOTAL}`;
+}
+
 function renderRows() {
   const container = $("rows");
   container.replaceChildren(...state.rows.map(renderRow));
@@ -859,7 +893,16 @@ function renderRows() {
     ? `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`
     : `${readyRows().length} of ${state.rows.length} fields ready to write. The rest are for you to complete by hand.`;
   $("review-summary").textContent = summary;
+
+  // Readiness as a bar as well as a count. It only ever moves on a confirm
+  // click or an edit — nothing advances it on its own, which is the point.
+  const needing = state.rows.filter((r) => r.needs_review && hasValue(r)).length;
+  const done = needing - pending;
+  const bar = $("review-progress");
+  if (bar) bar.style.width = `${needing === 0 ? 100 : Math.round((done / needing) * 100)}%`;
+
   updateFillButton();
+  updateProgress();
 }
 
 function updateFillButton() {
@@ -904,6 +947,24 @@ function renderReport(response) {
   const container = $("fill-report");
   container.replaceChildren();
 
+  // The result is three different messages needing three different responses
+  // from the doctor — what landed, what belongs to a later step, and what they
+  // must write themselves — so each gets its own block rather than one flat
+  // list where the important one scrolls past.
+  const written = (response.applied || []).filter((a) => a.status === "filled").length;
+  if (!response.refused) {
+    const banner = document.createElement("div");
+    banner.className = "report-block is-success";
+    const heading = document.createElement("h3");
+    heading.textContent = `Filled ${written} field${written === 1 ? "" : "s"} on this page.`;
+    const body = document.createElement("p");
+    // The most important sentence in the product: what is written here is
+    // signed and submitted as the doctor's own clinical statement.
+    body.textContent = "Check each one on the form, then submit it yourself.";
+    banner.append(heading, body);
+    container.append(banner);
+  }
+
   const list = document.createElement("ul");
   const byId = new Map(state.rows.map((r) => [r.field_id, r]));
 
@@ -922,15 +983,26 @@ function renderReport(response) {
     item.textContent = `${name} — ${outcome}${why}`;
     list.append(item);
   }
-  container.append(list);
+  const detail = document.createElement("div");
+  detail.className = "report-block";
+  const detailHeading = document.createElement("h3");
+  detailHeading.textContent = "What happened to each field";
+  detail.append(detailHeading, list);
+  container.append(detail);
 
   // Fields belonging to a step that is not rendered. Said plainly, because
   // otherwise they are indistinguishable from fields that failed — and the
   // action is simply to advance the wizard and press Fill again.
   if (response.report.deferred) {
-    const later = document.createElement("p");
-    later.className = "note";
-    later.textContent = `${response.report.deferred} field${response.report.deferred === 1 ? "" : "s"} belong to a later step. Move to that step and press Fill again.`;
+    const later = document.createElement("div");
+    later.className = "report-block is-deferred";
+    const h = document.createElement("h3");
+    h.textContent = `${response.report.deferred} field${response.report.deferred === 1 ? "" : "s"} belong to a later step`;
+    const body = document.createElement("p");
+    body.className = "note";
+    // A normal outcome on a multi-step portal. It must not read as failure.
+    body.textContent = "Move to that step of the form and press Fill again.";
+    later.append(h, body);
     container.append(later);
   }
 
@@ -938,10 +1010,13 @@ function renderReport(response) {
   // is how a portal that grew a question becomes visible, and it is the input
   // to extending the schema. The doctor fills these by hand today.
   if (response.report.unknownControls.length) {
-    const heading = document.createElement("p");
-    heading.className = "note";
-    heading.textContent = "Fields on this page BreezeFill does not know about — fill these yourself:";
-    container.append(heading);
+    const block = document.createElement("div");
+    block.className = "report-block is-manual";
+    const heading = document.createElement("h3");
+    heading.textContent = "Fill these yourself";
+    const body = document.createElement("p");
+    body.className = "note";
+    body.textContent = "Questions on this page BreezeFill has no answer for.";
 
     const unknown = document.createElement("ul");
     unknown.className = "unknown";
@@ -950,7 +1025,8 @@ function renderReport(response) {
       item.textContent = control.label || `(unlabelled ${control.type})`;
       unknown.append(item);
     }
-    container.append(unknown);
+    block.append(heading, body, unknown);
+    container.append(block);
   }
 }
 
@@ -1101,6 +1177,8 @@ async function onFill() {
       // doctor — this is the only moment anyone can sanity-check the labels
       // against the form they are looking at.
       if (mappingLive()) showDraft();
+      state.filled = true;
+      updateProgress();
     }
     renderReport(response);
   } catch (error) {
