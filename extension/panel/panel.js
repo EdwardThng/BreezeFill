@@ -105,6 +105,27 @@ const DEMOGRAPHIC_FIELDS = {
 // for something the product does not need.
 const REQUIRED_FIELDS = ["full-name", "dob"];
 
+// A synthetic note for trying the panel without a real patient, and for
+// demonstrating it. Every identifier in it is invented — repo fixtures are
+// synthetic only, and this ships inside the extension.
+//
+// It is deliberately awkward rather than tidy, because a sample that parsed
+// cleanly would demonstrate the wrong thing. It carries two phone numbers, so
+// the sole-match rule in demographics.py has to refuse both rather than guess;
+// a policy number written two ways; and a first-consult date that is not the
+// consultation date, which is exactly the distinction a schema description
+// exists to draw.
+const SAMPLE_NOTE = `Tan Wei Ling, F, 47
+NRIC S8012345D  DOB 14/03/1978
+HP 9123 4567 / 6123 4567
+Policy GHS-88213004 or GH-88213004 (AIA Singapore)
+Blk 118 Bishan St 12 #07-21, S570118
+
+Seen 02/08/2026. 3 days sore throat, fever 38.4, odynophagia.
+O/E tonsils enlarged with exudate, tender cervical nodes.
+Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
+First consult for this episode 31/07/2026. MC 2 days.`;
+
 const state = {
   forms: [],
   /** Whether the last /forms call failed, as opposed to returning nothing. */
@@ -1320,6 +1341,16 @@ $("note-next").addEventListener("click", () => {
   showStep("extra");
 });
 $("extra-next").addEventListener("click", () => showStep("details"));
+
+// Fills the paste box only. The name is not written in: the doctor typed it
+// at step 1, and "BreezeFill never guesses this one" would be a strange thing
+// to say next to a button that guesses it.
+$("sample-note").addEventListener("click", () => {
+  $("paste").value = SAMPLE_NOTE;
+  // A programmatic value assignment fires no input event, so the debounce
+  // that normally parses on a pause in typing would never run.
+  $("paste").dispatchEvent(new Event("input", { bubbles: true }));
+});
 
 $("map-btn").addEventListener("click", onMap);
 $("check-btn").addEventListener("click", onCheck);

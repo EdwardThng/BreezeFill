@@ -1220,3 +1220,38 @@ describe("the fill report", () => {
     expect($("fill-report").textContent).toMatch(/4 fields belong to a later step/i);
   });
 });
+
+describe("the sample note", () => {
+  test("fills the paste box and triggers a parse", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    $("sample-note").click();
+    expect($("paste").value).toContain("acute tonsillitis");
+    // A programmatic assignment fires no input event of its own, so the
+    // button has to dispatch one or the debounce never runs.
+    await vi.advanceTimersByTimeAsync(600);
+    await settle();
+    expect(globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/parse"))).toBe(true);
+  });
+
+  test("it does not write the patient's name", async () => {
+    // "BreezeFill never guesses this one" would be a strange thing to say
+    // beside a button that guesses it. The doctor typed the name at step 1.
+    const panel = loadPanel();
+    await settle();
+
+    $("full-name").value = "";
+    $("sample-note").click();
+    expect($("full-name").value).toBe("");
+  });
+
+  test("every identifier in it is synthetic", () => {
+    // It ships inside the extension, so it is held to the repo's rule that
+    // fixtures are synthetic only.
+    const panel = loadPanel();
+    $("sample-note").click();
+    expect($("paste").value).toContain("S8012345D");
+    expect($("paste").value).not.toContain("S7211043C"); // the test fixture's own
+  });
+});
