@@ -32,6 +32,7 @@ import logging
 import os
 import re
 import zipfile
+from collections import Counter
 from pathlib import Path
 
 import anthropic
@@ -40,7 +41,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from demographics import ParsedDemographics, parse_demographics
+from demographics import (
+    ParsedDemographics,
+    demographic_field_for_label,
+    parse_demographics,
+)
 from mapping import (
     FormField,
     FormSchema,
@@ -339,6 +344,49 @@ def _entry_label(field: LiveField) -> str:
     return f"{field.label} (entry {field.instance})"
 
 
+def _live_sources(fields: list[LiveField]) -> list[str]:
+    """Which of the page's controls are asking for a demographic, by index.
+
+    Without this every live control was `source="llm"`, and the consequence was
+    not a weaker answer but no answer at all. The demographics are exactly what
+    redaction strips out first, so the model reads `[PATIENT]` and `[NRIC]` and
+    correctly reports `missing` — while the value sat in the PatientRecord the
+    whole time, typed by the doctor two steps earlier. The patient's name is
+    the clearest case: it is required at step 1, so it is ALWAYS known, and it
+    was the one field guaranteed to be left blank.
+
+    Three rules, all of them refusals:
+
+    - A label resolves only through `demographic_field_for_label`, which is
+      exact against the shared alias table. An unrecognised label stays `llm`.
+    - **A repeating entry is never demographic.** `instance` means the question
+      is asked once per entry — several dependants, several admissions — and
+      one patient record cannot answer the second one. These stay `llm`.
+    - **Two controls wanting the same demographic yields neither.** A form with
+      "Name" in the patient block and "Name" again in the physician block gives
+      no way to tell which is which from the label alone, and filling both puts
+      the patient's name in the doctor's box. The same refusal `locate.js`
+      makes over three identical "Date Of Birth" labels.
+
+    The privacy property is unchanged and worth stating, because this looks
+    like it moves data toward the model and does the opposite: a demographic
+    field is answered by `assemble_claim` copying from the record, so marking a
+    control demographic REMOVES its question from the mapping call.
+    """
+    resolved: list[str | None] = [
+        None
+        if field.instance is not None
+        else demographic_field_for_label(field.label)
+        for field in fields
+    ]
+
+    seen = Counter(name for name in resolved if name)
+    return [
+        f"demographics.{name}" if name and seen[name] == 1 else "llm"
+        for name in resolved
+    ]
+
+
 def _live_schema(fields: list[LiveField]) -> FormSchema:
     """The page's controls, as a schema for one request only.
 
@@ -371,6 +419,8 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
         "checkbox-group": "checkbox",
         "date": "date",
     }
+    sources = _live_sources(fields)
+
     return FormSchema(
         form_id="__live__",
         fill_mode="web",
@@ -378,7 +428,7 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
             FormField(
                 id=_slug(_entry_label(field), taken),
                 type=types.get(field.type.lower(), "text"),
-                source="llm",
+                source=sources[index],
                 # Scrubbed a second time. The extension already ran the same
                 # patterns before this left the browser; a label reaches the
                 # model only if both passes missed it.
@@ -395,7 +445,7 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
                 # from the control itself, so they cannot be out of date.
                 options=[scrub_patterns(o) for o in field.options if o.strip()],
             )
-            for field in fields
+            for index, field in enumerate(fields)
             if field.label.strip()
         ],
     )
