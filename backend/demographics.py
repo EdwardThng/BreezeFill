@@ -174,6 +174,56 @@ def _normalise_label(raw: str) -> str:
     return re.sub(r"[^a-z]", "", raw.lower())
 
 
+# Words that may sit around a demographic label while it still means the
+# patient's own field. Everything NOT on this list disqualifies the label, and
+# that direction is the safety property: `Hospital name`, `Doctor's name`,
+# `Employer name` and `Name of attending physician` all fail to resolve, so
+# they go to the model as ordinary questions instead of being answered with the
+# patient's name.
+_PATIENT_QUALIFIERS = (
+    "patient", "patients", "patientsown", "thepatient", "ofpatient",
+    "ofthepatient", "the", "please", "enter",
+)
+
+
+def demographic_field_for_label(label: str) -> str | None:
+    """A form control's label -> the demographic field it asks for, or None.
+
+    The vocabulary is `LABELS`, the same table the note parser uses, so the two
+    cannot drift. What differs is the direction of the question: the parser
+    asks "what field does this line of a note announce", and this asks "what
+    field does this box on an insurer's form want".
+
+    Matching is exact against the alias table once a patient-qualifier has been
+    stripped. Nothing fuzzy, and deliberately so — the value written here does
+    not pass the model and is not derived from the note, so a mismatch puts the
+    patient's NRIC in a box asking for something else, with a green
+    "From the details you entered" badge above it. A miss costs one field the
+    doctor types by hand; a false match is a wrong identifier on a claim.
+    """
+    text = _normalise_label(label)
+    if not text:
+        return None
+
+    # Strip patient-qualifiers from either end, longest first, until nothing
+    # more comes off — "Patient's Full Name" and "Name of the Patient" both
+    # reduce to "name", while "Hospital name" reduces to itself.
+    changed = True
+    while changed and text:
+        changed = False
+        for qualifier in sorted(_PATIENT_QUALIFIERS, key=len, reverse=True):
+            if text.startswith(qualifier) and len(text) > len(qualifier):
+                text = text[len(qualifier):]
+                changed = True
+                break
+            if text.endswith(qualifier) and len(text) > len(qualifier):
+                text = text[: -len(qualifier)]
+                changed = True
+                break
+
+    return _LABEL_LOOKUP.get(text)
+
+
 def parse_date(text: str) -> str | None:
     """One date string -> ISO, or None if it is not a plausible birth date."""
     value = text.strip().rstrip(".,")
