@@ -209,3 +209,97 @@ def test_a_field_outside_any_repeat_keeps_its_plain_label():
     schema = _live_schema([LiveField(label="Principal diagnosis", type="text")])
     assert schema.fields[0].label == "Principal diagnosis"
     assert schema.fields[0].id == "principal_diagnosis"
+
+
+# ---------------------------------------------------------------------------
+# Demographic controls on a live page
+# ---------------------------------------------------------------------------
+#
+# Before this, every live control was source="llm", and the result was not a
+# weaker answer to a demographic question but no answer at all: those values
+# are exactly what redaction strips first, so the model saw [PATIENT] and
+# returned missing while the value sat in the PatientRecord.
+
+
+class TestDemographicsOnALivePage:
+    DEMOGRAPHIC_PAGE = [
+        {"label": "Patient's Full Name", "type": "text"},
+        {"label": "NRIC / FIN", "type": "text"},
+        {"label": "Date of Birth", "type": "text"},
+        {"label": "Hospital name", "type": "text"},
+        {"label": "Diagnosis", "type": "text"},
+    ]
+
+    def rows(self, fields=None):
+        response = post(fields or self.DEMOGRAPHIC_PAGE)
+        assert response.status_code == 200, response.text
+        return {r["label"]: r for r in response.json()["fields"]}
+
+    def test_the_name_is_filled_because_the_doctor_typed_it(self) -> None:
+        # It is required at step 1 of the panel, so it is ALWAYS known — and it
+        # was the one field guaranteed to come back blank.
+        row = self.rows()["Patient's Full Name"]
+        assert row["value"] == "Tan Wei Ming"
+        assert row["status"] == "demographic"
+
+    def test_the_other_demographics_are_filled_when_known(self) -> None:
+        rows = self.rows()
+        assert rows["NRIC / FIN"]["value"] == "S1234567A"
+        assert rows["Date of Birth"]["value"] == "14/03/1962"
+
+    def test_a_demographic_nobody_supplied_is_missing_not_invented(self) -> None:
+        # PATIENT carries no address. The question is still recognised, so it
+        # does not go to the model — which could not answer it either, the
+        # address having been stripped out of the note.
+        rows = self.rows([*self.DEMOGRAPHIC_PAGE, {"label": "Address", "type": "text"}])
+        assert rows["Address"]["value"] in (None, "")
+
+    def test_a_question_that_is_not_about_the_patient_still_goes_to_the_model(self) -> None:
+        rows = self.rows()
+        assert rows["Hospital name"]["status"] == "missing"
+        assert rows["Diagnosis"]["status"] == "missing"
+
+    def test_a_demographic_control_is_not_sent_to_the_model(self, stub_llm) -> None:
+        # The privacy direction of this change, and the one that looks
+        # backwards until you read it: a demographic field is answered by
+        # copying from the record, so recognising one REMOVES its question from
+        # the grammar and the prompt.
+        post(self.DEMOGRAPHIC_PAGE)
+        sent = {f.id for f in stub_llm["schema"].llm_fields}
+        assert "hospital_name" in sent
+        assert "patient_s_full_name" not in sent
+        assert "nric_fin" not in sent
+
+    def test_two_controls_wanting_one_demographic_yields_neither(self) -> None:
+        # A claim form with "Name" in the patient block and "Name" again in the
+        # physician block cannot be told apart from the label. Filling both
+        # writes the patient's name into the doctor's box, so neither is
+        # filled — the same refusal locate.js makes over three identical
+        # "Date Of Birth" labels.
+        response = post([{"label": "Name", "type": "text"}, {"label": "Name", "type": "text"}])
+        rows = response.json()["fields"]
+        assert [r["status"] for r in rows] == ["missing", "missing"]
+
+    def test_a_repeating_entry_is_never_demographic(self) -> None:
+        # `instance` means the question is asked once per entry — several
+        # dependants, several admissions — and one patient record cannot answer
+        # the second one.
+        response = post(
+            [
+                {"label": "Name", "type": "text", "instance": 1},
+                {"label": "Name", "type": "text", "instance": 2},
+            ]
+        )
+        assert all(r["status"] == "missing" for r in response.json()["fields"])
+
+    def test_a_label_naming_somebody_else_is_never_the_patient(self) -> None:
+        for label in (
+            "Hospital name",
+            "Doctor's name",
+            "Employer name",
+            "Name of attending physician",
+            "Company Name",
+            "Clinic address",
+        ):
+            rows = self.rows([{"label": label, "type": "text"}])
+            assert rows[label]["status"] == "missing", label
