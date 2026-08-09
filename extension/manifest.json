@@ -14,8 +14,6 @@
     "128": "icons/chrome-store-listing-128.png"
   },
 
-  "optional_host_permissions": ["https://*/*"],
-
   "side_panel": {
     "default_path": "panel/panel.html"
   },
