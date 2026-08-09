@@ -478,6 +478,19 @@ def llm_sweep(text: str, client=None, model: str = SWEEP_MODEL) -> list[str]:
                     "numbers, phone numbers, email addresses, or street "
                     "addresses that are NOT already replaced by [TOKENS]? "
                     "List each one verbatim on its own line, or reply NONE.\n\n"
+                    # The patients are Singaporean, so the ID number this pass
+                    # most needs to catch has one fixed shape. Pass 2's regex
+                    # is deliberately tighter than this — it restricts the
+                    # first letter to the five prefixes actually issued — so
+                    # anything reaching here is by definition something that
+                    # shape did not match: a typo, an unusual prefix, an odd
+                    # separator. Describing the general form is what lets this
+                    # pass be the safety net rather than a second copy of the
+                    # regex.
+                    "An NRIC or FIN is nine characters: a letter, then seven "
+                    "digits, then a letter. Treat anything of that shape as an "
+                    "ID number even if it is spaced, hyphenated, or partly "
+                    "obscured.\n\n"
                     f"<text>\n{text}\n</text>"
                 ),
             }
