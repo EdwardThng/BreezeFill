@@ -79,7 +79,7 @@
 <main>
 
 <h1>BreezeFill Privacy Policy</h1>
-<p class="updated">Last updated 6 August 2026</p>
+<p class="updated">Last updated 9 August 2026</p>
 
 <div class="lede">
   <p><strong>The short version.</strong> BreezeFill helps a doctor fill an
@@ -141,7 +141,10 @@ credentials to any of them.</p>
       <td>You press <em>Map fields</em></td>
       <td>The pasted text and the patient details you confirmed</td>
       <td><strong>BreezeFill server</strong>, which removes the identifiers and
-      then sends <strong>only the de-identified text</strong> to Anthropic.</td>
+      then sends <strong>only the de-identified text</strong> to Anthropic. The
+      last stage of that removal is itself an AI call, over text already
+      stripped by the two passes before it — see
+      <a href="#deident">De-identification</a>.</td>
     </tr>
     <tr>
       <td>You press <em>Map fields</em> on a form BreezeFill does not have a
@@ -168,7 +171,7 @@ credentials to any of them.</p>
   <li>Anything from any other browser tab. BreezeFill cannot see them.</li>
 </ul>
 
-<h2>De-identification: the AI never learns who the patient is</h2>
+<h2 id="deident">De-identification: the AI never learns who the patient is</h2>
 
 <p>This is the core protection in BreezeFill, so it is worth being exact about
 what it does and does not cover.</p>
@@ -189,8 +192,8 @@ whom.</p>
 
 <h3>How the clinical text is stripped</h3>
 
-<p>Three passes run before any AI call, each catching what the last could
-not:</p>
+<p>Three passes run before the note is used to answer the form's questions,
+each catching what the last could not:</p>
 
 <ol>
   <li><strong>The patient's own details</strong> are replaced using the list
@@ -203,6 +206,15 @@ not:</p>
   <li><strong>A checking pass</strong> re-reads the stripped text and removes
   anything identifying that the first two missed.</li>
 </ol>
+
+<p><strong>The third pass is itself an AI call, and we would rather say so
+here than have you assume otherwise.</strong> It runs over text the first two
+passes have already stripped, it is given no patient details, and it is asked
+one question only — is anything identifying still in here — never to answer
+anything about the claim. But it is the pass that exists precisely because
+something may have survived the first two, so if anything did, this is where it
+would be seen. It goes to the same provider as the mapping call described
+below, under the same terms.</p>
 
 <p>Questions read off the insurer's page are scrubbed twice over — once in your
 browser before they are sent, once again on arrival — so a label reaches the AI
@@ -284,7 +296,8 @@ reading rather than skimming.</p>
       <td><strong>Leaves Singapore.</strong> It is sent to Anthropic to answer
       the form's questions, and Anthropic's API routes inference to the United
       States or globally. There is no Singapore option available to BreezeFill
-      today.</td>
+      today. The checking pass described above is a second call to the same
+      provider, and leaves Singapore on the same terms.</td>
     </tr>
   </tbody>
 </table>
