@@ -34,9 +34,9 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-08
+## Status as of 2026-08-09
 
-**504 tests pass**: 215 backend (1 skipped), 242 extension, 47 website.
+**512 tests pass**: 223 backend (1 skipped), 242 extension, 47 website.
 
 | Piece | State |
 |---|---|
@@ -896,6 +896,48 @@ describes carry their own labels out, which is the irreducible cost of
 answering them at all. The join runs in the page (`locate.enrich`), so schema
 instructions reach controls without page structure being sent anywhere to
 arrange it.
+
+**What one path quietly broke, found 2026-08-09: demographics were never
+filled.** `_live_schema` stamped every control `source="llm"`, and the
+consequence was not a weaker answer to "Patient's Full Name" but **no answer at
+all** — demographics are exactly what redaction strips first, so the model read
+`[PATIENT]` and correctly returned `missing`, while the value sat in the
+`PatientRecord` the whole time. Every claim on the extension's only path left
+the name, NRIC, date of birth, phone, address and policy number blank.
+
+The name is the sharpest case and the reason this is not a coverage
+nicety: **it is required at step 1 of the panel, so it is always known**, and
+it was the one field guaranteed to come back empty. The others are conditional
+on being known — which is the right condition, and now the one that applies.
+
+`_live_sources` resolves a control's label through
+`demographic_field_for_label`, which is exact against the alias table
+`demographics.py` already owns, so the note parser and the form reader cannot
+drift apart. Three refusals guard it, and they matter more than the fills
+because a value assigned this way skips the model and reaches the doctor
+already green:
+
+- **An unrecognised label stays `llm`.** The qualifier list is an allowlist, so
+  `Hospital name`, `Doctor's name`, `Employer name` and `Name of attending
+  physician` resolve to nothing while `Patient Name`, `Name of Patient` and
+  `Full name` all resolve.
+- **A control inside a repeating entry is never demographic.** `instance` means
+  the question is asked once per entry — several dependants, several admissions
+  — and one patient record cannot answer the second one.
+- **Two controls wanting the same demographic yields neither.** A form with
+  "Name" in the patient block and "Name" again in the physician block cannot be
+  told apart from the label, and filling both writes the patient's name into
+  the doctor's box. The same refusal `locate.js` makes over three identical
+  "Date Of Birth" labels.
+
+**It moves data away from the model, not toward it.** This reads backwards
+until you check `map_fields`, which sends `schema.llm_fields`: recognising a
+control as demographic *removes* its question from the grammar and the prompt.
+`test_a_demographic_control_is_not_sent_to_the_model` asserts it.
+
+`schemaFieldsOf` in the panel still filters demographics out of enrichment, and
+that stays correct on its own terms — a demographic field has no `description`
+to lend. It is simply no longer the whole story.
 
 **The limit, found by a test that expected to pass.** Enrichment matches by the
 same label scorer filling uses, and it compares words rather than meaning:
