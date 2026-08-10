@@ -24,5 +24,11 @@ frontend/dist/
 # Never commit generated/filled PDFs or anything derived from patient data
 forms/output/
 
+# The zip uploaded to the Chrome Web Store. Built from extension/ on demand, so
+# it is derived rather than authored — and it goes stale the moment the
+# manifest version changes, which is exactly when someone would reach for a
+# committed one by mistake. Rebuild it, never read it out of the history.
+/breezefill-store-*.zip
+
 .vercel
 .env*
