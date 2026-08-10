@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BreezeFill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fills insurer claim forms from a clinical note. Fills in place; never submits.",
   "minimum_chrome_version": "114",
 
