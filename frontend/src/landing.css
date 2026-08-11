@@ -179,13 +179,19 @@
   transform: translateY(-1px);
 }
 
-.btn-primary {
+/* Scoped, because these buttons are <a> elements and `.landing a { color:
+   inherit }` above is specificity 0,1,1 — it outranks a bare `.btn-primary`
+   at 0,1,0 and the label inherited --ink instead of --accent-ink. That put
+   navy on the blue fill at 3.11:1, under AA, on the page's primary control.
+   `.final-cta .btn-primary` is also 0,2,0 and comes later, so the band's
+   inverted button still wins. */
+.landing .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
 }
 
-.btn-primary:hover {
+.landing .btn-primary:hover {
   background: var(--accent-hover);
 }
 
