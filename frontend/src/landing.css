@@ -331,7 +331,7 @@
   gap: 5px;
 }
 
-.pill {
+.landing .pill {
   font-size: 9.5px;
   font-weight: 650;
   text-transform: uppercase;
@@ -341,17 +341,17 @@
   justify-self: start;
 }
 
-.pill.green {
+.landing .pill.green {
   background: rgba(var(--ok-rgb), 0.16);
   color: var(--ok);
 }
 
-.pill.amber {
+.landing .pill.amber {
   background: rgba(138, 106, 40, 0.12);
   color: var(--amber);
 }
 
-.pill.grey {
+.landing .pill.grey {
   background: var(--bg-raise);
   color: var(--ink-faint);
 }
@@ -499,26 +499,35 @@
   margin: 40px 0 32px;
 }
 
-.step {
+/* Scoped under .landing because styles.css — the claim UI's stylesheet at
+   #/app — is GLOBAL and defines .step and .pill for its own stepper and status
+   chips. Both files are loaded on every route by main.tsx, so an unscoped
+   .step here shares specificity with that one and inherits whatever it does
+   not itself declare. That is a real bug, not a hypothetical: the landing
+   .step never set `display`, so the claim UI's `display: flex` applied and the
+   step cards laid their number, title and body out in a row, one word per
+   line. Keep these scoped, and keep `display` explicit. */
+.landing .step {
+  display: block;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 24px;
 }
 
-.step-n {
+.landing .step-n {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.1em;
 }
 
-.step h3 {
+.landing .step h3 {
   font-size: 18px;
   margin: 12px 0 10px;
 }
 
-.step p {
+.landing .step p {
   margin: 0;
   font-size: 14.5px;
   color: var(--ink-dim);
@@ -555,7 +564,7 @@
 /* Coverage ----------------------------------------------------------------- */
 
 .coverage .two-col p {
-  margin-bottom: 14px;
+  margin: 16px 0 14px;
 }
 
 .coverage-card {
@@ -797,7 +806,11 @@
   color: var(--band-ink);
   border-radius: 18px;
   padding: clamp(48px, 7vw, 88px) clamp(20px, 5vw, 64px);
-  margin: 0 clamp(16px, 5vw, 56px) clamp(56px, 8vw, 96px);
+  /* `auto` on the sides, because .section centres with `margin: 0 auto` and a
+     shorthand here replaces it — which left the band 1080px wide against the
+     left gutter with 376px of dead space on the right. Measured, not guessed. */
+  margin: 0 auto clamp(56px, 8vw, 96px);
+  max-width: min(1080px, calc(100% - 32px));
   text-align: center;
 }
 
