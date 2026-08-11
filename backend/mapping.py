@@ -595,6 +595,19 @@ def assemble_claim(
         if field.source.startswith("demographics."):
             attr = field.source.removeprefix("demographics.")
             value = _demographic_value(record, attr)
+            # The insurer is the one exception to "demographics come from the
+            # note", and it is the only field where the form knows better than
+            # the paste. A note names its insurer in passing if at all — "(AIA
+            # Singapore)" after the policy number — while the schema states it
+            # outright, and the insurer that belongs on a claim form is the one
+            # whose form it is. A note naming a different insurer than the form
+            # being filled is answering a question nobody asked.
+            #
+            # Only ever fills a blank. A doctor who typed one has decided, and
+            # this is a fallback rather than a correction. A live schema
+            # carries no insurer, so that path is unchanged and still blank.
+            if attr == "insurer" and not value:
+                value = schema.insurer
             # A demographic date is held too, and it is the one with the least
             # excuse for being trusted: it was not read by a model that could
             # be asked to reconsider, it was assigned by `parse_demographics`,
