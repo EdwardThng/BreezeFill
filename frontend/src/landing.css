@@ -32,6 +32,22 @@
      take --accent-ink, never white. */
   --accent: #3aa0dc;
   --accent-ink: #04121d;
+  /* The same blue as channels, because glows and tints need rgba() and a
+     literal there is how the old mint survived a change of accent in nine
+     places across two stylesheets. Use rgba(var(--accent-rgb), a), never a
+     hex, so the accent can be changed in exactly one place. */
+  --accent-rgb: 58, 160, 220;
+  --accent-hover: #55b0e4;
+
+  /* Status, not brand. The three pills in the hero mock are a legend for the
+     panel's own states — extracted, needs checking, not found — and green,
+     amber and grey are what the panel actually renders. Painting the first
+     one with --accent would say two wrong things at once: that the accent is
+     something other than "interactive", and that a value quoted from the note
+     looks the same as a button. Recoloured with the brand, the mock would stop
+     depicting the product. */
+  --ok: #4fd1a5;
+  --ok-rgb: 79, 209, 165;
   --amber: #e8b04b;
 
   background: var(--bg);
@@ -136,7 +152,7 @@
 }
 
 .btn-primary:hover {
-  background: #62e0b6;
+  background: var(--accent-hover);
 }
 
 .btn-ghost {
@@ -167,7 +183,7 @@
   margin: 0 auto;
   /* A single soft light source behind the headline, not a rainbow gradient. */
   background:
-    radial-gradient(60% 55% at 50% 0%, rgba(79, 209, 165, 0.13), transparent 70%);
+    radial-gradient(60% 55% at 50% 0%, rgba(var(--accent-rgb), 0.13), transparent 70%);
 }
 
 .eyebrow {
@@ -227,7 +243,7 @@
   border-radius: 14px 14px 0 0;
   border-bottom: none;
   text-align: left;
-  box-shadow: 0 -1px 60px rgba(79, 209, 165, 0.07);
+  box-shadow: 0 -1px 60px rgba(var(--accent-rgb), 0.07);
 }
 
 @media (max-width: 720px) {
@@ -292,8 +308,8 @@
 }
 
 .pill.green {
-  background: rgba(79, 209, 165, 0.16);
-  color: var(--accent);
+  background: rgba(var(--ok-rgb), 0.16);
+  color: var(--ok);
 }
 
 .pill.amber {
@@ -371,8 +387,8 @@
 /* Filled fields carry the accent, so "what the tool did" is legible at a
    glance — and the one it left blank is visibly, deliberately blank. */
 .mock-input.filled {
-  border-color: rgba(79, 209, 165, 0.45);
-  background: linear-gradient(90deg, rgba(79, 209, 165, 0.14), transparent 70%);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.14), transparent 70%);
 }
 
 /* Marquee ------------------------------------------------------------------ */
@@ -608,4 +624,95 @@
   font-size: 12.5px;
   color: var(--ink-faint);
   max-width: 60ch;
+}
+
+/* Pricing ------------------------------------------------------------------
+ *
+ * One card, centred, no comparison table. There is one plan, and a three-tier
+ * grid with two columns greyed out would invent choices that do not exist.
+ *
+ * The Subscribe button is the page's only --btn-primary below the hero: it is
+ * the one control that takes money, and giving it the same weight as "see the
+ * demo" would be the growth-funnel look the rest of the page avoids.
+ */
+
+.pricing {
+  text-align: center;
+}
+
+.price-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: clamp(26px, 4vw, 40px);
+  margin: 32px auto 0;
+  max-width: 520px;
+  text-align: left;
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.price-amount {
+  font-size: clamp(34px, 5vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.price-period {
+  color: var(--ink-dim);
+  font-size: 15px;
+}
+
+.price-included {
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.price-included li {
+  position: relative;
+  padding-left: 26px;
+  color: var(--ink-dim);
+  font-size: 15px;
+}
+
+/* A tick drawn in CSS rather than an icon font or an SVG sprite: the page
+   loads nothing from anywhere else, and a test asserts that. */
+.price-included li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.price-card .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.price-note {
+  margin: 16px 0 0;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.price-caveat {
+  max-width: 620px;
+  margin: 28px auto 0;
+  color: var(--ink-dim);
+  font-size: 15px;
 }

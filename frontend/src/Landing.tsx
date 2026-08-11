@@ -14,6 +14,31 @@
 
 export const DOWNLOAD_URL = "/download/breezefill-extension.zip";
 
+/**
+ * Where the Subscribe button sends a doctor.
+ *
+ * A Stripe Payment Link, set at build time the way `VITE_API_URL` is, so the
+ * link can be created, replaced or repriced in the Stripe dashboard without a
+ * code change. Until it is set the button points at the pricing section
+ * itself, which is inert rather than broken — a dead `href` on the one control
+ * that takes money is worse than a button that visibly does nothing yet.
+ */
+export const SUBSCRIBE_URL =
+  (import.meta.env.VITE_STRIPE_PAYMENT_LINK as string | undefined) || "#pricing";
+
+/** 200 SGD/month, stated once so the page and the tests cannot drift apart. */
+export const PRICE = { amount: "200", currency: "SGD", period: "month" };
+
+// What the subscription actually buys. Written as capability and support,
+// never as a change to how the software behaves: the refusals are the product
+// and they are identical at every price, including free.
+const INCLUDED = [
+  "Unlimited claims, on every insurer form the extension can read",
+  "The described forms — AIA and Great Eastern group hospital & surgical — plus any form it meets, read from the page",
+  "Updates as insurers change their forms, delivered automatically through Chrome",
+  "Support by email, answered by the person who wrote it",
+];
+
 const STEPS = [
   {
     n: "01",
@@ -80,6 +105,7 @@ export default function Landing() {
       <HowItWorks />
       <Privacy />
       <Coverage />
+      <Pricing />
       <Faq />
       <FinalCta />
       <Footer />
@@ -97,6 +123,7 @@ function Nav() {
       <div className="nav-links">
         <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
+        <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
       </div>
       <a className="btn btn-small" href="#/demo">
@@ -307,6 +334,50 @@ function Coverage() {
           </a>
         </div>
       </div>
+    </section>
+  );
+}
+
+function Pricing() {
+  return (
+    <section className="section pricing" id="pricing">
+      <p className="eyebrow">Pricing</p>
+      <h2>One price, per clinic.</h2>
+      <p className="section-lede">
+        No per-claim charge and no per-form charge. A claim you decide not to
+        submit costs nothing, and neither does a form it declines to fill.
+      </p>
+
+      <div className="price-card">
+        <p className="price">
+          <span className="price-amount">
+            {PRICE.currency} {PRICE.amount}
+          </span>
+          <span className="price-period">per {PRICE.period}</span>
+        </p>
+        <ul className="price-included">
+          {INCLUDED.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        <a className="btn btn-primary btn-large" href={SUBSCRIBE_URL}>
+          Subscribe
+        </a>
+        <p className="price-note">
+          Billed monthly, cancel any time. After checkout you are given a
+          licence key and the link to install from the Chrome Web Store.
+        </p>
+      </div>
+
+      {/* The honest caveat, in the pricing section rather than buried in a
+          FAQ. A doctor deciding whether to pay should read this before they
+          decide, not after. */}
+      <p className="price-caveat">
+        What it will not do does not change with the price: it still leaves a
+        question blank rather than guess at it, still asks you to confirm
+        anything it did not quote from your note, and still never presses
+        submit.
+      </p>
     </section>
   );
 }

@@ -69,7 +69,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 209, 165, 0.16);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
 }
 
 .demo-empty {
@@ -288,14 +288,14 @@
 }
 
 .demo-field output.written {
-  border-color: rgba(79, 209, 165, 0.5);
-  background: rgba(79, 209, 165, 0.07);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.07);
   animation: flash 0.5s ease;
 }
 
 @keyframes flash {
   from {
-    background: rgba(79, 209, 165, 0.28);
+    background: rgba(var(--accent-rgb), 0.28);
   }
 }
 
