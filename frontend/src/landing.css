@@ -875,3 +875,293 @@
   border-color: var(--line-strong);
   box-shadow: 0 1px 2px rgba(11, 31, 51, 0.04), 0 8px 24px rgba(11, 31, 51, 0.05);
 }
+
+/* The hero still, and the video ---------------------------------------------
+ *
+ * Both are frames the owner drops an asset into. The chrome around them is
+ * markup rather than part of the image, so a screenshot of the panel alone
+ * still reads as a browser without having to be captured with one.
+ */
+
+.shot-frame {
+  margin: clamp(40px, 6vw, 72px) auto 0;
+  max-width: 1000px;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--bg-card);
+  box-shadow: 0 24px 60px -30px rgba(11, 58, 102, 0.35);
+  text-align: left;
+}
+
+.shot-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfdff;
+}
+
+.shot-chrome .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e6ecf2;
+}
+
+.shot-chrome .url {
+  margin-left: 12px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.shot-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+/* The mock, when it stands in for a screenshot, must not also draw a frame. */
+.shot-frame .hero-visual {
+  margin: 0;
+  max-width: none;
+}
+
+.shot-frame .mock {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg-card);
+}
+
+.video-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.video-head p {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--ink-quiet);
+}
+
+.video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--bg-raise);
+  box-shadow: 0 30px 70px -36px rgba(11, 58, 102, 0.4);
+  display: grid;
+  place-items: center;
+}
+
+.video-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-placeholder {
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  color: var(--ink-quiet);
+  font-size: 14.5px;
+}
+
+.video-placeholder code {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* The scroll-driven fill ----------------------------------------------------
+ *
+ * Tall section, sticky panel. The height is what the animation is spread over,
+ * so shortening it makes the sequence run faster rather than removing steps.
+ */
+
+.scroll-demo {
+  position: relative;
+  height: 420vh;
+  background: linear-gradient(
+    180deg,
+    var(--bg) 0%,
+    var(--bg-raise) 22%,
+    var(--bg-raise) 78%,
+    var(--bg) 100%
+  );
+}
+
+.scroll-demo-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 0 clamp(16px, 5vw, 56px);
+}
+
+.scroll-demo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: clamp(24px, 5vw, 64px);
+  align-items: center;
+  width: 100%;
+  max-width: 1080px;
+}
+
+@media (max-width: 860px) {
+  .scroll-demo-grid {
+    grid-template-columns: 1fr;
+  }
+  /* The form is the point; the copy can go if there is no room for both. */
+  .scroll-demo-copy {
+    display: none;
+  }
+}
+
+.scroll-demo-copy h2 {
+  font-size: clamp(24px, 3.2vw, 38px);
+  max-width: 15ch;
+}
+
+.scroll-demo-copy > p {
+  margin: 16px 0 0;
+  color: var(--ink-dim);
+  max-width: 46ch;
+}
+
+.scroll-demo-bar {
+  margin-top: 28px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+.scroll-demo-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+
+.scroll-demo-count {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--ink-quiet);
+}
+
+.scroll-demo-form {
+  background: var(--bg-card);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px -34px rgba(11, 58, 102, 0.4);
+  overflow: hidden;
+}
+
+.scroll-demo-form-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfdff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scroll-demo-form-head .mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.scroll-demo-rows {
+  list-style: none;
+  margin: 0;
+  padding: 8px 20px 20px;
+}
+
+.scroll-demo-rows li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.scroll-demo-rows li:last-child {
+  border-bottom: none;
+}
+
+.scroll-demo-label {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-quiet);
+  margin-bottom: 6px;
+}
+
+.scroll-demo-value {
+  display: block;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 14.5px;
+  color: var(--ink);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+/* An empty row shows a bar rather than nothing, so the form reads as a form
+   before any of it is answered. */
+.scroll-demo-value i {
+  display: block;
+  height: 8px;
+  width: 45%;
+  border-radius: 4px;
+  background: var(--line-strong);
+  margin-top: 6px;
+}
+
+.scroll-demo-rows .is-filled .scroll-demo-value {
+  border-color: rgba(var(--ok-rgb), 0.45);
+  background: rgba(var(--ok-rgb), 0.07);
+}
+
+.scroll-demo-rows .is-asking .scroll-demo-value {
+  border-style: dashed;
+}
+
+.scroll-demo-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--ink-quiet);
+}
+
+.scroll-demo-rows .is-asking .scroll-demo-note {
+  color: var(--amber);
+}
+
+.scroll-demo-choices {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.scroll-demo-choices .choice {
+  padding: 5px 12px;
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  background: var(--bg-card);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+}
