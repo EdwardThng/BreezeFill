@@ -192,9 +192,34 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-09
+## Status as of 2026-08-10
 
 **512 tests pass**: 223 backend (1 skipped), 242 extension, 47 website.
+
+**Where the project is in one line: the product is built and deployed, and the
+only thing between it and doctors is the Chrome Web Store listing.** The
+extension is at `0.2.0`, the upload zip is built, and the submission is waiting
+on three screenshots.
+
+### The store submission (the current thread of work)
+
+| Step | State |
+|---|---|
+| Demographics filled on the live path | **Done 2026-08-09.** The functional gap that would have shown a reviewer an empty name box — see "What one path quietly broke" |
+| `optional_host_permissions` dropped | **Done 2026-08-09.** Never requested anywhere; the biggest single lever on review speed |
+| Privacy policy live and accurate | **Done.** `https://breezefill.com/privacy.html`, 200, `Last updated 9 August`, including the clause saying the third redaction pass is itself an AI call |
+| NRIC shape given to the sweep | **Done 2026-08-09.** Pass 3 is told the nine-character form; pass 2's regex stays tighter on purpose |
+| Version bumped to `0.2.0` | **Done 2026-08-10.** A store upload consumes a version number even when rejected |
+| Upload zip built | **Done 2026-08-10.** `breezefill-store-v0.2.0.zip`, 85 KB, 19 entries, manifest at root, gitignored. **Rebuild it rather than reusing one** — `scripts/` has no builder; the command is in the runbook and in Known gotchas |
+| Phase A — developer account, `privacy@breezefill.com` | **Done by the owner 2026-08-10** |
+| **Screenshots** | **The only outstanding blocker.** None taken. Needs a human at a browser: the side panel is Chrome UI, not page content, so no automation here can capture it — verified, a page screenshot's (0,0) is the top-left of the page. `scripts/store_screenshots.py` converts captures to exactly 1280×800 |
+| Listing copy, disclosures, justifications, test instructions | Written and ready to paste. **Disclose Website content** alongside PII and Health information — the `/map-live` path sends the page's question labels |
+
+Two things to hold onto while the review runs. **Production is part of the
+submission**: the reviewer's test hits `api.breezefill.com`, every push to
+`main` auto-deploys there, and a broken route during review reads as a broken
+extension. And **a new upload restarts the review clock**, so batch changes
+rather than shipping into the queue.
 
 | Piece | State |
 |---|---|
@@ -1791,27 +1816,31 @@ decision accepts, explicitly, is that **the extension has still never filled a
 real insurer form** (next steps item 1), so the first version in the store is
 one whose core path is proven only against RoboForm and synthetic fixtures.
 
-Before submitting: ~~a **privacy policy**~~ — written 2026-08-06 and **live as
-of 2026-08-08** at `https://breezefill.com/privacy.html` (verified 200, and it
-is static HTML so it does not depend on the React bundle rendering). Still
-outstanding, in the order they block:
+**Status 2026-08-10 — everything is done except the screenshots.** The full
+state is in the store-submission table under Status, above. Cleared since this
+was written: the privacy policy is live and accurate, the mailbox and developer
+account are done, `optional_host_permissions` is gone, the version is `0.2.0`
+and the upload zip is built.
 
-1. **A working mailbox at `privacy@breezefill.com`.** The policy publishes it
-   and the store form asks for a contact address; publishing one that bounces
-   is the kind of thing that gets found.
-2. **Listing assets** — at least one 1280×800 screenshot, a short and a long
-   description, and the **data-safety disclosures**. The disclosures must agree
-   with `privacy.html` line for line: the store asks the same questions and a
-   mismatch is a rejection, not a query.
-3. **Drop `optional_host_permissions: ["https://*/*"]` from
-   `manifest.json`.** Still declared, still never requested anywhere in the
-   code — verified 2026-08-08. A host permission for all of HTTPS is the single
-   biggest thing that turns a fast review into a slow one, and this one buys
-   nothing: the wizard question it was reserved for was answered No.
-4. **A justification string for every permission**, `activeTab`, `scripting`
-   and `sidePanel`, plus the single-purpose statement. Write these from the
-   refusals — "fills in place, never submits" is the honest description and it
-   is also the one that survives review.
+What is left, and it is one thing:
+
+1. **Screenshots — at least one, 1280×800, and none exist.** It needs a human
+   at a browser. The side panel is Chrome UI rather than page content, so
+   browser automation cannot capture it: a page screenshot's origin is the
+   top-left of the *page*, with no toolbar and no panel in frame, which also
+   means the toolbar icon cannot be clicked. Shoot the review step with the
+   source quotes visible — that is the product's whole argument — on a neutral
+   form with a synthetic note, never a real insurer's branded portal.
+   `scripts/store_screenshots.py` converts the captures to exactly 1280×800.
+2. **A justification string for every permission**, `activeTab`, `scripting`
+   and `sidePanel`, plus the single-purpose statement. Drafted; write these
+   from the refusals — "fills in place, never submits" is the honest
+   description and it is also the one that survives review.
+
+The **data-safety disclosures** must agree with `privacy.html` line for line;
+the store asks the same questions and a mismatch is a rejection, not a query.
+Tick PII, Health information **and Website content** — the third is the one
+that gets missed, and `/map-live` genuinely sends the page's question labels.
 
 Icons are done. Expect weeks rather than days: health data plus a permissions
 story means manual review, and a rejection restarts the clock.
