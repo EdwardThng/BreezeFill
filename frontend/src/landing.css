@@ -118,9 +118,19 @@
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: rgba(246, 250, 253, 0.82);
   backdrop-filter: blur(10px);
   z-index: 10;
+}
+
+/* Layout is shared; the ground is not. Demo.tsx renders the same `.nav`, and
+   a translucent slab has to be tinted to whatever it sits over — the light
+   value alone put a pale bar across the top of the dark demo page. */
+.landing .nav {
+  background: rgba(246, 250, 253, 0.82);
+}
+
+.demo .nav {
+  background: rgba(8, 11, 15, 0.85);
 }
 
 .brand {
