@@ -127,9 +127,14 @@ class TestLabelledLines:
         # it is never an insurer. It is deliberately absent from LABELS.
         parsed = parse_demographics("Plan: review 2/52 if no better\n")
         assert parsed.insurer is None
-        assert parsed.model_dump(exclude={"sources"}) == {
-            k: None for k in parsed.model_dump(exclude={"sources"})
+        # `sources` and `choices` are metadata about the parse, not values the
+        # form can be filled from, so the "nothing was found" assertion is
+        # about everything else.
+        meta = {"sources", "choices"}
+        assert parsed.model_dump(exclude=meta) == {
+            k: None for k in parsed.model_dump(exclude=meta)
         }
+        assert parsed.choices == {}
 
     def test_prose_containing_a_colon_is_not_a_label(self) -> None:
         parsed = parse_demographics(
@@ -479,6 +484,9 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         # ...but a labelled region is different: both candidates are stated to
         # be the date of birth, so the doctor is choosing between two claims
         # the note actually makes.
+        # ISO, not as written: the panel's date input holds nothing else, and
+        # a JS copy of the day-first rule that drifted from the Python one is
+        # exactly the leak `parse_date` exists to prevent.
         parsed = parse_demographics("DOB 14/03/1978 or 15/03/1978\n")
         assert parsed.dob is None
-        assert parsed.choices["dob"] == ["14/03/1978", "15/03/1978"]
+        assert parsed.choices["dob"] == ["1978-03-14", "1978-03-15"]

@@ -179,6 +179,21 @@ class ParsedDemographics(BaseModel):
     # and so a future panel can mark guesses differently from labelled values.
     sources: dict[str, str] = {}
 
+    # field -> the candidates found where the parser refused BECAUSE there was
+    # more than one. Never populated for a field that resolved, and never for
+    # a field with no shape.
+    #
+    # The distinction this carries is the whole point: "the note does not say"
+    # and "the note says two things and nothing here can choose between them"
+    # both produced an empty box, and only the first of them should. A blank
+    # the doctor cannot account for reads as the product failing to look.
+    #
+    # It is emphatically NOT a ranking. Nothing decides that a mobile beats a
+    # landline or that the first match wins — the refusal to guess is
+    # unchanged, and all that travels is the evidence behind it, to the one
+    # person who can settle it.
+    choices: dict[str, list[str]] = {}
+
 
 def _normalise_label(raw: str) -> str:
     return re.sub(r"[^a-z]", "", raw.lower())
@@ -390,42 +405,74 @@ def _labelled_anywhere(line: str) -> dict[str, str]:
     """
     labels = _label_positions(line)
     found: dict[str, str] = {}
+    choices: dict[str, list[str]] = {}
 
     for index, (_, end, field) in enumerate(labels):
         # The value runs to the next label, or to the end of the line.
         stop = labels[index + 1][0] if index + 1 < len(labels) else len(line)
         region = line[end:stop]
 
-        candidates = {m.group(0).strip() for m in SHAPED_FIELDS[field].finditer(region)}
-        if len(candidates) != 1:
-            continue
-        raw = candidates.pop()
+        candidates = _shaped_candidates(field, SHAPED_FIELDS[field], region)
+        if len(candidates) == 1:
+            found.setdefault(field, candidates[0])
+        elif len(candidates) > 1:
+            # Unchanged: nothing is chosen here. What changes is that the
+            # candidates survive, so the panel can ask instead of showing a
+            # blank the doctor cannot account for.
+            choices.setdefault(field, candidates)
 
-        if field == "nric":
-            cleaned = raw.replace(" ", "").upper()
-            if NRIC_PATTERN.fullmatch(cleaned):
-                found.setdefault(field, cleaned)
-        elif field == "dob":
-            iso = parse_date(raw)
-            if iso:
-                found.setdefault(field, iso)
-        else:
-            found.setdefault(field, raw)
-
-    return found
+    return found, choices
 
 
-def _sole_match(pattern: re.Pattern[str], text: str) -> str | None:
-    """A shape found in unlabelled prose, but only when there is exactly one
-    candidate. Two distinct phone numbers in a note (the patient's and the
-    clinic's, which sits under the doctor's signature) means neither is safe to
-    assume, so neither is returned."""
-    matches = {m.group(0).strip() for m in pattern.finditer(text)}
-    return matches.pop() if len(matches) == 1 else None
+def _all_matches(pattern: re.Pattern[str], text: str) -> list[str]:
+    """Distinct matches, in the order the note wrote them.
+
+    Ordered rather than a set because these reach the doctor as a list to
+    choose from, and a list of their own note's values should read the way
+    their note does. Deduplicated because the same number written twice is one
+    candidate, not two.
+    """
+    seen: list[str] = []
+    for match in pattern.finditer(text):
+        value = match.group(0).strip()
+        if value and value not in seen:
+            seen.append(value)
+    return seen
 
 
-def _sole_address(text: str) -> str | None:
-    """The line carrying a Singapore postal code, when exactly one line does.
+def _normalised(field: str, raw: str) -> str | None:
+    """One raw match, in the form the field actually holds, or None if the
+    shape matched but the value does not survive validation."""
+    if field == "nric":
+        cleaned = raw.replace(" ", "").upper()
+        return cleaned if NRIC_PATTERN.fullmatch(cleaned) else None
+    if field == "dob":
+        # ISO, because that is what the field holds and what the panel's date
+        # input accepts. A candidate offered to the doctor has to be a value
+        # they can pick, not a string someone still has to convert.
+        return parse_date(raw)
+    return raw
+
+
+def _shaped_candidates(
+    field: str, pattern: re.Pattern[str], text: str
+) -> list[str]:
+    """Every distinct value of `field`'s shape in `text`, ready to use.
+
+    Deduplicated AFTER normalising, so `S8012345D` written once in each case
+    is one candidate rather than two. One candidate is the value; more than
+    one is a question for the doctor; none is a genuine blank.
+    """
+    out: list[str] = []
+    for raw in _all_matches(pattern, text):
+        value = _normalised(field, raw)
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
+def _address_lines(text: str) -> list[str]:
+    """Every line carrying a Singapore postal code, in order.
 
     The same rule as `_sole_match`, with one difference that matters: for every
     other shaped field the shape *is* the value, and here it is only the
@@ -436,20 +483,19 @@ def _sole_address(text: str) -> str | None:
     Two candidates yields neither, for the reason the phone rule does: a note
     carries the clinic's own address under the doctor's signature about as
     often as it carries its phone number, and writing that onto a claim as the
-    patient's is the failure this module exists to avoid.
+    patient's is the failure this module exists to avoid. The caller decides —
+    one line is the address, more than one is a question for the doctor.
     """
-    codes = {m.group(0) for m in POSTAL_PATTERN.finditer(text)}
-    if len(codes) != 1:
-        return None
-    code = codes.pop()
-
+    lines: list[str] = []
     for line in _logical_lines(text):
-        if code not in line:
+        if not POSTAL_PATTERN.search(line):
             continue
         # A label with no colon never reached LABELLED_LINE, so it is still
         # attached. It introduces the address; it is not part of it.
-        return _ADDRESS_LABEL_PREFIX.sub("", line.strip()).strip()
-    return None
+        cleaned = _ADDRESS_LABEL_PREFIX.sub("", line.strip()).strip()
+        if cleaned and cleaned not in lines:
+            lines.append(cleaned)
+    return lines
 
 
 def parse_demographics(text: str) -> ParsedDemographics:
@@ -461,11 +507,17 @@ def parse_demographics(text: str) -> ParsedDemographics:
     text = str(text or "")
     values: dict[str, str] = {}
     sources: dict[str, str] = {}
+    choices: dict[str, list[str]] = {}
 
     def record(field: str, value: str, source: str) -> None:
         if field not in values and value:
             values[field] = value
             sources[field] = source
+
+    def offer(field: str, candidates: list[str]) -> None:
+        """More than one candidate: hand them over rather than dropping them."""
+        if field not in choices and len(candidates) > 1:
+            choices[field] = candidates
 
     for line in _logical_lines(text):
         match = LABELLED_LINE.match(line)
@@ -496,23 +548,37 @@ def parse_demographics(text: str) -> ParsedDemographics:
     # Runs second so an explicitly labelled line always wins, and only ever
     # fills fields still empty.
     for line in _logical_lines(text):
-        for field, value in _labelled_anywhere(line).items():
+        line_found, line_choices = _labelled_anywhere(line)
+        for field, value in line_found.items():
             record(field, value, "labelled-inline")
+        for field, candidates in line_choices.items():
+            offer(field, candidates)
 
     # Whatever the labels did not supply, and only where a shape is unique.
     # Not the name (no shape), and not the date of birth (a note is full of
-    # dates, so the shape cannot tell which one is a birth date).
-    if "nric" not in values:
-        found = _sole_match(NRIC_PATTERN, text)
-        if found:
-            record("nric", found.replace(" ", "").upper(), "sole-match")
-    if "phone" not in values:
-        found = _sole_match(PHONE_IN_TEXT, text)
-        if found:
-            record("phone", found, "sole-match")
-    if "address" not in values:
-        found = _sole_address(text)
-        if found:
-            record("address", found, "sole-match")
+    # dates, so the shape cannot tell which one is a birth date — and a list of
+    # every date in the note would invite the doctor to pick a consultation
+    # date as a birth date, which is why `dob` is offered as a choice only from
+    # a region a label already said was a date of birth).
+    for field, pattern in (("nric", NRIC_PATTERN), ("phone", PHONE_IN_TEXT)):
+        if field in values:
+            continue
+        candidates = _shaped_candidates(field, pattern, text)
+        if len(candidates) == 1:
+            record(field, candidates[0], "sole-match")
+        else:
+            offer(field, candidates)
 
-    return ParsedDemographics(**values, sources=sources)
+    if "address" not in values:
+        candidates = _address_lines(text)
+        if len(candidates) == 1:
+            record("address", candidates[0], "sole-match")
+        else:
+            offer("address", candidates)
+
+    # A field that resolved is not also a question. An earlier pass may have
+    # answered something a later one found two candidates for — the value
+    # wins, exactly as `record` makes the first one win.
+    choices = {f: c for f, c in choices.items() if f not in values}
+
+    return ParsedDemographics(**values, sources=sources, choices=choices)
