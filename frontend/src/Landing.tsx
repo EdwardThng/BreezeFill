@@ -43,18 +43,18 @@ const INCLUDED = [
 const STEPS = [
   {
     n: "01",
-    title: "Paste the consultation",
-    body: "One box, in a side panel next to the insurer's form. Paste the note exactly as it sits in your CMS — patient details and all. Nothing is typed twice.",
+    title: "Read the form in front of you",
+    body: "Every question on the insurer's page becomes something to answer — matched by the wording of the question, not by the page's code, so a redesign usually changes nothing. Where BreezeFill knows the form, it uses the instruction a colleague would give instead of the question as the page happens to word it.",
   },
   {
     n: "02",
-    title: "Check what it proposes",
-    body: "Every value arrives with where it came from: quoted from the note, inferred, or not found. Anything not quoted directly needs your explicit click before it can be written.",
+    title: "Propose one answer, with its source",
+    body: "Each value arrives quoted from your note, marked as inferred, or left as not found. Where the note says two things — two phone numbers, two policy numbers — it fills neither and asks which one is the patient's.",
   },
   {
     n: "03",
-    title: "It fills the form in place",
-    body: "Values land in the insurer's own form, in your browser. You read it, sign it and submit it yourself — BreezeFill never presses submit.",
+    title: "Nothing is written until you confirm",
+    body: "Anything not quoted directly from your note needs an explicit click. Then the values go into the insurer's own form and stop: it never overwrites an answer you already gave, never presses a button, and never submits.",
   },
 ];
 
@@ -137,25 +137,33 @@ function Nav() {
 function Hero() {
   return (
     <header className="hero">
-      <p className="eyebrow">For Singapore GPs</p>
+      <p className="badge">Chrome Web Store listing coming soon</p>
       <h1>
-        Insurance forms, filled from
+        You already wrote this.
         <br />
-        the notes you already wrote.
+        Once.
       </h1>
       <p className="lede">
-        BreezeFill sits beside the insurer's form in your browser. Paste the
-        consultation once and it proposes each answer with its source, for you
-        to check and sign. It fills. You submit.
+        Paste the consultation into a panel beside the insurer's form.
+        BreezeFill reads the questions on that form, proposes an answer to each
+        one with the line from your note that supports it, and writes in only
+        what you confirm. It never submits.
       </p>
       <div className="cta-row">
         <a className="btn btn-primary btn-large" href={DOWNLOAD_URL} download>
           Download for Chrome
         </a>
         <a className="btn btn-ghost btn-large" href="#/demo">
-          See it work →
+          Watch it fill a form
         </a>
       </div>
+      {/* The three things a doctor most needs to be true, and all three are.
+          The design put "Nothing leaves your browser" here, which is false —
+          the paste goes to the backend to be scrubbed. What is true, and is
+          the stronger claim anyway, is that the MODEL never sees identifiers. */}
+      <p className="trustline">
+        No sign-in · Identifiers never reach the model · Nothing is stored
+      </p>
       <p className="fineprint">
         Not on the Chrome Web Store yet — unzip it and load it from
         <code> chrome://extensions</code>. Takes about a minute.
@@ -237,7 +245,16 @@ function Marquee() {
 function Problem() {
   return (
     <section className="section problem">
-      <h2>The form is not the hard part. Retyping is.</h2>
+      <p className="eyebrow">A new patient, the same form, again</p>
+      <h2>Nobody went to medical school to fill forms.</h2>
+      <p className="section-lede">
+        {/* The design compared this to password managers. That invites the
+            comparison you lose — they are free and genuinely local. The thing
+            BreezeFill competes with is retyping. */}
+        Every claim form asks the same clinical facts you already wrote, in a
+        different order, with different wording, on a page that changes without
+        warning.
+      </p>
       <div className="two-col">
         <div>
           <h3>Today</h3>
@@ -415,7 +432,8 @@ function Faq() {
 function FinalCta() {
   return (
     <section className="section final-cta">
-      <h2>Put it beside your next claim form.</h2>
+      <p className="eyebrow">Ready to start</p>
+      <h2>Your forms, filled and checked.</h2>
       {/* The offer and the price in the same breath. A free download sitting
           silently next to a priced plan asks the reader to work out whether
           they are about to be charged, and that is the one thing a page taking
@@ -449,6 +467,9 @@ function Footer() {
         <Logo />
         <span>BreezeFill</span>
       </div>
+      <p className="footer-line">
+        © 2026 BreezeFill · It fills. You check. You submit.
+      </p>
       <p>
         Assists with form completion. The reviewing doctor remains responsible
         for the accuracy of every submitted form.
