@@ -62,7 +62,7 @@ uploading last attempt's package by mistake.
 | Dashboard field | File | State |
 |---|---|---|
 | Package | `breezefill-store-v0.2.1.zip` (repo root) | Rebuilt 2026-08-11: 13 files, 78 KB, verified against the current build |
-| Store icon, 128×128 | `assets/logo/chrome-store-listing-128.png` | Ready |
+| Store icon, 128×128 | `assets/logo/chrome-store-listing-128.png` | Ready. Upload it even though the manifest declares a 128 icon too — the manifest's is what Chrome draws in the browser, this is what the store page shows. Same file, two surfaces |
 | Small promo tile, 440×280 | `assets/logo/chrome-store-promo-440x280.png` | Ready. **Required** — the listing cannot be submitted without it |
 | Screenshots, 1280×800 | `~/Documents/breezefill-store/store-1280x800-*.png` | Four, ready |
 | Marquee promo tile, 1400×560 | — | Optional. Skip |
@@ -78,23 +78,31 @@ follow in step order (`3.45.30`, `3.45.38`, `3.46.57`).
 
 ## 2. Store listing tab
 
-**Item name**
+### Two fields are already filled, and you cannot edit them here
 
-```
-BreezeFill
-```
+The name and the short description come from `manifest.json`, not from this
+tab. Chrome's own guidance is blunt about it: *"After uploading your item, you
+won't be able to edit the metadata of your manifest in the developer
+dashboard."* Expect both to appear pre-filled and greyed out — that is the
+manifest doing its job, not a duplicate to resolve.
 
-**Summary** (the dashboard enforces a short limit, ~132 characters; this is
-within it, but trim the last sentence first if it complains)
+| Field | Comes from | Current value |
+|---|---|---|
+| Item name | `manifest.name` | `BreezeFill` |
+| Short description | `manifest.description` | `Fills insurer claim forms from a clinical note. Fills in place; never submits.` — 78 chars, limit 132 |
 
-```
-Turns a pasted consultation note into a filled insurer claim form. You review every answer. It fills in place and never submits.
-```
+Both are accurate as they stand, so leave them. Changing either means editing
+`extension/manifest.json`, bumping the version, rebuilding the zip and
+uploading again — the short description is not worth that, and the name
+certainly is not.
+
+### What you do fill in here
 
 **Category:** Workflow & Planning
 **Language:** English
 
-**Description**
+**Description** — the long one, and the only text field on this tab that is
+actually yours to write
 
 ```
 BreezeFill helps a clinician fill in an insurer's medical claim form without retyping the consultation.
