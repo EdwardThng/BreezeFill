@@ -207,7 +207,7 @@ on three screenshots.
 |---|---|
 | Demographics filled on the live path | **Done 2026-08-09.** The functional gap that would have shown a reviewer an empty name box — see "What one path quietly broke" |
 | `optional_host_permissions` dropped | **Done 2026-08-09.** Never requested anywhere; the biggest single lever on review speed |
-| Privacy policy live and accurate | **Done.** `https://breezefill.com/privacy.html`, 200, `Last updated 9 August`, including the clause saying the third redaction pass is itself an AI call |
+| Privacy policy live and accurate | **Done.** `https://breezefill.com/privacy`, 200, `Last updated 9 August`, including the clause saying the third redaction pass is itself an AI call |
 | NRIC shape given to the sweep | **Done 2026-08-09.** Pass 3 is told the nine-character form; pass 2's regex stays tighter on purpose |
 | Version bumped to `0.2.0` | **Done 2026-08-10.** A store upload consumes a version number even when rejected |
 | Upload zip built | **Done 2026-08-10.** `breezefill-store-v0.2.0.zip`, 85 KB, 19 entries, manifest at root, gitignored. **Rebuild it rather than reusing one** — `scripts/` has no builder; the command is in the runbook and in Known gotchas |
@@ -564,7 +564,7 @@ needed no change at all, being same-origin throughout (`api.ts` resolves
 
 *Why not announce.* Written 2026-08-06, when three of four blockers stood.
 **Two have since cleared** and the count is now one: the plan is Pro
-(2026-08-06), and the privacy policy is live at `/privacy.html` (2026-08-08).
+(2026-08-06), and the privacy policy is live at `/privacy` (2026-08-08).
 Inference is still not SG-region, but that stopped being an announce blocker
 when the owner put real notes in scope on 2026-08-06 — the policy discloses the
 transfer instead of forbidding the data.
@@ -590,7 +590,7 @@ Nothing else changes. `robots.txt` stays as it is.
 
 *State as of 2026-08-08 — **DNS is live**.* Both `breezefill.com` and
 `api.breezefill.com` resolve to Vercel (`216.150.1.193` / `216.150.16.193`) and
-both answer: `/health`, `/forms`, `/privacy.html`, the extension download and
+both answer: `/health`, `/forms`, `/privacy`, the extension download and
 `POST /map` were all exercised over plain `curl`. The extension's default
 backend now points at a host that exists, which is what unblocked the
 "Demoable?" row.
@@ -612,7 +612,9 @@ extension cannot be edited when they do. Do not restate the domain rationale as
 "the old URL broke". It did not.
 
 **A privacy policy exists as of 2026-08-06**: `frontend/public/privacy.html`,
-served at `/privacy.html`, linked from the landing footer. Static HTML rather
+served at `/privacy` (`cleanUrls` in `vercel.json` drops the extension, and
+the old `/privacy.html` redirects rather than breaking), linked from the
+landing footer. Static HTML rather
 than a `#/` route on purpose — it is the document a Chrome Web Store reviewer
 and a regulator have to be able to read, so it must not depend on the React
 bundle rendering. **Live and serving 200 as of 2026-08-08**, once DNS landed.
