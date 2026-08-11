@@ -360,9 +360,12 @@ function Footer() {
         for the accuracy of every submitted form.
       </p>
       {/* A real path, not a #/ route: the policy is served as static HTML so
-          that it reads even if this bundle does not. See privacy.html. */}
+          that it reads even if this bundle does not. The file is
+          public/privacy.html; `cleanUrls` in vercel.json drops the extension,
+          which is why this links to /privacy and why that is the URL given to
+          the Chrome Web Store. */}
       <p>
-        <a href="/privacy.html">Privacy policy</a>
+        <a href="/privacy">Privacy policy</a>
       </p>
     </footer>
   );
