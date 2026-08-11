@@ -1429,14 +1429,34 @@ Whenever the sample note changes, run it through the parser rather than reading
 it: `parse_demographics(SAMPLE_NOTE)` in `backend/demographics.py`.
 
 **What it actually yields today, so nobody reads the list above as a
-promise: `nric` and `dob`, and nothing else.** That is correct and deliberate.
-The sample deliberately writes two phone numbers (`9123 4567 / 6123 4567`) and
-two policy variants (`GHS-88213004 or GH-88213004`), so both fields hit the
-two-candidates refusal — the sample demonstrates the refusals as much as the
-finds, and `test_two_values_behind_one_label_yields_neither` asserts it. The
-name is never guessed from anything and the doctor typed it at step 1. So the
-required pair is satisfied and the flow completes; the four values named in the
-paragraph above are what the *design spec* shows, not what the parser returns.
+promise: `nric`, `dob` and `address`, and nothing else.** That is correct and
+deliberate. The sample deliberately writes two phone numbers
+(`9123 4567 / 6123 4567`) and two policy variants (`GHS-88213004 or
+GH-88213004`), so both fields hit the two-candidates refusal — the sample
+demonstrates the refusals as much as the finds, and
+`test_two_values_behind_one_label_yields_neither` asserts it. The name is never
+guessed from anything and the doctor typed it at step 1. So the required pair
+is satisfied and the flow completes; the four values named in the paragraph
+above are what the *design spec* shows, not what the parser returns.
+
+`address` was added on 2026-08-11 and is worth knowing about, because it was
+absent for the wrong reason. The sample writes it bare on its own line
+(`Blk 118 Bishan St 12 #07-21, S570118`), and the label-anywhere pass excluded
+address on the grounds that it "has no shape" — which is true of a name and
+was never true of an address ending in a postal code. `_classify_segment` had
+been using `POSTAL_PATTERN` to identify an address inside a compound patient
+line the whole time. `_sole_address` now applies the same rule to an address
+on its own line, with the same two-candidates refusal the phone has, because a
+note carries the clinic's address under the signature about as readily as its
+phone number.
+
+**It was never only a blank box.** Redaction pass 1 removes the address only
+when the record carries one (`redaction.py:154`), and pass 2's patterns cover
+NRIC, phone and email — there is no postal-code pattern. So an address the
+parser missed was still in the text when it reached the model, caught only by
+the pass-3 sweep, which is itself an API call. Anything else the parser
+silently declines to find has the same property: check whether pass 2 covers
+it before calling a miss cosmetic.
 
 **Duplicate PDF field names across pages.** Names like `Policy No` and
 `Company Name` repeat on pages 2 and 3 of the AIA form. When adding fields,
@@ -1942,10 +1962,30 @@ obvious in a render and invisible in a report.
 `ap-southeast-1`. Until then: synthetic notes only.
 
 **9. Smaller, worth doing once the pilot has pasted real CMS exports.** The
-label synonyms in `demographics.py` are a guess at what ClinicAssist emits, and
-the parser cannot find an insurer implied only by a policy prefix (`GHS-`,
-`GE-`, `PRU-`) — deriving it from the selected schema's `insurer` would be
-deterministic and is probably right.
+label synonyms in `demographics.py` are a guess at what ClinicAssist emits.
+
+~~The parser cannot find an insurer implied only by a policy prefix~~ — **done
+2026-08-11, and the owner's call was to take it from the form rather than from
+the note.** `assemble_claim` falls back to the schema's own `insurer` when the
+record carries none. The reasoning is worth keeping, because it is the one
+demographic where the form knows better than the paste: a note names its
+insurer in passing if at all (`(AIA Singapore)` after the policy number) while
+the schema states it outright, and the insurer that belongs on a claim form is
+the one whose form it is. A note naming a different insurer than the form being
+filled is answering a question nobody asked.
+
+Two properties to preserve. It **only ever fills a blank** — a doctor who typed
+an insurer has decided, and this is a fallback rather than a correction. And a
+**live schema carries no `insurer`**, so on the schema-free path the box stays
+blank and the doctor types one line; closing that would mean the panel sending
+the best-fitting schema's insurer alongside the page's controls, which is a
+change to the request shape and was not made.
+
+The rejected alternative, so it is not re-opened: scanning the note for known
+insurer names. It puts world knowledge into a module that is otherwise pure
+shape, the list goes stale as insurers rename and merge, and a demographic
+reaches the doctor **already green** — so a false positive is a wrong value
+that bypasses both the model and the review confirm.
 
 **10. Deferred.** Sweeping the `FORMFILL_*` environment variables to
 `BREEZEFILL_*`; the naming note at the top of this file explains why it has not
