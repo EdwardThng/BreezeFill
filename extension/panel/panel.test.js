@@ -129,6 +129,24 @@ const $ = (id) => document.getElementById(id);
 /** Let the microtask queue drain, so an awaited fetch settles. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
+/**
+ * Shut the details drawer, and reset the flag that lets it reopen itself.
+ *
+ * Any test asserting the drawer OPENS has to come through here first. The
+ * drawer is `<details ... open>` in panel.html, so `expect(open).toBe(true)`
+ * on a freshly loaded panel passes whatever the code does — it was already
+ * open. Clearing the paste is what resets `openedForMissing` (see
+ * `scheduleParse`), and without that reset the drawer deliberately stays shut,
+ * because it opens itself once per paste and not once per keystroke.
+ *
+ * The sequence is also the real one: the doctor closed it, then pasted a note.
+ */
+function shutDrawer() {
+  $("paste").value = "";
+  $("paste").dispatchEvent(new Event("input", { bubbles: true }));
+  $("found").open = false;
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   routes = {
@@ -310,6 +328,7 @@ describe("reading the paste", () => {
   test("the drawer opens itself when something required is missing", async () => {
     const panel = loadPanel();
     await settle();
+    shutDrawer();
 
     // Date of birth is required and this response has none: there is no
     // pattern rule for a bare date, so a missing one stays in the text sent
@@ -1360,16 +1379,9 @@ describe("choosing between candidates", () => {
     // Nothing required is missing here, so the old rule would have left it
     // shut and the question unseen.
     //
-    // The drawer starts open, so asserting it is open proves nothing on its
-    // own — this clears the paste first, which is what resets the once-per-
-    // paste flag, then shuts the drawer and pastes afresh. That is the real
-    // sequence: the doctor closed it, then pasted a new note.
     const panel = loadPanel();
     await settle();
-
-    $("paste").value = "";
-    $("paste").dispatchEvent(new Event("input", { bubbles: true }));
-    $("found").open = false;
+    shutDrawer();
 
     routes["/parse"] = () => respond(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
