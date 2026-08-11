@@ -137,7 +137,7 @@ PRIVACY
 - Nothing is stored. The service keeps no record of a claim after the request that carried it.
 - The extension requests no access to any website until you click its icon on the tab you want filled, and it asks for no storage permission — nothing is written to disk.
 
-Full privacy policy: https://breezefill.com/privacy.html
+Full privacy policy: https://breezefill.com/privacy
 
 BreezeFill assists with completing a form. The reviewing clinician remains responsible for the accuracy of everything submitted.
 ```
@@ -217,7 +217,7 @@ the wording on screen differs from what is described here, believe the screen.
 **Privacy policy URL**
 
 ```
-https://breezefill.com/privacy.html
+https://breezefill.com/privacy
 ```
 
 The listing's disclosures and that page must agree line for line. The store
