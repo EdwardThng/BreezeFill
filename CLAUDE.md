@@ -1,8 +1,166 @@
 # BreezeFill — working notes for Claude
 
+Chrome MV3 extension + FastAPI backend that maps doctor consultation notes to
+Singapore insurance claim forms. Users are private-practice GPs filling forms
+between patients — speed and correctness both matter, and **a wrong autofill is
+worse than an empty field.**
+
+---
+
+# HARD RULES
+
+**These are mandatory on every change. Do not violate them without asking
+first.** Everything below this block is context, history and reasoning; this
+block is the part that constrains what you may do.
+
+## Hard invariants — never violate these without asking me first
+
+- **Redaction runs before anything leaves the backend.** Patient identifiers
+  must never reach the Claude API. If a change touches the request path to the
+  model, state explicitly in your summary how redaction is preserved.
+- **No PHI in logs, traces, error messages, or test fixtures.** Use synthetic
+  data in tests. Never paste a real note into a fixture file.
+- **Demographic fields are deterministic, not inferred.** Name, NRIC, DOB,
+  policy number and similar are mapped by explicit rules. Do not route them
+  through the model, and do not "improve" them by adding LLM fallback.
+- **The backend is stateless across forms.** No server-side session state
+  carrying data between forms. If you think you need it, stop and ask.
+- **Field assignment is a scored assignment problem with an ambiguity margin.**
+  Every field is scored against every control; a field whose best control beats
+  its runner-up by less than `TIE_MARGIN` is refused as ambiguous rather than
+  guessed; strongest matches claim their control first, and a field whose
+  control is already taken is refused rather than displacing it. Two guards
+  then gate the whole plan: `MIN_MATCHED` and `MIN_MATCH_RATE`, both, never
+  either. Do not replace this with per-field independent matching that ignores
+  collisions, and do not drop the margin or either guard to raise the fill rate.
+  <!-- The invariant as first written said "Hungarian algorithm". There is no
+  Hungarian assignment in this repo and never has been: `locate()` in
+  extension/fill/locate.js ranks fields by best score and assigns greedily in
+  that order, with TIE_MARGIN and a taken-set. Corrected to describe the real
+  mechanism, because a rule in this section that misnames the code sends the
+  next reader looking for an implementation that does not exist. If global
+  optimal assignment is actually wanted, that is a change to make deliberately,
+  not a rule to assert. -->
+- **MV3 constraints are real.** Service worker is non-persistent — no
+  long-lived in-memory state, no remote code execution, no `eval`.
+- **The extension never submits a form**, never overwrites an answer already in
+  a control, and never clicks a page button. It fills in place and stops.
+- **No `chrome.storage`, and the permission is not requested.** Patient notes
+  must not reach disk. State lives in the side panel's memory.
+
+## Layout
+
+```
+extension/            MV3 extension. No content_scripts, no host permissions
+  panel/              The doctor's surface. Progressive steps; holds the claim
+                      in memory only
+  fill/locate.js      Scores schema fields against live controls; TIE_MARGIN,
+                      MIN_MATCHED, MIN_MATCH_RATE all live here
+  fill/apply.js       Writes values. Never overwrites, never submits
+  learn/dump.js       Label resolution + scrubber. INJECTED AT RUNTIME — ships,
+                      despite reading like a console tool
+  content/fill.js     The only code that touches the insurer's page
+backend/
+  main.py             Every route, all stateless. `_review_rows` is the shared
+                      redact -> map -> assemble middle
+  redaction.py        Three passes. Pass 1 needs the demographics FIRST — that
+                      ordering is the privacy model
+  demographics.py     Paste -> demographic fields, patterns only, never a model.
+                      Also owns the label alias table both directions share
+  mapping.py          Structured-output call, FormSchema/FormField, assembly
+  schemas/*.json      The form bank
+frontend/src/         Landing, Demo (talks to nothing), ClaimApp at #/app
+```
+
+## Commands
+
+```bash
+# Run backend (needs the key in THIS shell; without it POST /map returns 503)
+export ANTHROPIC_API_KEY=...        # never via the `!` prefix: it is logged
+.venv/bin/python -m uvicorn main:app --app-dir backend --port 8000
+
+# Run tests — THREE suites, three runners. All three must pass.
+.venv/bin/python -m pytest -q                 # backend
+npm test                                      # extension (from repo root)
+cd frontend && npm test                       # website
+
+# Load extension: chrome://extensions -> Developer mode -> Load unpacked
+# -> select extension/. Reload after every change; reopen the side panel, and
+# reload the insurer tab too.
+```
+
+There is no typecheck or lint step configured — do not invent one. Node comes
+from nvm and is invisible to non-interactive shells; see the toolchain note far
+below for the `PATH` line that fixes it. The fuller command list, including
+Vercel and the overlay calibration tools, is in **Commands** near the end.
+
+## How to work
+
+**Verify before claiming done.** Never report something as working without
+running it. "Done" means: relevant tests green, and for user-facing flows,
+actually exercised end to end. If you skipped a step or a test failed, say so
+plainly and show the output. Do not summarize a failure as a success.
+
+**Tests first for anything in the mapping or redaction path.** Write the
+failing test, watch it fail, then implement. When fixing a bug, reproduce it
+with a failing test before touching the fix. Elsewhere (UI, glue code) use
+judgment.
+
+**Small diffs.** Change what I asked for and nothing else. No opportunistic
+refactors, no renaming, no reformatting untouched files. If you spot something
+worth fixing, mention it at the end instead of doing it.
+
+**Ask before expanding scope.** New dependency, new service, new architectural
+pattern, or a change touching more than ~3 files that I didn't anticipate:
+propose it first with the tradeoff, and wait.
+
+**Edit, don't recreate.** Prefer modifying existing files over creating new
+ones. Don't create `foo_v2.py` alongside `foo.py`.
+
+**When the request is ambiguous, ask one question.** One, not five — the most
+load-bearing one. Guessing and building the wrong thing costs more than asking.
+
+**Commit and push after every file change.** Not batched at the end — the owner
+reviews as the work lands, so an unpushed change is invisible. Many small
+commits is the intended outcome, and an intermediate commit that does not pass
+is acceptable. See **Working style** at the end of this file.
+
+## Known gotchas
+
+*Append to this every time I correct you. One line each, what to do.*
+
+- Use `git ls-files -z | xargs -0 grep` for repo-wide greps — design-doc
+  filenames contain spaces and the plain form silently breaks on them.
+- On a new machine run `git var GIT_AUTHOR_IDENT` before committing: Vercel
+  refuses to build a commit whose author email is not a real GitHub account,
+  and the CLI reports it only as `UNKNOWN`.
+- Derive the node path (`export PATH="$HOME/.nvm/versions/node/$(ls ~/.nvm/versions/node | tail -1)/bin:$PATH"`)
+  before any `npm` call — nvm loads for interactive shells only.
+- After moving machines, delete and rebuild both `.venv` and every
+  `node_modules` — npm installs platform-specific binaries and the failure
+  reads as a broken build.
+- Read a value back after writing it to a control; one that rejects a value
+  empties itself silently and reports as filled.
+- Build the Chrome Web Store zip from *inside* `extension/` — the
+  `/download` zip nests under a folder and the store rejects it.
+- Run a changed sample note through `parse_demographics` rather than reading
+  it; the panel's sample is held to what the parser actually returns.
+- Check `field.options` before `field.type` anywhere that branches on a
+  field's shape — an option-answered question is often a checkbox.
+- Assert the positive case alongside every refusal: a refusal is not evidence
+  of a working rule, and both look identical to a test that only checks `None`.
+- Take the Vercel DNS target from `vercel domains inspect`, not from memory or
+  from this file — the anycast range moved off `76.76.21.21`.
+- Leave `chrome.sidePanel.setPanelBehavior()` uncalled; it throws `No SW` from
+  every lifecycle event and the default is already correct.
+- Keep `redaction.py`'s patterns blunt and `demographics.py`'s strict — one
+  blanks text, the other assigns a value to a field.
+
+---
+
 Product docs live in `README.md` (what it does, privacy model, how to add an
-insurer form). **Read that first.** This file records decisions, current
-state, and the traps — the things not derivable from the code.
+insurer form). **Read that first.** The rest of this file records decisions,
+current state, and the traps — the things not derivable from the code.
 
 Stack: FastAPI + pypdf backend, React/Vite website, a Chrome extension, and
 Anthropic structured output. Repo `EdwardThng/BreezeFill` (private). Pilot user
