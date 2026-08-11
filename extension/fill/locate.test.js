@@ -416,6 +416,47 @@ describe("enriching live controls", () => {
     expect(field.describedBy).toBeNull();
   });
 
+  test("the better-matching control gets the description, not the earlier one", () => {
+    // Two controls compete for one schema field. "Ward class" is an exact
+    // match; "Ward class requested" is a different question that merely scores
+    // well. Deciding by page order hands the instruction to whichever happens
+    // to be printed first, which is a confident wrong instruction attached to
+    // the looser label — the failure the tie check exists to prevent, arriving
+    // by a route the tie check never sees.
+    const fields = locate.enrich(
+      [
+        { ref: "c1", label: "Ward class requested", type: "text", options: [] },
+        { ref: "c2", label: "Ward class", type: "text", options: [] },
+      ],
+      SCHEMA_FIELDS
+    );
+    const byRef = Object.fromEntries(fields.map((f) => [f.ref, f]));
+
+    expect(byRef.c2.describedBy).toBe("ward");
+    expect(byRef.c1.describedBy).toBeNull();
+    // ...and the one that lost the field is still a question, from its own
+    // label. Losing a description costs sharpness, never coverage.
+    expect(byRef.c1.label).toBe("Ward class requested");
+  });
+
+  test("the questions come back in page order, whatever order they were assigned in", () => {
+    // Assignment is by score; the list the doctor reviews is by page. These
+    // must not be the same order, and `liveFields` travels to /map-live in
+    // this one.
+    const fields = locate.enrich(
+      [
+        { ref: "c1", label: "Ward class requested", type: "text", options: [] },
+        { ref: "c2", label: "Date of first consultation", type: "text", options: [] },
+        { ref: "c3", label: "Ward class", type: "text", options: [] },
+      ],
+      SCHEMA_FIELDS
+    );
+
+    expect(fields.map((f) => f.ref)).toEqual(["c1", "c2", "c3"]);
+    expect(fields[1].describedBy).toBe("first_consult");
+    expect(fields[2].describedBy).toBe("ward");
+  });
+
   test("one schema field cannot describe two controls", () => {
     const fields = locate.enrich(
       [
