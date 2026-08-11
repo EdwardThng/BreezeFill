@@ -119,9 +119,19 @@ PHONE_IN_TEXT = re.compile(
 # A Singapore postal code, which is what makes an address segment an address.
 POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d)")
 
+# An address label that survived LABELLED_LINE because it carried no colon.
+_ADDRESS_LABEL_PREFIX = re.compile(
+    rf"^(?:{'|'.join(LABELS['address'])})\s*[:.\-]?\s+", re.I
+)
+
 # The fields a label may introduce ANYWHERE in a line, each with the shape its
-# value has to take. Name, address and insurer are deliberately absent: they
-# have no shape, so there would be nothing to confirm a guess against.
+# value has to take. Name and insurer are deliberately absent: they have no
+# shape, so there would be nothing to confirm a guess against.
+#
+# Address is absent for a different reason, and it is not "no shape" — it has
+# one, and `_sole_address` uses it. It is absent because this pass returns the
+# matched shape as the value, and for an address the shape is the postal code
+# while the value is the whole line.
 SHAPED_FIELDS = {
     "nric": NRIC_PATTERN,
     "phone": PHONE_IN_TEXT,
@@ -414,6 +424,34 @@ def _sole_match(pattern: re.Pattern[str], text: str) -> str | None:
     return matches.pop() if len(matches) == 1 else None
 
 
+def _sole_address(text: str) -> str | None:
+    """The line carrying a Singapore postal code, when exactly one line does.
+
+    The same rule as `_sole_match`, with one difference that matters: for every
+    other shaped field the shape *is* the value, and here it is only the
+    evidence. `S570118` is what proves the line is an address; the address is
+    the whole line, which is also what `_classify_segment` returns for the
+    compound-line form.
+
+    Two candidates yields neither, for the reason the phone rule does: a note
+    carries the clinic's own address under the doctor's signature about as
+    often as it carries its phone number, and writing that onto a claim as the
+    patient's is the failure this module exists to avoid.
+    """
+    codes = {m.group(0) for m in POSTAL_PATTERN.finditer(text)}
+    if len(codes) != 1:
+        return None
+    code = codes.pop()
+
+    for line in _logical_lines(text):
+        if code not in line:
+            continue
+        # A label with no colon never reached LABELLED_LINE, so it is still
+        # attached. It introduces the address; it is not part of it.
+        return _ADDRESS_LABEL_PREFIX.sub("", line.strip()).strip()
+    return None
+
+
 def parse_demographics(text: str) -> ParsedDemographics:
     """The whole pasted block -> a draft PatientRecord.
 
@@ -462,8 +500,8 @@ def parse_demographics(text: str) -> ParsedDemographics:
             record(field, value, "labelled-inline")
 
     # Whatever the labels did not supply, and only where a shape is unique.
-    # Not the name (no shape), not the date of birth (a note is full of dates),
-    # not the address (no reliable shape once the postal code is absent).
+    # Not the name (no shape), and not the date of birth (a note is full of
+    # dates, so the shape cannot tell which one is a birth date).
     if "nric" not in values:
         found = _sole_match(NRIC_PATTERN, text)
         if found:
@@ -472,5 +510,9 @@ def parse_demographics(text: str) -> ParsedDemographics:
         found = _sole_match(PHONE_IN_TEXT, text)
         if found:
             record("phone", found, "sole-match")
+    if "address" not in values:
+        found = _sole_address(text)
+        if found:
+            record("address", found, "sole-match")
 
     return ParsedDemographics(**values, sources=sources)
