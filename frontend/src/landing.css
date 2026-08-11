@@ -51,7 +51,12 @@
   --band-ink: #f4fafe;
   --band-dim: #9fc7e8;
 
+  /* The status green, and its channels. The pills in the hero mock tint with
+     rgba(var(--ok-rgb), …); without the triple that rule resolves to nothing
+     and the "from your notes" pill silently loses its colour — which is
+     exactly what happened when this block was first written. */
   --ok: #157553;
+  --ok-rgb: 21, 117, 83;
   --amber: #8a6a28;
 
   background: var(--bg);
