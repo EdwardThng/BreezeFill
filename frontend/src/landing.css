@@ -19,8 +19,19 @@
   --bg-raise: #10161d;
   --bg-card: #131b23;
   --line: #1f2a35;
-  --accent: #4fd1a5;
-  --accent-ink: #04120d;
+  /* The logo's own blue, taken from source-master.svg. One accent, used for
+     every interactive thing and nothing else.
+
+     It survives both directions of use, which is why a straight swap works and
+     no second shade is needed: as text on the page ground it measures 6.80:1,
+     and as a filled button under --accent-ink it measures 6.53:1. Both clear
+     WCAG AA.
+
+     What does NOT work, and is the trap if anyone restyles a button: white
+     text on this blue is 2.90:1 and fails AA outright. Filled accent surfaces
+     take --accent-ink, never white. */
+  --accent: #3aa0dc;
+  --accent-ink: #04121d;
   --amber: #e8b04b;
 
   background: var(--bg);
