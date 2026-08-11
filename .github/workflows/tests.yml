@@ -1,0 +1,87 @@
+# Runs the three suites on every push.
+#
+# Why this matters more here than in most repos: `main` IS production. Vercel
+# deploys every push to it, so until now a commit that broke the backend went
+# live and the first thing to notice was a 500 in front of a doctor. This does
+# not stop that yet — it reports. Gating the deploy on a green run is a
+# separate change.
+#
+# Three jobs rather than three steps in one, because "Website (vitest) failed"
+# in the checks list says more than "Tests failed" and they run in parallel.
+#
+# No secrets, deliberately: all three suites are offline and stub the model, so
+# there is no ANTHROPIC_API_KEY here and nothing to leak. Keep it that way — a
+# test that needs a key is a test that cannot run on a fork's pull request.
+
+name: Tests
+
+on:
+  push:
+    # Docs-only commits cannot break a suite, and this repo produces a lot of
+    # them — the working style is a commit per file change. Skipping them keeps
+    # the runner minutes for changes that can actually fail.
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.14 to match the machine this is developed on. Every dependency is
+      # >=-pinned, so it resolves clean; drop to 3.13 or 3.12 if a runner ever
+      # lacks it, since backend/requirements.txt needs only 3.11+.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r backend/requirements.txt
+
+      # No venv: the runner is disposable, so installing into it is the same
+      # isolation a venv buys locally. This is why the .venv/bin/python paths
+      # in CLAUDE.md do not appear here.
+      - run: python -m pytest -q
+
+  extension:
+    name: Extension (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # `npm ci` not `npm install`: it installs exactly the lockfile and fails
+      # if package.json and the lock disagree, which is what you want from a
+      # check rather than a build.
+      - run: npm ci
+      - run: npm test
+
+  website:
+    name: Website (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # A THIRD project with its own vitest, its own jsdom and the React
+      # plugin. It has to run from inside frontend/ — the root runner would
+      # discover these tests without the plugin and report failures on a green
+      # codebase.
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
