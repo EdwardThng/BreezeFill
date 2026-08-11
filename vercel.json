@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build && rm -rf public && cp -r frontend/dist public",
   "regions": ["sin1"],
-  "cleanUrls": true,
+  "rewrites": [{ "source": "/privacy", "destination": "/privacy.html" }],
   "headers": [
     {
       "source": "/(.*)",
