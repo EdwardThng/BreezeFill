@@ -389,3 +389,96 @@ class TestAnAddressIsFoundByItsPostalCode:
         )
         assert self.ADDRESS not in result.redacted_text
         assert "[ADDRESS]" in result.redacted_text
+
+
+class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
+    """A refusal the doctor cannot see reads as a failure to find anything.
+
+    The parser already knows the difference between "the note does not say"
+    and "the note says two things and I will not choose between them". Only
+    the first justifies a blank box. The second is a question, and the answer
+    belongs to the doctor — so the candidates travel instead of being
+    discarded, and the panel asks.
+
+    What this must NOT become: a ranking. Nothing here decides that a mobile
+    beats a landline or that the first number wins. The refusal to guess is
+    unchanged; the only change is that the evidence for it now reaches the
+    person who can settle it.
+    """
+
+    SAMPLE = (
+        "Tan Wei Ling, F, 47\n"
+        "NRIC S8012345D  DOB 14/03/1978\n"
+        "HP 9123 4567 / 6123 4567\n"
+        "Policy GHS-88213004 or GH-88213004 (AIA Singapore)\n"
+        "Blk 118 Bishan St 12 #07-21, S570118\n"
+    )
+
+    def test_two_phones_behind_one_label_are_offered(self) -> None:
+        parsed = parse_demographics(self.SAMPLE)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["9123 4567", "6123 4567"]
+
+    def test_two_policy_numbers_are_offered(self) -> None:
+        parsed = parse_demographics(self.SAMPLE)
+        assert parsed.policy_number is None
+        assert parsed.choices["policy_number"] == ["GHS-88213004", "GH-88213004"]
+
+    def test_candidates_keep_the_order_the_note_wrote_them_in(self) -> None:
+        # Not a ranking — but if the doctor is choosing between two numbers,
+        # the list should read the way their own note reads.
+        assert parse_demographics(self.SAMPLE).choices["phone"][0] == "9123 4567"
+
+    def test_two_phones_in_prose_are_offered_too(self) -> None:
+        # The clinic's own number under the signature. Same collision, found
+        # by the unlabelled rule rather than the labelled one.
+        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["91112233", "62551234"]
+
+    def test_two_addresses_are_offered(self) -> None:
+        text = (
+            "Blk 118 Bishan St 12 #07-21, S570118\n\nSeen 02/08/2026.\n"
+            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.address is None
+        assert len(parsed.choices["address"]) == 2
+        assert parsed.choices["address"][0] == "Blk 118 Bishan St 12 #07-21, S570118"
+
+    def test_a_field_that_resolved_is_never_also_a_question(self) -> None:
+        parsed = parse_demographics("HP 9123 4567\n")
+        assert parsed.phone == "9123 4567"
+        assert "phone" not in parsed.choices
+
+    def test_a_note_that_says_nothing_asks_nothing(self) -> None:
+        # A blank because the note is silent stays a blank. Offering an empty
+        # choice would turn every unfilled field into a question.
+        parsed = parse_demographics("Seen today. Sore throat, settling.\n")
+        assert parsed.choices == {}
+
+    def test_a_name_is_never_offered_as_a_choice(self) -> None:
+        # A name has no shape, so there are no candidates to offer and no way
+        # to build a list that is not a guess about which words are a name.
+        text = "Chua Beng Huat attended with Tan Wei Ling today.\n"
+        assert "full_name" not in parse_demographics(text).choices
+
+    def test_dates_in_prose_are_never_offered_as_a_date_of_birth(self) -> None:
+        # The refusal that must survive this change. A clinical note is
+        # nothing but dates — consultation, admission, discharge, MC — so a
+        # list of every date in the note invites the doctor to pick a
+        # consultation date as a birth date, one click, looking exactly like
+        # a correct answer on the form.
+        text = "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n"
+        parsed = parse_demographics(text)
+        assert parsed.dob is None
+        assert "dob" not in parsed.choices
+
+    def test_two_dates_behind_a_dob_label_are_offered(self) -> None:
+        # ...but a labelled region is different: both candidates are stated to
+        # be the date of birth, so the doctor is choosing between two claims
+        # the note actually makes.
+        parsed = parse_demographics("DOB 14/03/1978 or 15/03/1978\n")
+        assert parsed.dob is None
+        assert parsed.choices["dob"] == ["14/03/1978", "15/03/1978"]
