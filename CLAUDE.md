@@ -618,9 +618,15 @@ and a regulator have to be able to read, so it must not depend on the React
 bundle rendering. **Live and serving 200 as of 2026-08-08**, once DNS landed.
 
 One thing in it is a claim about the world rather than about this repo, and it
-is not true yet: the contact address `privacy@breezefill.com` **has no mailbox**.
-That is now a Chrome Web Store blocker as well as a correctness one — see next
-steps 2b.
+was untrue for a while: the contact address `privacy@breezefill.com`. **The
+mailbox is live as of 2026-08-11** — the owner tested it in both directions,
+sending and receiving. It had none when the policy went up on 2026-08-06, which
+made the policy's own contact line unreachable and blocked the store listing;
+this paragraph said so until today.
+
+Keep it monitored rather than merely existing. **Google emails a Chrome Web
+Store review decision to the developer account**, so a rejection nobody reads
+stalls the submission indefinitely while it looks like it is still queued.
 
 An earlier version of this paragraph said the policy carried a "synthetic notes
 only" restriction. **It does not, and must not** — it was rewritten after the
