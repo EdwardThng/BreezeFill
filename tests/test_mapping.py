@@ -715,3 +715,59 @@ def test_a_checkbox_without_options_is_still_a_boolean():
     assert _checkbox_answer("consent_given", "true").value is True
     assert _checkbox_answer("consent_given", "false").value is False
     assert _checkbox_answer("consent_given", "Emergency").status == "missing"
+
+
+# ---------------------------------------------------------------------------
+# The insurer comes from the form, not from the note
+# ---------------------------------------------------------------------------
+#
+# `parse_demographics` can only find an insurer the note labelled, and a note
+# usually names it in passing if at all — "(AIA Singapore)" after the policy
+# number. But the insurer that belongs on the form is the one whose form it
+# is, which the schema already knows. Reading it out of the note is a
+# roundabout route to an answer we hold, and a wrong one whenever the note
+# names a different insurer than the form being filled.
+
+INSURER_SCHEMA = FormSchema.model_validate(
+    {
+        "form_id": "insurer_probe_v1",
+        "pdf_path": "forms/dev_sample.pdf",
+        "insurer": "AIA",
+        "fields": [
+            {
+                "id": "insurer_name",
+                "pdf_field_name": "Text_Insurer",
+                "type": "text",
+                "source": "demographics.insurer",
+            },
+        ],
+    }
+)
+
+
+def test_the_insurer_comes_from_the_form_when_the_note_did_not_name_one():
+    record = make_record(insurer="")
+    [row] = assemble_claim(INSURER_SCHEMA, record, {}, {})
+
+    assert row.value == "AIA"
+    assert row.status == "demographic"
+
+
+def test_a_doctor_entered_insurer_is_not_overwritten_by_the_form():
+    # The refusal that matters. The doctor typed it, so it wins — the schema
+    # value is a fallback for a blank box, never a correction of an answer a
+    # human already gave.
+    record = make_record(insurer="Great Eastern")
+    [row] = assemble_claim(INSURER_SCHEMA, record, {}, {})
+
+    assert row.value == "Great Eastern"
+
+
+def test_a_form_with_no_insurer_of_its_own_leaves_the_box_blank():
+    # The live path: a schema synthesised from the page's own controls carries
+    # no insurer, so there is nothing to fall back to. Blank is the correct
+    # answer, and the doctor types one line.
+    schema = INSURER_SCHEMA.model_copy(update={"insurer": None})
+    [row] = assemble_claim(schema, make_record(insurer=""), {}, {})
+
+    assert not row.value
