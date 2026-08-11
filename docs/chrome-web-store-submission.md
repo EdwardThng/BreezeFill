@@ -1,7 +1,7 @@
 # Chrome Web Store submission — everything needed, in one place
 
 Paste-ready copy for the Developer Dashboard, plus the exact files to upload.
-Written 2026-08-11 against extension version `0.2.0`.
+Written 2026-08-11 against extension version `0.2.1`.
 
 Everything below is drawn from what the extension actually does. Where a claim
 here and the code ever disagree, the code wins and this file is wrong — the
@@ -11,7 +11,7 @@ listing has to survive a reviewer installing it and trying it.
 
 ## 0. What the `.zip` is
 
-`breezefill-store-v0.2.0.zip` in the repo root **is the extension itself** —
+`breezefill-store-v0.2.1.zip` in the repo root **is the extension itself** —
 the thing the store hosts and installs. It is not a screenshot bundle and not a
 backup. On the dashboard it goes in *"Upload new package"*, and everything else
 in this document is metadata wrapped around it.
@@ -21,8 +21,8 @@ file, and it must be **rebuilt rather than reused** whenever anything under
 `extension/` changes:
 
 ```bash
-cd extension && rm -f ../breezefill-store-v0.2.0.zip \
-  && zip -rX ../breezefill-store-v0.2.0.zip . -x "*.test.js" ".*" "__MACOSX*" "README.md"
+cd extension && rm -f ../breezefill-store-v0.2.1.zip \
+  && zip -rX ../breezefill-store-v0.2.1.zip . -x "*.test.js" ".*" "__MACOSX*" "README.md"
 ```
 
 Build it from **inside** `extension/`. Zipping the folder from outside nests
@@ -40,14 +40,20 @@ The result is **13 files, ~78 KB**, `manifest.json` at the root.
 Check it carries the build you think it does before uploading:
 
 ```bash
-unzip -l breezefill-store-v0.2.0.zip          # 13 files, manifest.json at root
-unzip -p breezefill-store-v0.2.0.zip manifest.json | grep version
+unzip -l breezefill-store-v0.2.1.zip          # 13 files, manifest.json at root
+unzip -p breezefill-store-v0.2.1.zip manifest.json | grep version
 ```
 
-**A version number is consumed by an upload even if the review rejects it.**
-`0.2.0` has never been uploaded, so it is still available. Once you upload,
-the next package needs `0.2.1`, in both `extension/manifest.json` and the zip
-filename.
+**A version number is consumed by an upload even if the review rejects it —
+and even if the item never leaves draft.** That is not a rule of thumb here:
+`0.2.0` was built and its upload failed repeatedly, with the package itself
+verified clean every time, so the version being already taken is the leading
+explanation. `0.2.1` was cut on 2026-08-11 for exactly that reason.
+
+So each upload attempt needs its own number. Bump **both** places together —
+`"version"` in `extension/manifest.json` *and* the zip filename — then rebuild
+and re-verify. The filename is cosmetic to the store but it is what stops you
+uploading last attempt's package by mistake.
 
 ---
 
@@ -55,7 +61,7 @@ filename.
 
 | Dashboard field | File | State |
 |---|---|---|
-| Package | `breezefill-store-v0.2.0.zip` (repo root) | Rebuilt 2026-08-11: 13 files, 78 KB, verified against the current build |
+| Package | `breezefill-store-v0.2.1.zip` (repo root) | Rebuilt 2026-08-11: 13 files, 78 KB, verified against the current build |
 | Store icon, 128×128 | `assets/logo/chrome-store-listing-128.png` | Ready |
 | Small promo tile, 440×280 | `assets/logo/chrome-store-promo-440x280.png` | Ready. **Required** — the listing cannot be submitted without it |
 | Screenshots, 1280×800 | `~/Documents/breezefill-store/store-1280x800-*.png` | Four, ready |
