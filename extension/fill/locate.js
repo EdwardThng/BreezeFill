@@ -363,25 +363,48 @@
    */
   function enrich(controls, schemaFields) {
     const fields = Array.isArray(schemaFields) ? schemaFields : [];
+    const list = controls || [];
     const claimed = new Set();
+    const enriched = new Array(list.length);
 
-    return (controls || []).map((control) => {
-      const ranked = fields
+    // Strongest matches claim their field first, exactly as `locate` ranks
+    // fields before assigning controls. Deciding by page order instead lets a
+    // control that merely scores well take the instruction from one the schema
+    // matches exactly, purely because it is printed higher up — and the tie
+    // check never sees it, because the two controls are never compared with
+    // each other. The result is the failure this whole function guards
+    // against: a confident instruction attached to the wrong question.
+    //
+    // Priority is each control's best score across ALL fields, computed once
+    // and before anything is claimed, so it does not shift as assignment
+    // proceeds. Sorting is stable, so controls that match equally well keep
+    // page order and the result is deterministic.
+    const ranked = list
+      .map((control, index) => ({
+        index,
+        control,
+        top: fields.reduce((best, f) => Math.max(best, score(f.label, control.label)), 0),
+      }))
+      .sort((a, b) => b.top - a.top);
+
+    for (const { index, control } of ranked) {
+      const rankedFields = fields
         .filter((f) => !claimed.has(f.fieldId))
         .map((f) => ({ field: f, score: score(f.label, control.label) }))
         .sort((a, b) => b.score - a.score);
 
-      const [best, runnerUp] = ranked;
+      const [best, runnerUp] = rankedFields;
       const confident =
         best &&
         best.score >= MIN_SCORE &&
         !(runnerUp && best.score - runnerUp.score < TIE_MARGIN);
 
       if (!confident) {
-        return { ...control, description: null, describedBy: null };
+        enriched[index] = { ...control, description: null, describedBy: null };
+        continue;
       }
       claimed.add(best.field.fieldId);
-      return {
+      enriched[index] = {
         ...control,
         // The schema's wording replaces the page's, and this is a privacy
         // property rather than a cosmetic one: a described control now
@@ -407,7 +430,12 @@
           ? control.options
           : best.field.options || [],
       };
-    });
+    }
+
+    // Page order, not assignment order. This list is what the doctor reviews
+    // and what travels to /map-live, and both want the questions in the order
+    // they appear on the form.
+    return enriched;
   }
 
   const api = {
