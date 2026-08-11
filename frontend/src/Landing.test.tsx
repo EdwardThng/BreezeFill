@@ -12,7 +12,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import App, { routeOf } from "./App";
-import Landing, { DOWNLOAD_URL } from "./Landing";
+import Landing, { DOWNLOAD_URL, SUBSCRIBE_URL } from "./Landing";
 
 describe("routing", () => {
   test.each([
@@ -143,5 +143,48 @@ describe("structure", () => {
     for (const href of anchors) {
       expect(container.querySelector(href)).not.toBeNull();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pricing
+// ---------------------------------------------------------------------------
+//
+// The page now asks for money, which raises the bar on every claim it makes.
+// These pin the parts that would be dishonest to get wrong: what it costs, and
+// that subscribing does not quietly become a promise the product does not keep.
+
+describe("pricing", () => {
+  test("the price and the period are both stated", () => {
+    render(<Landing />);
+    const pricing = document.querySelector("#pricing")!;
+    expect(pricing).not.toBeNull();
+    expect(pricing.textContent).toMatch(/200/);
+    expect(pricing.textContent).toMatch(/SGD/i);
+    expect(pricing.textContent).toMatch(/month/i);
+  });
+
+  test("the subscribe button is a real link when Stripe is configured", () => {
+    render(<Landing />);
+    const subscribe = screen.getByRole("link", { name: /subscribe/i });
+    expect(subscribe.getAttribute("href")).toBe(SUBSCRIBE_URL);
+  });
+
+  test("pricing is reachable from the nav", () => {
+    const { container } = render(<Landing />);
+    const nav = container.querySelector("nav")!;
+    const hrefs = within(nav)
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("#pricing");
+  });
+
+  test("it does not claim the subscription buys a different product", () => {
+    // The refusals are the product, and they do not change with money. Copy
+    // implying a paid tier fills more fields, or reviews less, would be
+    // selling exactly what the software declines to do.
+    render(<Landing />);
+    const pricing = document.querySelector("#pricing")!.textContent!;
+    expect(pricing).not.toMatch(/unlimited fields|fills everything|no review|fully automatic/i);
   });
 });
