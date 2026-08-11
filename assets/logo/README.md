@@ -4,7 +4,7 @@ Every sized copy of the logo the product needs, in one place. **All of it is
 generated** — change the master, re-run the script, commit the result:
 
 ```bash
-./.venv/Scripts/python.exe scripts/make_logo_assets.py
+.venv/bin/python scripts/make_logo_assets.py
 ```
 
 Do not edit the sized PNGs by hand. They will be overwritten, and a
