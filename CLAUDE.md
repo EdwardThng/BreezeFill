@@ -1911,14 +1911,34 @@ and the upload zip is built.
 
 What is left, and it is one thing:
 
-1. **Screenshots — at least one, 1280×800, and none exist.** It needs a human
-   at a browser. The side panel is Chrome UI rather than page content, so
-   browser automation cannot capture it: a page screenshot's origin is the
-   top-left of the *page*, with no toolbar and no panel in frame, which also
-   means the toolbar icon cannot be clicked. Shoot the review step with the
-   source quotes visible — that is the product's whole argument — on a neutral
-   form with a synthetic note, never a real insurer's branded portal.
-   `scripts/store_screenshots.py` converts the captures to exactly 1280×800.
+1. **Screenshots — at least one, 1280×800, five allowed and five worth
+   taking.** It needs a human at a browser. The side panel is Chrome UI rather
+   than page content, so browser automation cannot capture it: a page
+   screenshot's origin is the top-left of the *page*, with no toolbar and no
+   panel in frame, which also means the toolbar icon cannot be clicked. Shoot
+   the review step with the source quotes visible — that is the product's whole
+   argument — on a neutral form with a synthetic note, never a real insurer's
+   branded portal. `scripts/store_screenshots.py` converts the captures to
+   exactly 1280×800.
+
+   Four traps, all met on the first attempt (2026-08-11):
+
+   - **Crop, or the argument is unreadable.** A whole-window capture spends
+     three quarters of its width on the insurer's form, putting the panel's
+     copy at ~9px — illegible at the size the store draws a thumbnail. Use
+     `--crop right:62`, which was the balance that keeps the panel readable
+     while the form still reads as a form rather than as sliced words.
+   - **`Cmd+Shift+B` first.** The bookmarks bar puts personal browsing into a
+     public listing, and it survives the crop as a legible sliver.
+   - **Turn off the floating thumbnail** (`Cmd+Shift+5` → Options). Until it
+     flies away the capture lives only in
+     `/var/folders/…/TemporaryItems/NSIRD_screencaptureui_*/`, and dismissing
+     or dragging it deletes the file instead of saving it. Three of four
+     retakes were lost this way.
+   - **Reload the extension before shooting.** Screenshots taken against a
+     stale build show fixed problems — the first set caught the blank Phone
+     and Policy boxes from before `choices` existed, which is a picture of the
+     complaint rather than of the product.
 2. **A justification string for every permission**, `activeTab`, `scripting`
    and `sidePanel`, plus the single-purpose statement. Drafted; write these
    from the refusals — "fills in place, never submits" is the honest
