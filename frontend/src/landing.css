@@ -10,7 +10,59 @@
  * that have not agreed to appear.
  */
 
-.landing,
+/* The landing page is light; the demo is not.
+ *
+ * The redesign inverts the marketing page to a blue-tinted light theme. The
+ * demo at #/demo was not redesigned and its styles assume a dark ground, so
+ * the two now carry separate palettes rather than sharing one. Splitting them
+ * is what keeps #/demo working; do not re-merge these blocks without
+ * restyling demo.css too.
+ */
+.landing {
+  --ink: #0b1f33;
+  --ink-dim: #4d6377;
+  --ink-quiet: #5b7185;
+  /* 3.18:1 on the page ground — decorative and large text only, never body
+     copy. Use --ink-quiet for anything a doctor has to read. */
+  --ink-faint: #7c8fa1;
+
+  --bg: #f6fafd;
+  --bg-raise: #eef6fc;
+  --bg-card: #ffffff;
+  --line: #e6eef6;
+  --line-strong: #d8e5f0;
+
+  /* Two blues, and the split is a contrast requirement rather than taste.
+     #3aa0dc is the logo's own colour and it works on a dark ground, which is
+     what it was picked against. On this light ground it measures 2.76:1 as
+     text and 2.90:1 under white on a button — both fail AA outright. So the
+     brand blue stays a FILL (the logo mark, tints, the band) and a darker
+     blue carries anything that has to be read: 4.99:1 as link text, 5.24:1
+     with white on it. */
+  --brand: #3aa0dc;
+  --brand-rgb: 58, 160, 220;
+  --accent: #1a6fb8;
+  --accent-hover: #155c99;
+  --accent-ink: #ffffff;
+  --accent-rgb: 26, 111, 184;
+
+  /* The deep band behind the closing section. */
+  --band: #0d3f6b;
+  --band-ink: #f4fafe;
+  --band-dim: #9fc7e8;
+
+  --ok: #157553;
+  --amber: #8a6a28;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Unchanged: the demo keeps the dark palette it was designed against. */
 .demo {
   --ink: #e8edf2;
   --ink-dim: #93a1b0;
@@ -19,33 +71,10 @@
   --bg-raise: #10161d;
   --bg-card: #131b23;
   --line: #1f2a35;
-  /* The logo's own blue, taken from source-master.svg. One accent, used for
-     every interactive thing and nothing else.
-
-     It survives both directions of use, which is why a straight swap works and
-     no second shade is needed: as text on the page ground it measures 6.80:1,
-     and as a filled button under --accent-ink it measures 6.53:1. Both clear
-     WCAG AA.
-
-     What does NOT work, and is the trap if anyone restyles a button: white
-     text on this blue is 2.90:1 and fails AA outright. Filled accent surfaces
-     take --accent-ink, never white. */
   --accent: #3aa0dc;
   --accent-ink: #04121d;
-  /* The same blue as channels, because glows and tints need rgba() and a
-     literal there is how the old mint survived a change of accent in nine
-     places across two stylesheets. Use rgba(var(--accent-rgb), a), never a
-     hex, so the accent can be changed in exactly one place. */
   --accent-rgb: 58, 160, 220;
   --accent-hover: #55b0e4;
-
-  /* Status, not brand. The three pills in the hero mock are a legend for the
-     panel's own states — extracted, needs checking, not found — and green,
-     amber and grey are what the panel actually renders. Painting the first
-     one with --accent would say two wrong things at once: that the accent is
-     something other than "interactive", and that a value quoted from the note
-     looks the same as a button. Recoloured with the brand, the mock would stop
-     depicting the product. */
   --ok: #4fd1a5;
   --ok-rgb: 79, 209, 165;
   --amber: #e8b04b;
@@ -84,7 +113,7 @@
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: rgba(8, 11, 15, 0.85);
+  background: rgba(246, 250, 253, 0.82);
   backdrop-filter: blur(10px);
   z-index: 10;
 }
@@ -183,7 +212,7 @@
   margin: 0 auto;
   /* A single soft light source behind the headline, not a rainbow gradient. */
   background:
-    radial-gradient(60% 55% at 50% 0%, rgba(var(--accent-rgb), 0.13), transparent 70%);
+    radial-gradient(62% 58% at 50% 0%, rgba(var(--brand-rgb), 0.20), transparent 72%);
 }
 
 .eyebrow {
@@ -243,7 +272,7 @@
   border-radius: 14px 14px 0 0;
   border-bottom: none;
   text-align: left;
-  box-shadow: 0 -1px 60px rgba(var(--accent-rgb), 0.07);
+  box-shadow: 0 -1px 60px rgba(var(--brand-rgb), 0.14);
 }
 
 @media (max-width: 720px) {
@@ -271,7 +300,7 @@
   display: grid;
   gap: 6px;
   padding: 10px;
-  background: #0b1116;
+  background: var(--bg-raise);
   border: 1px solid var(--line);
   border-radius: 6px;
   margin-bottom: 12px;
@@ -280,7 +309,7 @@
 .ln {
   height: 5px;
   border-radius: 3px;
-  background: #223040;
+  background: var(--line-strong);
 }
 
 .ln.short {
@@ -313,19 +342,19 @@
 }
 
 .pill.amber {
-  background: rgba(232, 176, 75, 0.16);
+  background: rgba(138, 106, 40, 0.12);
   color: var(--amber);
 }
 
 .pill.grey {
-  background: #1c262f;
+  background: var(--bg-raise);
   color: var(--ink-faint);
 }
 
 .bar {
   height: 7px;
   border-radius: 4px;
-  background: #2b3a49;
+  background: var(--line-strong);
 }
 
 .bar.short {
@@ -335,8 +364,8 @@
 .bar.empty {
   background: repeating-linear-gradient(
     -45deg,
-    #1a232c,
-    #1a232c 4px,
+    var(--line-strong),
+    var(--line-strong) 4px,
     transparent 4px,
     transparent 8px
   );
@@ -355,7 +384,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #253340;
+  background: var(--line-strong);
 }
 
 .url {
@@ -381,7 +410,7 @@
   height: 26px;
   border-radius: 5px;
   border: 1px solid var(--line);
-  background: #0b1116;
+  background: var(--bg-raise);
 }
 
 /* Filled fields carry the accent, so "what the tool did" is legible at a
@@ -725,4 +754,90 @@
   color: var(--ink-dim);
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* The redesign's own components ---------------------------------------------
+ *
+ * Added with the light theme. Everything here uses tokens; the export's inline
+ * hexes are deliberately not copied across, because a second definition of the
+ * accent is how the last recolour got missed in nine places.
+ */
+
+/* The badge above the headline. States a fact with a date on it — remove it
+   when the Web Store listing is live rather than letting it quietly rot. */
+.badge {
+  display: inline-block;
+  margin: 0 0 22px;
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--ink-quiet);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+/* Three claims under the hero buttons. --ink-quiet, not --ink-faint: this is
+   body copy a doctor is meant to read, and faint fails contrast at this size. */
+.trustline {
+  margin: 18px 0 0;
+  color: var(--ink-quiet);
+  font-size: 13.5px;
+}
+
+/* The closing band. The one dark surface on the page, and the only place the
+   brand blue can sit behind white text. */
+.final-cta {
+  background: var(--band);
+  color: var(--band-ink);
+  border-radius: 18px;
+  padding: clamp(48px, 7vw, 88px) clamp(20px, 5vw, 64px);
+  margin: 0 clamp(16px, 5vw, 56px) clamp(56px, 8vw, 96px);
+  text-align: center;
+}
+
+.final-cta .eyebrow {
+  color: var(--band-dim);
+}
+
+.final-cta p {
+  color: var(--band-dim);
+  max-width: 60ch;
+  margin-inline: auto;
+}
+
+/* On the band the accent button would disappear into the ground, so the
+   primary inverts: white fill, band-coloured text. Measured 10.28:1. */
+.final-cta .btn-primary {
+  background: var(--band-ink);
+  border-color: var(--band-ink);
+  color: var(--band);
+}
+
+.final-cta .btn-primary:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.final-cta .btn-ghost {
+  color: var(--band-ink);
+  border-color: rgba(244, 250, 254, 0.35);
+}
+
+.final-cta .btn-ghost:hover {
+  border-color: var(--band-ink);
+}
+
+.footer-line {
+  font-size: 13.5px;
+  color: var(--ink-quiet);
+}
+
+/* Cards read as raised paper on a tinted ground, rather than as darker holes
+   punched in it. */
+.coverage-card,
+.price-card {
+  background: var(--bg-card);
+  border-color: var(--line-strong);
+  box-shadow: 0 1px 2px rgba(11, 31, 51, 0.04), 0 8px 24px rgba(11, 31, 51, 0.05);
 }
