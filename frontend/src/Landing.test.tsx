@@ -31,7 +31,7 @@ describe("routing", () => {
     window.location.hash = "";
     render(<App />);
     expect(
-      screen.getByRole("heading", { level: 1, name: /insurance forms, filled/i }),
+      screen.getByRole("heading", { level: 1, name: /you already wrote this/i }),
     ).toBeDefined();
   });
 
@@ -53,10 +53,39 @@ describe("what the page promises", () => {
 
   test("it says identifiers do not reach the model", () => {
     render(<Landing />);
-    expect(screen.getByText(/never reach the model/i)).toBeDefined();
+    // Said twice on purpose since the redesign: once in the hero trust line,
+    // once in the privacy section. getAllByText, because getByText throws on
+    // more than one match and the duplication is the point.
+    expect(screen.getAllByText(/never reach the model/i).length).toBeGreaterThan(0);
     expect(
       screen.getByText(/pulled out by pattern matching — no AI involved/i),
     ).toBeDefined();
+  });
+
+  test("the hero does not claim the data stays on the doctor's machine", () => {
+    // The redesign's own line was "Nothing leaves your browser". It is false:
+    // the paste goes to the backend, which is where the identifiers are found
+    // and the note is scrubbed. Claiming otherwise on a page a Chrome Web
+    // Store reviewer reads would contradict the listing's own disclosures.
+    const { container } = render(<Landing />);
+    expect(container.textContent).not.toMatch(
+      /nothing leaves your browser|everything stays (inside|in) your browser|stays on your (machine|computer)/i,
+    );
+  });
+
+  test("it does not claim to be free or open source", () => {
+    const { container } = render(<Landing />);
+    expect(container.textContent).not.toMatch(/open source/i);
+  });
+
+  test("it does not promise features the extension does not have", () => {
+    // All three came from the redesign template: a save/remember prompt that
+    // would need chrome.storage, and iframe and shadow-DOM support that are
+    // open questions rather than shipped behaviour.
+    const { container } = render(<Landing />);
+    expect(container.textContent).not.toMatch(
+      /remember this answer|saved responses|browser storage|iframes|shadow dom/i,
+    );
   });
 
   test("it promises blanks rather than guesses", () => {
