@@ -602,6 +602,16 @@ function ScrollDemo() {
 
 /** The hero still. Falls back to the built-from-markup mock until HERO_SHOT is set. */
 function HeroShot() {
+  // The chrome is drawn only around a real screenshot. The fallback mock
+  // already renders its own address bar, and stacking both put two URL bars on
+  // top of each other.
+  if (!HERO_SHOT) {
+    return (
+      <div className="shot-frame is-mock">
+        <HeroVisual />
+      </div>
+    );
+  }
   return (
     <div className="shot-frame">
       <div className="shot-chrome" aria-hidden="true">
@@ -610,11 +620,11 @@ function HeroShot() {
         <span className="dot" />
         <span className="url">insurer.com.sg/claim</span>
       </div>
-      {HERO_SHOT ? (
-        <img className="shot-img" src={HERO_SHOT} alt="The BreezeFill panel beside an insurer's claim form" />
-      ) : (
-        <HeroVisual />
-      )}
+      <img
+        className="shot-img"
+        src={HERO_SHOT}
+        alt="The BreezeFill panel beside an insurer's claim form"
+      />
     </div>
   );
 }

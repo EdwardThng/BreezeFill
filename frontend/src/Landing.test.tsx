@@ -12,7 +12,13 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import App, { routeOf } from "./App";
-import Landing, { DOWNLOAD_URL, subscribeUrl } from "./Landing";
+import Landing, {
+  DEMO_VIDEO,
+  DEMO_VIDEO_POSTER,
+  DOWNLOAD_URL,
+  HERO_SHOT,
+  subscribeUrl,
+} from "./Landing";
 
 describe("routing", () => {
   test.each([
@@ -256,5 +262,56 @@ describe("pricing", () => {
     render(<Landing />);
     const pricing = document.querySelector("#pricing")!.textContent!;
     expect(pricing).not.toMatch(/unlimited fields|fills everything|no review|fully automatic/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The three pieces from the design that carry assets or motion
+// ---------------------------------------------------------------------------
+
+describe("hero shot, scroll demo and video", () => {
+  test("the hero falls back to the built mock rather than an empty box", () => {
+    // HERO_SHOT is unset until the owner drops a screenshot in, and a landing
+    // page whose main visual is a grey rectangle is worse than one whose
+    // visual is drawn from markup.
+    const { container } = render(<Landing />);
+    expect(HERO_SHOT).toBe("");
+    expect(container.querySelector(".shot-frame")).not.toBeNull();
+    expect(container.querySelector(".mock")).not.toBeNull();
+    // ...and exactly one address bar. The frame draws its own chrome only
+    // around a real screenshot; the mock already has one, and rendering both
+    // stacked two URL bars on top of each other.
+    expect(container.querySelector(".shot-chrome")).toBeNull();
+    expect(container.querySelectorAll(".shot-frame .url")).toHaveLength(1);
+  });
+
+  test("the video area says where to put the file", () => {
+    render(<Landing />);
+    expect(screen.getByText(/demo video goes here/i)).toBeDefined();
+    expect(document.querySelector(".video-frame video")).toBeNull();
+  });
+
+  test("no asset is loaded from another origin", () => {
+    // Both slots take a path under frontend/public. A YouTube embed or a CDN
+    // image would break the privacy argument the page makes two sections up.
+    for (const url of [HERO_SHOT, DEMO_VIDEO, DEMO_VIDEO_POSTER]) {
+      expect(url.startsWith("http")).toBe(false);
+    }
+  });
+
+  test("the scroll demo renders its finished state when it cannot measure", () => {
+    // jsdom has no layout, so progress stays 0 and the section shows its
+    // first stage. What must not happen is a crash or an empty panel: the
+    // rows and the stage copy are present either way.
+    const { container } = render(<Landing />);
+    const demo = container.querySelector("#demo");
+    expect(demo).not.toBeNull();
+    expect(demo!.querySelectorAll(".scroll-demo-rows li")).toHaveLength(5);
+    expect(demo!.textContent).toMatch(/of 5 answered/);
+  });
+
+  test("the scroll demo never claims a form was submitted", () => {
+    const { container } = render(<Landing />);
+    expect(container.querySelector("#demo")!.textContent).toMatch(/nothing submitted/i);
   });
 });

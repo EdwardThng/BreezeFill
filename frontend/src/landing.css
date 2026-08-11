@@ -1165,3 +1165,8 @@
   font-size: 12.5px;
   color: var(--ink);
 }
+
+/* The mock brings its own address bar, so the frame around it is just a card. */
+.shot-frame.is-mock {
+  border-radius: 20px;
+}
