@@ -12,9 +12,12 @@ actually pastes. Every identifier here is synthetic.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from demographics import parse_date, parse_demographics
+from redaction import PatientRecord, redact
 
 
 # The header format used throughout docs/test_notes.md: the whole patient
@@ -309,3 +312,80 @@ class TestAPolicyNumberIsNotAPhoneNumber:
             ("Tel: +65 9123 4567\n", "+65 9123 4567"),
         ):
             assert parse_demographics(text).phone == expected
+
+
+class TestAnAddressIsFoundByItsPostalCode:
+    """A Singapore postal code is a shape, and the module already trusts it.
+
+    `_classify_segment` has used `POSTAL_PATTERN` to call a segment an address
+    since the compound-line parser was written. What was missing was the same
+    rule for an address written on its own line — which is how a doctor
+    actually lays a note out, and how the pilot's own sample writes it.
+
+    Why the value is the whole line rather than the matched shape: unlike every
+    other shaped field, the shape is not the value. `S570118` is the evidence
+    that the line is an address; the address is the line.
+    """
+
+    ADDRESS = "Blk 118 Bishan St 12 #07-21, S570118"
+
+    def test_a_bare_address_line_is_taken(self) -> None:
+        parsed = parse_demographics(
+            f"NRIC S8012345D  DOB 14/03/1978\n{self.ADDRESS}\n\nSeen 02/08/2026. Sore throat.\n"
+        )
+        assert parsed.address == self.ADDRESS
+        assert parsed.sources["address"] == "sole-match"
+
+    def test_two_addresses_means_neither(self) -> None:
+        # The clinic's own address under the doctor's signature, which is the
+        # same collision the phone rule exists for. Refusing costs the doctor
+        # one line of typing; guessing writes the clinic's address onto the
+        # claim as the patient's.
+        text = (
+            f"{self.ADDRESS}\n\nSeen 02/08/2026. Sore throat.\n"
+            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+        )
+        assert parse_demographics(text).address is None
+
+    def test_a_labelled_address_still_wins_and_keeps_its_label_off_the_value(self) -> None:
+        # The anchored pass runs first, so this never reaches the postal rule.
+        parsed = parse_demographics(f"Address: {self.ADDRESS}\n")
+        assert parsed.address == self.ADDRESS
+        assert parsed.sources["address"] == "labelled"
+
+    def test_a_label_without_a_colon_does_not_land_in_the_value(self) -> None:
+        # LABELLED_LINE needs the colon, so this arrives at the postal rule
+        # with the label still attached. The label is not part of the address.
+        parsed = parse_demographics(f"Addr {self.ADDRESS}\n")
+        assert parsed.address == self.ADDRESS
+
+    def test_an_address_is_never_invented_without_a_postal_code(self) -> None:
+        # Positive case asserted alongside the refusal, because a refusal is
+        # not evidence of a working rule and both look identical to a test
+        # that only checks None.
+        assert parse_demographics("Lives in Bishan with her daughter.\n").address is None
+
+    def test_an_nric_is_not_read_as_a_postal_code(self) -> None:
+        assert parse_demographics("NRIC S8012345D attended alone.\n").address is None
+
+    def test_a_parsed_address_reaches_the_redaction_dictionary(self) -> None:
+        # The point of the fix, and it is not a blank box. Pass 1 removes the
+        # address only when the record carries one, and pass 2 has no postal
+        # pattern — so an address the parser misses is still in the text when
+        # it reaches the model.
+        note = f"{self.ADDRESS}\n\nSeen 02/08/2026. Sore throat, fever 38.4.\n"
+        parsed = parse_demographics(note)
+        assert parsed.address is not None
+
+        result = redact(
+            PatientRecord(
+                full_name="Tan Wei Ling",
+                nric="S8012345D",
+                dob=date(1978, 3, 14),
+                address=parsed.address,
+                insurer="AIA",
+                clinical_text=note,
+            )
+        )
+        assert self.ADDRESS not in result.redacted_text
+        assert "[ADDRESS]" in result.redacted_text
