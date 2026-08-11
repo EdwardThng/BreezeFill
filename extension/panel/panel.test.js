@@ -1255,3 +1255,132 @@ describe("the sample note", () => {
     expect($("paste").value).not.toContain("S7211043C"); // the test fixture's own
   });
 });
+
+// ---------------------------------------------------------------------------
+// Two candidates is a question, not a blank
+// ---------------------------------------------------------------------------
+//
+// The parser refuses to choose between two phone numbers, and it was right to.
+// What it did badly was say so: an empty box is what the panel also shows when
+// the note mentions no number at all, so a deliberate refusal read as the
+// product failing to look. These pin the difference being visible.
+
+const TWO_OF_EACH = {
+  ...PARSED,
+  phone: null,
+  policy_number: null,
+  choices: {
+    phone: ["9123 4567", "6123 4567"],
+    policy_number: ["GHS-88213004", "GH-88213004"],
+  },
+};
+
+describe("choosing between candidates", () => {
+  test("a refused field offers what the note actually said", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    const buttons = [...$("choices-phone").querySelectorAll("button")];
+    expect(buttons.map((b) => b.textContent)).toEqual(["9123 4567", "6123 4567"]);
+    // The box stays empty until the doctor picks. Offering is not choosing.
+    expect($("phone").value).toBe("");
+  });
+
+  test("it says why it is asking", async () => {
+    // The whole point. "2 found" tells the doctor the parser saw the number
+    // and declined to guess, which an empty box does not.
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    expect($("choices-phone").textContent).toContain("2");
+  });
+
+  test("picking one fills the field and clears the question", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    $("choices-phone").querySelector("button").click();
+
+    expect($("phone").value).toBe("9123 4567");
+    expect($("choices-phone").querySelectorAll("button")).toHaveLength(0);
+  });
+
+  test("a choice the doctor made survives the next parse", async () => {
+    // Same rule as a typed correction: they decided, and a re-parse must not
+    // undo it or ask again.
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+    $("choices-phone").querySelector("button").click();
+
+    await panel.parsePaste();
+
+    expect($("phone").value).toBe("9123 4567");
+    expect($("choices-phone").querySelectorAll("button")).toHaveLength(0);
+  });
+
+  test("a field that resolved is never asked about", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("choices-phone").querySelectorAll("button")).toHaveLength(0);
+    expect($("phone").value).toBe("91112233");
+  });
+
+  test("the summary counts the questions, so a closed drawer still says so", async () => {
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    expect($("found-summary").textContent).toContain("2 to choose");
+  });
+
+  test("the drawer opens itself when there is something to choose", async () => {
+    // Nothing required is missing here, so the old rule would have left it
+    // shut and the question unseen.
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("found").open = false;
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    expect($("found").open).toBe(true);
+  });
+
+  test("a backend with no choices at all changes nothing", async () => {
+    // The field is optional in the response, and an older backend does not
+    // send it. The panel must not render an empty question.
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () => respond({ ...PARSED, choices: undefined });
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("choices-phone").querySelectorAll("button")).toHaveLength(0);
+    expect($("found-summary").textContent).not.toContain("to choose");
+  });
+});
