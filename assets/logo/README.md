@@ -32,6 +32,30 @@ Brand blue is `#3aa0dc`, taken from the SVG's fill.
 | `website-favicon-32.png` | 32 | Browser tab on hi-DPI, and most bookmark bars |
 | `website-apple-touch-180.png` | 180 | iOS home screen |
 | `linkedin-profile-300.png` | 300 | LinkedIn company/profile picture |
+| `chrome-store-promo-440x280.png` | 440×280 | The Chrome Web Store's required "small promotional tile". **Uploaded to the dashboard by hand — it is not part of the extension package** |
+
+## The promo tile is the odd one out
+
+It is the only asset here that is neither square nor transparent, and both
+differences belong to the store rather than to the brand.
+
+**Landscape.** The mark is square, so it is centred at its own aspect ratio on
+a white ground and never stretched to fill 11:7. **Opaque.** The store
+composites the tile onto a light grey background, so a transparent PNG would
+leave the mark floating on a ground it was not drawn against; the file is
+written as RGB with no alpha channel, which makes that impossible rather than
+merely unlikely. The ground is white and not brand blue because the mark is
+already a blue rounded square — a blue ground erases its silhouette.
+
+No text on it. Google's guidance is to avoid text and to check the tile still
+reads at half size, and a wordmark small enough to sit beside the mark at
+440×280 is illegible at 220×140.
+
+It is also the one asset with almost no audience: BreezeFill is submitted
+**unlisted**, and the small tile appears on the store homepage, category pages
+and search results — none of which an unlisted item is in. Required to submit,
+not a surface anyone browses to.
+
 
 **Named for the use case, not the size, on purpose.** "32px" tells you nothing
 about whether a file can be deleted; "chrome-toolbar-retina" tells you exactly
