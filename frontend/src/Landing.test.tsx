@@ -12,7 +12,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import App, { routeOf } from "./App";
-import Landing, { DOWNLOAD_URL, SUBSCRIBE_URL } from "./Landing";
+import Landing, { DOWNLOAD_URL, subscribeUrl } from "./Landing";
 
 describe("routing", () => {
   test.each([
@@ -190,10 +190,25 @@ describe("pricing", () => {
     expect(pricing.textContent).toMatch(/month/i);
   });
 
-  test("the subscribe button is a real link when Stripe is configured", () => {
+  test("with no payment link configured there is no button to press", () => {
+    // A control that looks live and does nothing is worse than no control, and
+    // worst of all on the one that takes money. This is the state today.
+    expect(subscribeUrl()).toBe("");
     render(<Landing />);
-    const subscribe = screen.getByRole("link", { name: /subscribe/i });
-    expect(subscribe.getAttribute("href")).toBe(SUBSCRIBE_URL);
+    expect(screen.queryByRole("link", { name: /^subscribe$/i })).toBeNull();
+    expect(screen.getByText(/subscriptions open when/i)).toBeDefined();
+  });
+
+  test("once configured, Subscribe points at the payment link", () => {
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
+    try {
+      expect(subscribeUrl()).toBe("https://buy.stripe.com/test_123");
+      render(<Landing />);
+      const subscribe = screen.getByRole("link", { name: /^subscribe$/i });
+      expect(subscribe.getAttribute("href")).toBe("https://buy.stripe.com/test_123");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   test("pricing is reachable from the nav", () => {

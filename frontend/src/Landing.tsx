@@ -23,8 +23,9 @@ export const DOWNLOAD_URL = "/download/breezefill-extension.zip";
  * itself, which is inert rather than broken — a dead `href` on the one control
  * that takes money is worse than a button that visibly does nothing yet.
  */
-export const SUBSCRIBE_URL =
-  (import.meta.env.VITE_STRIPE_PAYMENT_LINK as string | undefined) || "#pricing";
+export function subscribeUrl(): string {
+  return (import.meta.env.VITE_STRIPE_PAYMENT_LINK as string | undefined) || "";
+}
 
 /** 200 SGD/month, stated once so the page and the tests cannot drift apart. */
 export const PRICE = { amount: "200", currency: "SGD", period: "month" };
@@ -91,7 +92,7 @@ const FAQS = [
   },
   {
     q: "Is my patient data leaving Singapore?",
-    a: "Today the model runs outside Singapore, so use synthetic or anonymised notes until in-region inference is in place. This is stated plainly rather than buried — it is the reason the pilot is not live on real notes yet.",
+    a: "Your patient's identifiers do not: name, NRIC, date of birth, phone, address and policy number are stripped out before anything is sent, and they are what the note is scrubbed against. The de-identified clinical text does — the model runs outside Singapore. The PDPA expects a comparable-protection agreement for an overseas transfer and there is not one in place yet, which the privacy policy says in those words rather than burying it. Read that section before you decide.",
   },
 ];
 
@@ -360,13 +361,25 @@ function Pricing() {
             <li key={item}>{item}</li>
           ))}
         </ul>
-        <a className="btn btn-primary btn-large" href={SUBSCRIBE_URL}>
-          Subscribe
-        </a>
-        <p className="price-note">
-          Billed monthly, cancel any time. After checkout you are given a
-          licence key and the link to install from the Chrome Web Store.
-        </p>
+        {/* No dead button. Until the payment link exists there is nothing to
+            subscribe to, and a control that looks live and does nothing is
+            worse on a page taking money than no control at all. */}
+        {subscribeUrl() ? (
+          <>
+            <a className="btn btn-primary btn-large" href={subscribeUrl()}>
+              Subscribe
+            </a>
+            <p className="price-note">
+              Billed monthly, cancel any time. After checkout you are given a
+              licence key and the link to install from the Chrome Web Store.
+            </p>
+          </>
+        ) : (
+          <p className="price-pending">
+            Subscriptions open when the Chrome Web Store listing is approved.
+            Until then it is free and installs by hand.
+          </p>
+        )}
       </div>
 
       {/* The honest caveat, in the pricing section rather than buried in a
@@ -403,9 +416,19 @@ function FinalCta() {
   return (
     <section className="section final-cta">
       <h2>Put it beside your next claim form.</h2>
+      {/* The offer and the price in the same breath. A free download sitting
+          silently next to a priced plan asks the reader to work out whether
+          they are about to be charged, and that is the one thing a page taking
+          money must not make them guess at. */}
       <p>
-        Free while in pilot. Works in Chrome. Uninstalling it leaves nothing
-        behind, because nothing was ever saved.
+        Free during the pilot, while it installs by hand. It becomes{" "}
+        {PRICE.currency} {PRICE.amount} a {PRICE.period} when it reaches the
+        Chrome Web Store — the pilot is not a trial that expires underneath
+        you, and you will be asked before anything is charged.
+      </p>
+      <p>
+        Works in Chrome. Uninstalling it leaves nothing behind, because nothing
+        was ever saved.
       </p>
       <div className="cta-row">
         <a className="btn btn-primary btn-large" href={DOWNLOAD_URL} download>
