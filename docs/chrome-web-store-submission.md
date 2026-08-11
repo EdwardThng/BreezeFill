@@ -186,9 +186,24 @@ A popup cannot do this: it closes as soon as the user clicks the page, and the r
 The panel also holds the claim in memory only. There is no storage permission, so nothing the user pastes is written to disk.
 ```
 
-**Remote code use:** select **No, I am not using remote code.** Every line the
-extension runs is inside the package. It calls an HTTPS API for processing and
-receives data back; it never fetches or evaluates code.
+### Remote code
+
+Select **"No, I am not using remote code."**
+
+Selecting No often means no justification box appears at all. If one does — or
+if a reviewer queries it, which is plausible for an extension that plainly
+talks to a server — this is the answer:
+
+```
+BreezeFill does not use remote code. Every script it executes is included in this package: the side panel UI, the service worker, and the four scripts injected into the page (learn/dump.js, fill/locate.js, fill/apply.js, content/fill.js). None of them is fetched from a server, and the extension contains no eval() and no new Function().
+
+The extension does make HTTPS requests to its backend at api.breezefill.com. Those requests exchange data, not code: it sends the de-identified consultation text and the form's question labels, and receives back proposed answers as JSON. Nothing in a response is executed, and no response can alter the extension's behaviour beyond the values shown to the user for confirmation.
+```
+
+Why that distinction matters, if it comes up: Chrome's remote code policy is
+about *executing* code fetched at runtime. Calling an API for data is not
+remote code, and the second paragraph exists to say so before anyone has to
+ask.
 
 ### Data disclosures
 
