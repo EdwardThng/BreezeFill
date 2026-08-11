@@ -1439,6 +1439,16 @@ guessed from anything and the doctor typed it at step 1. So the required pair
 is satisfied and the flow completes; the four values named in the paragraph
 above are what the *design spec* shows, not what the parser returns.
 
+**Those two boxes are no longer blank-and-silent (2026-08-11).** They still do
+not fill, and they still must not — but `ParsedDemographics.choices` now
+carries the candidates that caused the refusal, and the panel renders them as
+buttons under the field: *"2 found in the note — pick the patient's."* The
+reason is that a blank box was the panel's answer to two different situations,
+and only one of them justified it. "The note does not say" and "the note says
+two things and I will not choose between them" looked identical, so a
+deliberate refusal read as the product failing to look — which is exactly how
+the owner read it when testing on RoboForm.
+
 `address` was added on 2026-08-11 and is worth knowing about, because it was
 absent for the wrong reason. The sample writes it bare on its own line
 (`Blk 118 Bishan St 12 #07-21, S570118`), and the label-anywhere pass excluded
@@ -1618,6 +1628,22 @@ omission to "fix".
   add fuzzy matching to raise the fill rate — the value is a clinical statement
   the doctor signs, and a near-miss snapped across by string distance is
   indistinguishable in review from an answer the notes supported.
+- **Offering candidates is not choosing between them** (2026-08-11).
+  `ParsedDemographics.choices` exists so a refusal is *visible* rather than
+  indistinguishable from a blank; it must never become a ranking. Nothing is
+  pre-selected, nothing is written into a field on the doctor's behalf, and the
+  list is in the order the note wrote it rather than in any order of
+  preference. Picking one counts as a correction — it marks the field
+  `touched`, so a re-parse neither overwrites it nor asks again. The moment
+  something here sorts by "probably the mobile", the two-candidates refusal has
+  been undone by the back door.
+- **A field with no shape is never offered as a choice.** `full_name` and
+  `insurer` have no slot in the panel at all, and `dob` is offered *only* from
+  a region a label already said was a date of birth. A clinical note is nothing
+  but dates, so a list of every date in it invites the doctor to pick a
+  consultation date as a birth date — one click, indistinguishable from a
+  correct answer on the form. `test_dates_in_prose_are_never_offered_as_a_date_of_birth`
+  pins it.
 - No patient data in logs or error messages. LLM failures return a generic
   `"LLM call failed"`.
 - ~~**No real patient data until inference is confirmed in-region.**~~
