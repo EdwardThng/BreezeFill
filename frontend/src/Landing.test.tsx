@@ -77,6 +77,32 @@ describe("what the page promises", () => {
     expect(screen.getByText(/runs outside Singapore/i)).toBeDefined();
   });
 
+  test("it does not tell doctors to withhold real notes", () => {
+    // Superseded by the owner's call on 2026-08-06: real consultation notes
+    // are in scope, and the privacy policy discloses the transfer instead of
+    // forbidding the data. Copy still telling a doctor to anonymise first
+    // would describe a product that no longer exists — and would be
+    // incoherent beside a page asking them to pay for it.
+    render(<Landing />);
+    const body = document.body.textContent!;
+    expect(body).not.toMatch(/synthetic or anonymised|anonymise (the note|it) first/i);
+  });
+
+  test("the free download says what it will cost, where the download is", () => {
+    // The contradiction this closes: a free download sitting beside a
+    // 200/month price, with nothing saying how the two relate. A doctor
+    // should not have to work out whether they are about to be charged.
+    //
+    // Scoped to the section holding the download button on purpose. Asserting
+    // "the page mentions 200 somewhere" would pass on the pricing section
+    // alone and prove nothing about the offer next to the button.
+    const { container } = render(<Landing />);
+    const cta = container.querySelector(".final-cta")!;
+    expect(cta).not.toBeNull();
+    expect(cta.textContent).toMatch(/pilot/i);
+    expect(cta.textContent).toMatch(/200/);
+  });
+
   test("it is honest that this is not a Web Store install", () => {
     render(<Landing />);
     expect(screen.getByText(/not on the Chrome Web Store yet/i)).toBeDefined();
