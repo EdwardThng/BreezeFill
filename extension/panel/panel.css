@@ -818,3 +818,52 @@ button.confirm:active:not(:disabled) {
   outline: 2px solid var(--focus-line);
   outline-offset: 2px;
 }
+
+/* ---------------------------------------------------------------------------
+   Candidate questions
+   ---------------------------------------------------------------------------
+
+   Shown under a field the parser refused to fill BECAUSE the note gave more
+   than one answer. It is deliberately not styled as a warning: nothing is
+   wrong, and the doctor is not being corrected. It is a question, and the
+   colour that carries it is the same amber the review screen uses for "check
+   this", because that is exactly what is being asked.
+
+   The buttons are not the accent colour. The accent is only ever the Fill
+   button — the one irreversible action in the panel — and a row of blue
+   buttons beside it would read as equally consequential. */
+
+.choices:empty {
+  display: none;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.choices-why {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--check);
+}
+
+button.choice {
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--check-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.choice:hover {
+  background: var(--surface);
+  border-color: var(--check);
+}

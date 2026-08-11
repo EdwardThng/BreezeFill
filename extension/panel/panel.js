@@ -570,7 +570,64 @@ async function parsePaste() {
     const value = parsed[key];
     $(id).value = value == null ? "" : value;
   }
+  renderChoices(parsed.choices || {});
   updateFound();
+}
+
+/**
+ * Ask, where the parser refused for having found more than one.
+ *
+ * The refusal itself is right and is not what changes here. What changes is
+ * that it becomes visible: an empty box is also what the panel shows when the
+ * note mentions no number at all, so a deliberate "the note says two things
+ * and I will not choose between them" was indistinguishable from "I found
+ * nothing" — and read as the product failing to look.
+ *
+ * The doctor picks. Nothing is pre-selected, nothing is ordered by preference,
+ * and no candidate is written into the box on the doctor's behalf: the list is
+ * in the order their own note wrote it, and the refusal to guess is unchanged.
+ */
+function renderChoices(choices) {
+  for (const [id, key] of Object.entries(DEMOGRAPHIC_FIELDS)) {
+    const box = $(`choices-${id}`);
+    // full_name and insurer have no slot: neither has a shape, so neither can
+    // produce candidates without guessing which words are a value.
+    if (!box) continue;
+    box.textContent = "";
+
+    const options = choices[key] || [];
+    // A value the doctor typed, or one an earlier pass resolved, is an answer.
+    // Re-asking would invite them to undo a decision they already made.
+    if (options.length < 2 || state.touched.has(id) || $(id).value.trim()) continue;
+
+    const why = document.createElement("p");
+    why.className = "choices-why";
+    why.textContent = `${options.length} found in the note — pick the patient's:`;
+    box.appendChild(why);
+
+    for (const option of options) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "choice";
+      button.textContent = option;
+      button.addEventListener("click", () => {
+        $(id).value = option;
+        // Picking is deciding, so it counts as a correction: the next parse
+        // must not put the question back or overwrite the answer.
+        state.touched.add(id);
+        box.textContent = "";
+        updateFound();
+      });
+      box.appendChild(button);
+    }
+  }
+}
+
+/** How many fields are still waiting on the doctor to choose. */
+function pendingChoices() {
+  return Object.keys(DEMOGRAPHIC_FIELDS).filter(
+    (id) => $(`choices-${id}`) && $(`choices-${id}`).querySelector("button")
+  ).length;
 }
 
 /**
@@ -584,12 +641,16 @@ function updateFound() {
   const ids = Object.keys(DEMOGRAPHIC_FIELDS);
   const found = ids.filter((id) => $(id).value.trim()).length;
   const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+  // Said on the summary line, not only inside the drawer: the drawer can be
+  // shut, and a question nobody sees is the blank box this replaced.
+  const pending = pendingChoices();
+  const toChoose = pending ? `, ${pending} to choose` : "";
 
   $("found-summary").textContent = missing.length
-    ? `Patient details — ${missing.map(labelOf).join(", ")} still needed`
-    : `Patient details — ${found} of ${ids.length} found`;
+    ? `Patient details — ${missing.map(labelOf).join(", ")} still needed${toChoose}`
+    : `Patient details — ${found} of ${ids.length} found${toChoose}`;
 
-  if (missing.length && !state.openedForMissing) {
+  if ((missing.length || pending) && !state.openedForMissing) {
     $("found").open = true;
     state.openedForMissing = true;
   }

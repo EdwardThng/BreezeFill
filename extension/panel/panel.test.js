@@ -1359,11 +1359,19 @@ describe("choosing between candidates", () => {
   test("the drawer opens itself when there is something to choose", async () => {
     // Nothing required is missing here, so the old rule would have left it
     // shut and the question unseen.
+    //
+    // The drawer starts open, so asserting it is open proves nothing on its
+    // own — this clears the paste first, which is what resets the once-per-
+    // paste flag, then shuts the drawer and pastes afresh. That is the real
+    // sequence: the doctor closed it, then pasted a new note.
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "";
+    $("paste").dispatchEvent(new Event("input", { bubbles: true }));
     $("found").open = false;
+
+    routes["/parse"] = () => respond(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
