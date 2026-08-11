@@ -1238,6 +1238,47 @@ schema's shape, the count says there is enough evidence for the rate to mean
 anything. Consequence to accept: a note that yielded one or two values gets no
 autofill at all.
 
+### Design decisions not yet resolved
+
+*Open on purpose. Each was left rather than guessed, and each names what would
+settle it. Do not close one by picking the convenient side in passing.*
+
+**`locate` and `enrich` disagree about a collision, and only one of them can be
+right (2026-08-11).** Both join labels with the same scorer, the same
+`MIN_SCORE` and the same `TIE_MARGIN`, and since the enrichment fix both assign
+strongest-first. They part company on what to do when the thing being claimed
+is already taken:
+
+- `locate` **refuses**. A field whose best control is claimed is reported
+  `ambiguous` and nothing is written.
+- `enrich` **falls through** to the control's next-best unclaimed field, which
+  still has to clear `MIN_SCORE` and the tie check on its own.
+
+The case for leaving them different is that the stakes are not symmetric. A
+refusal in `locate` is a blank the doctor writes by hand; a refusal in `enrich`
+only means a control is answered from the page's own wording instead of the
+schema's, which is the documented weaker-but-safe direction. On that reading
+`enrich` should stay permissive, because the fall-through is independently
+evidenced — the second field cleared the same bar the first one did.
+
+The case for making them the same is that a wrong `description` is the one
+error nothing downstream can catch. A mislocated *value* is visible in review
+next to the question it landed under; a wrong instruction produces a
+plausible-looking answer to a question the doctor is not being shown, and the
+review screen renders it exactly like a right one. That argues `enrich` should
+refuse too.
+
+**What would settle it: the ClaimEZ dump.** The disagreement only bites on a
+page carrying two controls that ask a similar question, and nobody knows yet
+whether the real form does. If it does not, this is theory. If it does — a
+"Ward class" in the admission block and another in the requested-fees block,
+say — the dump shows the actual labels and the answer stops being a preference.
+
+Related and still open elsewhere: whether a step hidden behind `display:none`
+should be fillable (`isFillable` checks `disabled` and `readOnly`, not
+visibility) — see "All three are still gated on the same thing". Same shape of
+question, same thing unblocks it.
+
 ---
 
 ## Traps
