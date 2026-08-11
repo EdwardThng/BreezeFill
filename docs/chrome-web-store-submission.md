@@ -22,21 +22,25 @@ file, and it must be **rebuilt rather than reused** whenever anything under
 
 ```bash
 cd extension && rm -f ../breezefill-store-v0.2.0.zip \
-  && zip -rX ../breezefill-store-v0.2.0.zip . -x "*.test.js" ".*" "__MACOSX*"
+  && zip -rX ../breezefill-store-v0.2.0.zip . -x "*.test.js" ".*" "__MACOSX*" "README.md"
 ```
 
 Build it from **inside** `extension/`. Zipping the folder from outside nests
 everything under a `extension/` directory and the store rejects the package for
 having no `manifest.json` at the root.
 
-Two things the command does deliberately: `-x "*.test.js"` keeps the four test
-files out of a package Chrome unpacks on every install, and `-X` drops macOS
-resource forks. The result is 19 files, ~87 KB, `manifest.json` at the root.
+Everything the command excludes is deliberate. `*.test.js` keeps the four test
+files out of a package Chrome unpacks on every install. `README.md` is internal
+engineering documentation with no runtime purpose, and a `.crx` is a zip that
+anyone who installs can read — nothing in it is secret, but the smallest
+package is the easiest to review. `-X` drops macOS resource forks.
+
+The result is **13 files, ~78 KB**, `manifest.json` at the root.
 
 Check it carries the build you think it does before uploading:
 
 ```bash
-unzip -l breezefill-store-v0.2.0.zip          # 19 files, manifest.json at root
+unzip -l breezefill-store-v0.2.0.zip          # 13 files, manifest.json at root
 unzip -p breezefill-store-v0.2.0.zip manifest.json | grep version
 ```
 
@@ -51,7 +55,7 @@ filename.
 
 | Dashboard field | File | State |
 |---|---|---|
-| Package | `breezefill-store-v0.2.0.zip` (repo root) | Rebuilt 2026-08-11, contains the current build |
+| Package | `breezefill-store-v0.2.0.zip` (repo root) | Rebuilt 2026-08-11: 13 files, 78 KB, verified against the current build |
 | Store icon, 128×128 | `assets/logo/chrome-store-listing-128.png` | Ready |
 | Small promo tile, 440×280 | `assets/logo/chrome-store-promo-440x280.png` | Ready. **Required** — the listing cannot be submitted without it |
 | Screenshots, 1280×800 | `~/Documents/breezefill-store/store-1280x800-*.png` | Four, ready |
