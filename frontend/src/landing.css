@@ -1288,19 +1288,48 @@
   color: #7ea9cd;
 }
 
-/* The wordmark. Decoration only: clipped by .closing's overflow, never read
-   out, and never a scrollbar — `overflow: hidden` on the parent is what stops
-   a 20vw word widening the page. */
-.closing-wordmark {
-  margin: clamp(8px, 2vw, 24px) 0 0;
-  padding-left: clamp(12px, 3vw, 40px);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(96px, 21vw, 300px);
-  line-height: 0.82;
-  letter-spacing: -0.03em;
-  color: rgba(159, 199, 232, 0.13);
-  white-space: nowrap;
+/* The mark and the word, as one printed object.
+ *
+ * Tinted rather than clipped: it sits fully on the band with room beneath, and
+ * the mark takes the same value as the letters so neither reads as pasted on
+ * top of the other. `overflow: hidden` on .closing still guards against a
+ * wide viewport turning this into a horizontal scrollbar.
+ */
+.closing-mark {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2vw, 26px);
+  margin: clamp(16px, 3vw, 36px) 0 0;
+  padding: 0 clamp(12px, 3vw, 40px) clamp(20px, 3vw, 40px);
+  color: rgba(159, 199, 232, 0.15);
   user-select: none;
-  /* Sits below the footer text and is cut off by the page edge. */
-  margin-bottom: -0.18em;
+}
+
+.closing-mark span {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(56px, 14vw, 190px);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+/* The mark scales with the word rather than sitting at its own fixed size. */
+.closing-mark svg {
+  width: clamp(44px, 11vw, 150px);
+  height: auto;
+  flex: none;
+}
+
+/* Strokes take the same tint as the letters. The tick is left a touch
+   stronger — at this scale it is the one part of the mark that would
+   otherwise disappear. */
+.closing-mark .logo-page,
+.closing-mark .logo-lines {
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.closing-mark .logo-tick {
+  stroke: rgba(159, 199, 232, 0.22);
+  stroke-width: 2;
 }

@@ -713,14 +713,14 @@ function Closing() {
     <div className="closing">
       <FinalCta />
       <Footer />
-      {/* The wordmark is decoration: it bleeds off the bottom edge and is
-          clipped, so it must never be read out or reachable. The reference had
-          an illustrated mascot beside it; BreezeFill's mark is a small square
-          glyph rather than a character, and blown up to that size it reads as
-          a rendering fault, so it is left at its own scale in the row above. */}
-      <p className="closing-wordmark" aria-hidden="true">
-        breezefill
-      </p>
+      {/* Decoration, so it is hidden from assistive tech and unreachable. The
+          mark sits with the word and is tinted to the same value, so the two
+          read as one object printed on the band rather than a logo placed on
+          top of it. */}
+      <div className="closing-mark" aria-hidden="true">
+        <Logo />
+        <span>breezefill</span>
+      </div>
     </div>
   );
 }

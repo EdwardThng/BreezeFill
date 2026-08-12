@@ -327,8 +327,11 @@ describe("the closing region", () => {
 
   test("the wordmark is decoration and is hidden from assistive tech", () => {
     const { container } = render(<Landing />);
-    const mark = container.querySelector(".closing-wordmark")!;
+    const mark = container.querySelector(".closing-mark")!;
     expect(mark.getAttribute("aria-hidden")).toBe("true");
+    // The logo sits with the word rather than being a second thing to read.
+    expect(mark.querySelector("svg")).not.toBeNull();
+    expect(mark.textContent).toBe("breezefill");
   });
 
   test("the footer links to the privacy policy and invents nothing else", () => {
