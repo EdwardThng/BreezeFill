@@ -628,15 +628,22 @@ function VideoDemo() {
 function Faq() {
   return (
     <section className="section faq" id="faq">
-      <p className="eyebrow">Questions</p>
-      <h2>The ones worth asking first.</h2>
-      <div className="faq-list">
-        {FAQS.map((item) => (
-          <details key={item.q}>
-            <summary>{item.q}</summary>
-            <p>{item.a}</p>
-          </details>
-        ))}
+      <div className="faq-grid">
+        <div className="faq-intro">
+          <p className="eyebrow">Questions</p>
+          {/* No manual break: the column is narrow and a hard break left a
+              single short word stranded on its own line. */}
+          <h2>The ones worth asking first.</h2>
+          <span className="faq-ornament" aria-hidden="true" />
+        </div>
+        <div className="faq-list">
+          {FAQS.map((item) => (
+            <details key={item.q}>
+              <summary>{item.q}</summary>
+              <p>{item.a}</p>
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );
