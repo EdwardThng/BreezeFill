@@ -176,8 +176,7 @@ export default function Landing() {
       <VideoDemo />
       <Pricing />
       <Faq />
-      <FinalCta />
-      <Footer />
+      <Closing />
     </div>
   );
 }
@@ -709,27 +708,43 @@ function FinalCta() {
   );
 }
 
+function Closing() {
+  return (
+    <div className="closing">
+      <FinalCta />
+      <Footer />
+      {/* The wordmark is decoration: it bleeds off the bottom edge and is
+          clipped, so it must never be read out or reachable. The reference had
+          an illustrated mascot beside it; BreezeFill's mark is a small square
+          glyph rather than a character, and blown up to that size it reads as
+          a rendering fault, so it is left at its own scale in the row above. */}
+      <p className="closing-wordmark" aria-hidden="true">
+        breezefill
+      </p>
+    </div>
+  );
+}
+
 function Footer() {
   return (
     <footer className="footer">
-      <div className="brand">
-        <Logo />
-        <span>BreezeFill</span>
+      <div className="footer-row">
+        <p className="footer-copy">
+          © 2026 BreezeFill · It fills. You check. You submit.
+        </p>
+        {/* Privacy only. The reference has "Terms" beside it and there is no
+            terms page — a link to one that does not exist is worse than one
+            fewer link, particularly on a page a Web Store reviewer reads.
+            A real path, not a #/ route: the policy is static HTML so it reads
+            even if this bundle does not. `cleanUrls` in vercel.json is what
+            makes /privacy resolve to public/privacy.html. */}
+        <nav className="footer-links" aria-label="Legal">
+          <a href="/privacy">Privacy</a>
+        </nav>
       </div>
-      <p className="footer-line">
-        © 2026 BreezeFill · It fills. You check. You submit.
-      </p>
-      <p>
+      <p className="footer-note">
         Assists with form completion. The reviewing doctor remains responsible
         for the accuracy of every submitted form.
-      </p>
-      {/* A real path, not a #/ route: the policy is served as static HTML so
-          that it reads even if this bundle does not. The file is
-          public/privacy.html; `cleanUrls` in vercel.json drops the extension,
-          which is why this links to /privacy and why that is the URL given to
-          the Chrome Web Store. */}
-      <p>
-        <a href="/privacy">Privacy policy</a>
       </p>
     </footer>
   );

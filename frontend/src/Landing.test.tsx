@@ -315,3 +315,29 @@ describe("hero shot, scroll demo and video", () => {
     expect(container.querySelector("#demo")!.textContent).toMatch(/nothing submitted/i);
   });
 });
+
+describe("the closing region", () => {
+  test("the call to action and the footer share one dark band", () => {
+    const { container } = render(<Landing />);
+    const closing = container.querySelector(".closing")!;
+    expect(closing).not.toBeNull();
+    expect(closing.querySelector(".final-cta")).not.toBeNull();
+    expect(closing.querySelector(".footer")).not.toBeNull();
+  });
+
+  test("the wordmark is decoration and is hidden from assistive tech", () => {
+    const { container } = render(<Landing />);
+    const mark = container.querySelector(".closing-wordmark")!;
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("the footer links to the privacy policy and invents nothing else", () => {
+    // The reference had "Terms" beside Privacy. There is no terms page, and a
+    // link to one that does not exist is worse on this page than one fewer
+    // link — the Web Store listing points a reviewer straight at this footer.
+    const { container } = render(<Landing />);
+    const links = [...container.querySelectorAll(".footer-links a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/privacy"]);
+    expect(container.querySelector(".footer")!.textContent).not.toMatch(/terms/i);
+  });
+});

@@ -1170,3 +1170,137 @@
 .shot-frame.is-mock {
   border-radius: 20px;
 }
+
+/* The closing region ---------------------------------------------------------
+ *
+ * One continuous dark area: the call to action, a hairline, the footer row,
+ * and a wordmark bleeding off the bottom edge. Modelled on the reference, in
+ * BreezeFill's own palette — the deep blue band that already carried the
+ * closing section, rather than the reference's brown.
+ *
+ * Full-bleed rather than the inset rounded card it was, because the wordmark
+ * has to run off the page edge to read as clipped rather than as cropped
+ * inside a box.
+ */
+
+.closing {
+  position: relative;
+  background: var(--band);
+  color: var(--band-ink);
+  overflow: hidden;
+  margin-top: clamp(56px, 8vw, 96px);
+}
+
+/* Undo the inset card: inside .closing the band IS the page. */
+.closing .final-cta {
+  background: none;
+  border-radius: 0;
+  margin: 0;
+  max-width: none;
+  padding: clamp(64px, 9vw, 120px) clamp(20px, 5vw, 56px) clamp(48px, 6vw, 72px);
+}
+
+/* A serif display, as the reference has. Georgia is on every machine this
+   page will meet, which is why there is no webfont here — the page loads
+   nothing from another origin and a test asserts it. */
+.closing .final-cta h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  font-size: clamp(38px, 6vw, 82px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  max-width: 16ch;
+  margin-inline: auto;
+}
+
+/* The pill. This is the one place the brand blue works as a filled surface on
+   this page: on the dark band it carries --accent-ink at 6.53:1, where on the
+   light ground it failed at 2.90:1. */
+.closing .final-cta .btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #04121d;
+  border-radius: 999px;
+  padding: 15px 30px;
+}
+
+.closing .final-cta .btn-primary:hover {
+  background: #55b0e4;
+  border-color: #55b0e4;
+}
+
+.closing .final-cta .btn-ghost {
+  border-radius: 999px;
+  padding: 15px 30px;
+}
+
+.closing .footer {
+  position: relative;
+  z-index: 1;
+  /* Not the grid the light-theme .footer is: `margin: 0 auto` on a grid item
+     shrink-wraps it, which left `justify-content: space-between` with nothing
+     to spread and the copyright and links huddled in the middle. */
+  display: block;
+  border-top: 1px solid rgba(244, 250, 254, 0.14);
+  padding: 26px clamp(20px, 5vw, 56px) 0;
+  max-width: none;
+}
+
+.footer-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.footer-copy,
+.footer-links {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+.footer-copy {
+  color: var(--band-dim);
+}
+
+.footer-links {
+  display: flex;
+  gap: 22px;
+}
+
+.footer-links a {
+  color: var(--band-ink);
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+.closing .footer-note {
+  max-width: 1240px;
+  margin: 14px auto 0;
+  font-size: 12.5px;
+  color: #7ea9cd;
+}
+
+/* The wordmark. Decoration only: clipped by .closing's overflow, never read
+   out, and never a scrollbar — `overflow: hidden` on the parent is what stops
+   a 20vw word widening the page. */
+.closing-wordmark {
+  margin: clamp(8px, 2vw, 24px) 0 0;
+  padding-left: clamp(12px, 3vw, 40px);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(96px, 21vw, 300px);
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+  color: rgba(159, 199, 232, 0.13);
+  white-space: nowrap;
+  user-select: none;
+  /* Sits below the footer text and is cut off by the page edge. */
+  margin-bottom: -0.18em;
+}
