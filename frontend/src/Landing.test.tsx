@@ -330,7 +330,9 @@ describe("the closing region", () => {
     const mark = container.querySelector(".closing-mark")!;
     expect(mark.getAttribute("aria-hidden")).toBe("true");
     // The logo sits with the word rather than being a second thing to read.
-    expect(mark.querySelector("svg")).not.toBeNull();
+    const img = mark.querySelector("img")!;
+    expect(img).not.toBeNull();
+    expect(img.getAttribute("src")).toBe("/website-logo-128.png");
     expect(mark.textContent).toBe("breezefill");
   });
 

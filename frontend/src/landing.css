@@ -133,6 +133,13 @@
   background: rgba(8, 11, 15, 0.85);
 }
 
+.logo {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -141,25 +148,8 @@
   letter-spacing: -0.02em;
 }
 
-.logo-page {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.6;
-}
 
-.logo-lines {
-  stroke: var(--ink-faint);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
 
-.logo-tick {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
 
 .nav-links {
   display: flex;
@@ -577,114 +567,6 @@
   color: var(--ink-dim);
 }
 
-/* Coverage ----------------------------------------------------------------- */
-
-.coverage .two-col p {
-  margin: 16px 0 14px;
-}
-
-.coverage-card {
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 26px;
-  align-self: start;
-}
-
-.coverage-card h3 {
-  font-size: 18px;
-  text-transform: none;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  margin-bottom: 12px;
-}
-
-.coverage-card p {
-  margin-bottom: 18px;
-}
-
-/* FAQ ---------------------------------------------------------------------- */
-
-.faq-list {
-  margin-top: 32px;
-  border-top: 1px solid var(--line);
-}
-
-.faq-list details {
-  border-bottom: 1px solid var(--line);
-}
-
-.faq-list summary {
-  cursor: pointer;
-  padding: 18px 0;
-  font-size: 16.5px;
-  font-weight: 560;
-  list-style: none;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.faq-list summary::-webkit-details-marker {
-  display: none;
-}
-
-.faq-list summary::after {
-  content: "+";
-  color: var(--accent);
-  font-weight: 400;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.faq-list details[open] summary::after {
-  content: "−";
-}
-
-.faq-list p {
-  margin: 0 0 20px;
-  max-width: 68ch;
-  color: var(--ink-dim);
-  font-size: 15px;
-}
-
-/* Final CTA + footer ------------------------------------------------------- */
-
-.final-cta {
-  text-align: center;
-  border-bottom: none;
-}
-
-.final-cta h2 {
-  max-width: none;
-}
-
-.final-cta p {
-  color: var(--ink-dim);
-  margin: 16px auto 0;
-  max-width: 52ch;
-}
-
-.final-cta .cta-row {
-  margin-top: 28px;
-}
-
-.footer {
-  border-top: 1px solid var(--line);
-  padding: 32px clamp(16px, 5vw, 56px) 48px;
-  max-width: 1080px;
-  margin: 0 auto;
-  display: grid;
-  gap: 12px;
-}
-
-.footer p {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--ink-faint);
-  max-width: 60ch;
-}
-
 /* Pricing ------------------------------------------------------------------
  *
  * One card, centred, no comparison table. There is one plan, and a three-tier
@@ -869,7 +751,6 @@
 
 /* Cards read as raised paper on a tinted ground, rather than as darker holes
    punched in it. */
-.coverage-card,
 .price-card {
   background: var(--bg-card);
   border-color: var(--line-strong);
@@ -1323,13 +1204,11 @@
 /* Strokes take the same tint as the letters. The tick is left a touch
    stronger — at this scale it is the one part of the mark that would
    otherwise disappear. */
-.closing-mark .logo-page,
-.closing-mark .logo-lines {
-  stroke: currentColor;
-  stroke-width: 1.4;
-}
-
-.closing-mark .logo-tick {
-  stroke: rgba(159, 199, 232, 0.22);
-  stroke-width: 2;
+/* The mark is a full-colour blue tile, so on the band it is faded to sit at
+   the same value as the letters instead of punching a bright square out of
+   them. Opacity rather than a filter: the artwork keeps its own shape. */
+.closing-mark .logo {
+  width: clamp(52px, 13vw, 172px);
+  height: auto;
+  opacity: 0.18;
 }

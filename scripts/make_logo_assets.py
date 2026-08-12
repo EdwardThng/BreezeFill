@@ -82,6 +82,11 @@ MASTER = LOGO_DIR / "source-master-600.png"
 # paths are relative to it and may not climb out — so the four it needs are
 # copied in. Generated, never hand-edited: change the master and re-run.
 EXTENSION_ICONS = REPO_ROOT / "extension" / "icons"
+# Vite serves everything in public/ from the site root, so a file here is
+# reachable as /<name>.png. These were hand-copied until 2026-08-12, which is
+# a drift waiting to happen — the master is the only thing that should decide
+# what the site shows.
+WEBSITE_PUBLIC = REPO_ROOT / "frontend" / "public"
 
 # Below this size the mark is scaled up inside the tile before rendering.
 # 16 and under is where rendering showed the strokes merging.
@@ -98,6 +103,7 @@ OUTPUTS = {
     "website-favicon-32": (32, "Browser tab, hi-DPI, and most bookmark bars."),
     "website-apple-touch-180": (180, "iOS home screen, if a doctor saves the site."),
     "linkedin-profile-300": (300, "LinkedIn company/profile picture. LinkedIn re-crops to a circle, and the mark sits well inside the safe area at this framing."),
+    "website-logo-128": (128, "The mark in the site's nav and in the wordmark that closes the page. Same artwork as the store listing icon, named for where it appears rather than shared, because the two can diverge — the store's is framed by Chrome, this one sits on the page's own ground."),
 }
 
 # Deliberately NOT in OUTPUTS: everything there is square, and everything
@@ -176,6 +182,7 @@ def main() -> None:
     tight = tightened(master, TIGHT_FILL)
     LOGO_DIR.mkdir(parents=True, exist_ok=True)
     EXTENSION_ICONS.mkdir(parents=True, exist_ok=True)
+    WEBSITE_PUBLIC.mkdir(parents=True, exist_ok=True)
 
     x0, y0, x1, y1 = mark_bbox(master)
     print(f"master {master.width}x{master.height}, artwork fills "
@@ -200,6 +207,12 @@ def main() -> None:
         dst = EXTENSION_ICONS / f"{name}.png"
         dst.write_bytes(src.read_bytes())
         print(f"  {dst.relative_to(REPO_ROOT)}  (copy for the extension package)")
+
+    for name in (n for n in OUTPUTS if n.startswith("website-")):
+        src = LOGO_DIR / f"{name}.png"
+        dst = WEBSITE_PUBLIC / f"{name}.png"
+        dst.write_bytes(src.read_bytes())
+        print(f"  {dst.relative_to(REPO_ROOT)}  (copy served at /{name}.png)")
 
 
 if __name__ == "__main__":

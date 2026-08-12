@@ -172,7 +172,6 @@ export default function Landing() {
       <ScrollDemo />
       <HowItWorks />
       <Privacy />
-      <Coverage />
       <VideoDemo />
       <Pricing />
       <Faq />
@@ -384,40 +383,6 @@ function Privacy() {
             <p>{g.body}</p>
           </article>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function Coverage() {
-  return (
-    <section className="section coverage">
-      <div className="two-col">
-        <div>
-          <p className="eyebrow">Forms</p>
-          <h2>Knows the common ones. Handles the rest.</h2>
-          <p>
-            AIA and Great Eastern group hospital &amp; surgical claims are
-            described in detail, so the model is told what each question means
-            rather than guessing from its wording.
-          </p>
-          <p>
-            Meet a form it does not know and it reads the questions off the page
-            instead, then hands back a description of that form for review — so
-            the tool gets better at your insurers, not at insurers in general.
-          </p>
-        </div>
-        <div className="coverage-card">
-          <h3>Also fills PDFs</h3>
-          <p>
-            Not every insurer sends a link. Five printed forms — including the
-            scanned ones with no fillable fields — are filled and returned as a
-            PDF ready to print and sign.
-          </p>
-          <a className="btn btn-ghost" href="#/app">
-            Open the PDF form filler
-          </a>
-        </div>
       </div>
     </section>
   );
@@ -750,12 +715,21 @@ function Footer() {
   );
 }
 
-function Logo() {
+/**
+ * The mark itself, generated from the master by scripts/make_logo_assets.py
+ * and served from public/. This used to be a hand-drawn SVG of a document
+ * with a tick — nothing like the actual logo, which is why it read as missing
+ * rather than wrong.
+ */
+function Logo({ className = "" }: { className?: string }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3" y="2" width="18" height="20" rx="3" className="logo-page" />
-      <path d="M7.5 9.5h9M7.5 13h9M7.5 16.5h5" className="logo-lines" />
-      <path d="M14.5 17.5l2.5 2.5 4.5-5.5" className="logo-tick" />
-    </svg>
+    <img
+      className={`logo ${className}`.trim()}
+      src="/website-logo-128.png"
+      alt=""
+      width={128}
+      height={128}
+      aria-hidden="true"
+    />
   );
 }
