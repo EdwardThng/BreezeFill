@@ -655,6 +655,67 @@ an unknown property risks `Invalid vercel.json`, and a config that fails to
 parse is a deploy failure this repo has already paid for once (see the BOM
 trap).
 
+
+**Pricing, and the gate that does not exist yet (2026-08-12).** The owner's
+call: **SGD 200/month per clinic**, billed through Stripe on the website, with
+the extension distributed free through the store during the pilot.
+
+The decision that matters is not the price, it is **how a subscription gates
+anything**. Today the extension calls `api.breezefill.com` with no
+authentication at all: anyone who installs it uses it free, forever. A
+subscribe button in front of an ungated product sells nothing.
+
+Chosen shape: **a licence key the doctor pastes into the panel once, verified
+by asking Stripe whether that subscription is active.** Stripe holds the
+subscriber list, so the backend gains no database of its own — which matters
+because `README.md` says publicly that there is none, and that sentence is
+load-bearing for a product asking clinicians to trust it. What it costs: the
+extension needs a new version and a second store review.
+
+The alternatives, so they are not re-opened. *Full accounts* — sessions,
+password reset, real user records sitting beside a product whose pitch is that
+it stores nothing. *Ship the button and gate later* — fastest, but Chrome's
+own terms say you **may not collect future charges from users for copies they
+were allowed to download for free**, so every pilot install would be
+permanently free. That clause is also why the paid tier must be built as an
+upsell on top of a free baseline rather than a switch that turns the existing
+product off.
+
+Nothing is wired yet. `subscribeUrl()` reads `VITE_STRIPE_PAYMENT_LINK` at
+build time, and while it is unset the pricing card says subscriptions are not
+open rather than rendering a dead button — a control that looks live and does
+nothing is worst on the one that takes money.
+
+**The website redesign (2026-08-12).** The owner supplied a design export and
+asked for it to be implemented. It was a **template for a different product** —
+the assets in the zip are screenshots of "Bubble Lab", a community-ops tool,
+and the BreezeFill copy was that template with nouns swapped. Three of its
+claims were false here and were not implemented:
+
+- *"Nothing leaves your browser."* The paste goes to the backend, which is
+  where identifiers are found and the note is scrubbed. What is true, and is
+  the stronger claim, is that the **model** never sees them.
+- *"Free and open source."* Neither, and the same page quotes a price.
+- *A save/remember prompt, "saved responses live in browser storage", iframes
+  and open shadow DOM.* No `chrome.storage` permission exists, and iframes and
+  shadow roots are open unknowns rather than shipped behaviour.
+
+The visual language was taken and the claims rewritten; `Landing.test.tsx`
+gained guards for each of the three, because a future redesign pass will
+reintroduce them otherwise. What the design dropped and was kept anyway:
+`#privacy` and `#faq`. On a page asking a doctor to send clinical text to a
+server, deleting the honest disclosure is the worst available trade — and the
+store listing points a reviewer straight at it.
+
+Two things about the light theme worth knowing before touching it. **The
+accent had to split**: `#3aa0dc` is the logo's blue and it works on a dark
+ground, but on the light one it measures 2.76:1 as text and 2.90:1 under white
+on a button, both failing AA. So the brand blue is a **fill** (logo, tints,
+the hero glow, the pill on the dark band) and a darker `#1a6fb8` carries
+anything that has to be read. And **`.landing` and `.demo` no longer share a
+token block** — the demo was not redesigned and its stylesheet assumes a dark
+ground, so re-merging them breaks `#/demo`.
+
 **Hosting is being revisited (2026-08-04), and the statelessness above is what
 unblocks it.** The original single-origin decision assumed the website *was*
 the product; it is not any more, so the website (static: landing, demo,
