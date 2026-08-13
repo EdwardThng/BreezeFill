@@ -155,6 +155,26 @@ is acceptable. See **Working style** at the end of this file.
   every lifecycle event and the default is already correct.
 - Keep `redaction.py`'s patterns blunt and `demographics.py`'s strict — one
   blanks text, the other assigns a value to a field.
+- `frontend/src/styles.css` is the claim UI's and is **globally scoped**; it
+  already collides with the landing on `.step` and `.pill`. Scope new landing
+  rules under `.landing`, and set `display` explicitly rather than inheriting
+  whatever the claim UI happens to declare.
+- `.landing a { color: inherit }` is specificity 0,1,1 and outranks a bare
+  `.btn-primary` — style buttons as `.landing .btn-primary` or the label
+  silently takes the page's ink instead of the button's.
+- Define a colour's `-rgb` channels in **every** theme block that uses
+  `rgba(var(--x-rgb), …)`. A missing triple resolves to nothing and the rule
+  vanishes with no error.
+- `vite preview` serves a cached `index.html`; check the hashed filename in the
+  `<link>` before concluding a CSS change did not apply.
+- Never delete a CSS range between two comment markers without reading what is
+  inside it — doing that to the Coverage block took the FAQ, Final CTA and
+  Footer with it, and the `.closing` overrides masked the loss.
+- Turn off the macOS screenshot floating thumbnail (`Cmd+Shift+5` → Options).
+  Until it flies away the file exists only under
+  `/var/folders/…/TemporaryItems/`, and dismissing it deletes rather than saves.
+- Regenerate site assets with `scripts/make_logo_assets.py` rather than copying
+  by hand; it now writes `frontend/public/` too.
 
 ---
 
