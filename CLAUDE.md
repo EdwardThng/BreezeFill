@@ -2054,6 +2054,34 @@ forbidding the data. See the guardrail; do not reinstate the old rule here.
 Owner's terminal for anything holding the key — a key pasted into a transcript
 is a key to rotate.
 
+**2c. Build the paid tier, in this order.** The design is settled — see
+"Pricing, and the gate that does not exist yet". Nothing here blocks the store
+submission, and the submission should not wait for it.
+
+1. **Stripe payment link + price** (owner). Setting `VITE_STRIPE_PAYMENT_LINK`
+   at build time is all the site needs to turn the pricing card's placeholder
+   into a working Subscribe button.
+2. **A post-payment page** that hands over the licence key and the store link.
+3. **Licence verification in the backend**, by asking Stripe whether the
+   subscription is active — no subscriber table of this repo's own.
+4. **A licence field in the panel.** This is the part that costs a second
+   store review, so it is last.
+
+Two things to settle before the first real charge, both the owner's: the
+**legal entity** on the Stripe account (moving from sole trader to a company
+later means a new account and re-onboarding every card), and whether the free
+pilot installs are grandfathered — Chrome's terms say they must be.
+
+**2d. Gate the deploy on CI.** `.github/workflows/tests.yml` runs the three
+suites on every push but only reports; `main` is production and Vercel deploys
+it regardless, so a red suite still ships. The shape that fits this repo's
+"commit after every file change" habit is to **turn off Vercel's automatic Git
+deploys and deploy from the workflow after the tests pass** — pushing stays
+exactly as it is, production simply updates a few seconds later and only when
+green. Needs a Vercel token in GitHub secrets, which is the only secret in the
+whole setup. Add a post-deploy smoke check on `/health`, `/forms` and the
+download route while the store review is running.
+
 **3. ~~Wizard support~~ — built 2026-08-04, first exercised 2026-08-06.**
 `tests/fixtures/wizard_like.html` and `wizard_test_v1` (`internal: true`) turn
 it on: two `<legend>`-named steps, three question types each, a URL that never
