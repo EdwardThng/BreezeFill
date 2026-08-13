@@ -2000,46 +2000,41 @@ decision accepts, explicitly, is that **the extension has still never filled a
 real insurer form** (next steps item 1), so the first version in the store is
 one whose core path is proven only against RoboForm and synthetic fixtures.
 
-**Status 2026-08-10 — everything is done except the screenshots.** The full
-state is in the store-submission table under Status, above. Cleared since this
-was written: the privacy policy is live and accurate, the mailbox and developer
-account are done, `optional_host_permissions` is gone, the version is `0.2.0`
-and the upload zip is built.
+**Status 2026-08-12 — every asset exists; the listing form is the work.**
+The full state is in the store-submission table under Status, and every string
+to paste is in **`docs/chrome-web-store-submission.md`** — that file is the
+one to open, not this one.
 
-What is left, and it is one thing:
+Cleared since this was written: the four screenshots, the 440×280 promo tile,
+the permission justifications and single-purpose statement, the remote-code
+answer, and the package itself at `0.2.1`.
 
-1. **Screenshots — at least one, 1280×800, five allowed and five worth
-   taking.** It needs a human at a browser. The side panel is Chrome UI rather
-   than page content, so browser automation cannot capture it: a page
-   screenshot's origin is the top-left of the *page*, with no toolbar and no
-   panel in frame, which also means the toolbar icon cannot be clicked. Shoot
-   the review step with the source quotes visible — that is the product's whole
-   argument — on a neutral form with a synthetic note, never a real insurer's
-   branded portal. `scripts/store_screenshots.py` converts the captures to
-   exactly 1280×800.
+What is left:
 
-   Four traps, all met on the first attempt (2026-08-11):
+1. **Finish the listing form and submit.** Long description, category,
+   language, the four screenshots (lead with `3.45.53`), icon, promo tile, the
+   Privacy tab, and Distribution set to **Unlisted**. Name and short
+   description come from the manifest and cannot be edited there.
+2. **If the upload fails again, get the exact error text.** The package has
+   been verified clean offline every way available — root manifest, no BOM,
+   valid JSON, every internal reference resolving, icons at their declared
+   sizes, 78 KB against a 20 MB limit — so the next signal has to come from
+   the dashboard rather than from another local check.
 
-   - **Crop, or the argument is unreadable.** A whole-window capture spends
-     three quarters of its width on the insurer's form, putting the panel's
-     copy at ~9px — illegible at the size the store draws a thumbnail. Use
-     `--crop right:62`, which was the balance that keeps the panel readable
-     while the form still reads as a form rather than as sliced words.
+Four screenshot traps, all met on the first attempt (2026-08-11), all still
+true for a retake:
+
+   - **Crop, or the argument is unreadable.** A whole-window capture puts the
+     panel's copy at ~9px. `scripts/store_screenshots.py --crop right:62` was
+     the balance; a step whose content sits lower in the panel wants an
+     explicit `x,y,w,h` box instead, because the fractional form anchors at the
+     top.
    - **`Cmd+Shift+B` first.** The bookmarks bar puts personal browsing into a
-     public listing, and it survives the crop as a legible sliver.
-   - **Turn off the floating thumbnail** (`Cmd+Shift+5` → Options). Until it
-     flies away the capture lives only in
-     `/var/folders/…/TemporaryItems/NSIRD_screencaptureui_*/`, and dismissing
-     or dragging it deletes the file instead of saving it. Three of four
-     retakes were lost this way.
-   - **Reload the extension before shooting.** Screenshots taken against a
-     stale build show fixed problems — the first set caught the blank Phone
-     and Policy boxes from before `choices` existed, which is a picture of the
-     complaint rather than of the product.
-2. **A justification string for every permission**, `activeTab`, `scripting`
-   and `sidePanel`, plus the single-purpose statement. Drafted; write these
-   from the refusals — "fills in place, never submits" is the honest
-   description and it is also the one that survives review.
+     public listing and survives the crop.
+   - **Turn off the floating thumbnail.** Three of four retakes were lost to
+     it — see Known gotchas.
+   - **Reload the extension before shooting.** The first set photographed a
+     stale build and showed problems that were already fixed.
 
 The **data-safety disclosures** must agree with `privacy.html` line for line;
 the store asks the same questions and a mismatch is a rejection, not a query.
