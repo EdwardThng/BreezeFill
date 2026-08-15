@@ -1,17 +1,151 @@
 {
   "form_id": "wizard_test_v1",
-  "display_name": "Two-step wizard test page (testing only)",
+  "display_name": "Three-step wizard test page (testing only)",
   "insurer": "Test",
   "internal": true,
   "fill_mode": "web",
   "hosts": ["localhost"],
   "fields": [
     {
+      "id": "full_name",
+      "label": "Patient's Full Name",
+      "type": "text",
+      "source": "demographics.full_name",
+      "step": "Patient details"
+    },
+    {
+      "id": "nric",
+      "label": "NRIC / FIN",
+      "type": "text",
+      "source": "demographics.nric",
+      "step": "Patient details"
+    },
+    {
+      "id": "dob",
+      "label": "Date of Birth",
+      "type": "date",
+      "source": "demographics.dob",
+      "step": "Patient details",
+      "description": "A native date control, which holds yyyy-mm-dd and empties itself when handed anything else. The pipeline carries DD/MM/YYYY, so applyDate converts at the last moment and writeOrRestore reads the value back. It is the only such control in the repo."
+    },
+    {
+      "id": "phone",
+      "label": "Contact No.",
+      "type": "text",
+      "source": "demographics.phone",
+      "step": "Patient details",
+      "description": "The panel's sample note writes two phone numbers, so the parser refuses both and offers them as choices. This field is expected to stay blank until the doctor picks one."
+    },
+    {
+      "id": "policy_number",
+      "label": "Policy Number",
+      "type": "text",
+      "source": "demographics.policy_number",
+      "step": "Patient details",
+      "description": "Two policy variants in the sample note, so the same two-candidates refusal as the phone."
+    },
+    {
+      "id": "address",
+      "label": "Residential Address",
+      "type": "text",
+      "source": "demographics.address",
+      "step": "Patient details"
+    },
+    {
+      "id": "insurer",
+      "label": "Insurer",
+      "type": "text",
+      "source": "demographics.insurer",
+      "step": "Patient details",
+      "description": "Pre-filled by the fixture, so the never-overwrite guard should leave it alone and report it already answered rather than skipped."
+    },
+    {
+      "id": "consult_date",
+      "label": "Date of consultation",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "The date of THIS consultation — the visit the statement is being written about, not the first consultation for the condition and not the date the form is being filled in."
+    },
+    {
+      "id": "first_consult_date",
+      "label": "Date the patient first consulted you for this condition",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "The date the patient FIRST consulted this doctor for this condition, not the latest visit. Insurers use it to test whether the condition pre-dates the policy, so answer it only where the notes state it rather than assuming the earliest date they mention."
+    },
+    {
+      "id": "diagnosis_category",
+      "label": "Primary diagnosis category",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "The body system the PRINCIPAL diagnosis belongs to — the condition that caused this consultation, not an incidental or historical one. Answer with one of the listed options exactly as worded.",
+      "options": [
+        "Cardiovascular",
+        "Respiratory",
+        "Gastrointestinal",
+        "Infectious disease",
+        "Musculoskeletal",
+        "Other"
+      ]
+    },
+    {
+      "id": "clinical_findings",
+      "label": "Principal diagnosis and clinical findings",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "The principal diagnosis in the doctor's own clinical wording, with the examination and investigation findings that support it. Free text; quote the note rather than paraphrasing it."
+    },
+    {
+      "id": "treatment",
+      "label": "Treatment or medication prescribed",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "What was prescribed or done at this consultation, with the drug name, dose, frequency and duration as the notes record them. Do not convert or normalise a dose."
+    },
+    {
+      "id": "mc_days",
+      "label": "Number of days of medical leave certified",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "The number of days of medical leave certified at this consultation, as a plain number. If no medical leave was given, leave this missing rather than answering zero — a nil entry and an unanswered question are different statements on a claim."
+    },
+    {
+      "id": "referred",
+      "label": "Was the patient referred to a specialist?",
+      "type": "text",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "Whether this consultation ended in a referral to a specialist or another institution. A plan to review in the same clinic is not a referral. If the notes do not say either way, leave this missing.",
+      "options": ["Yes", "No"]
+    },
+    {
+      "id": "symptoms",
+      "label": "Presenting symptoms recorded at this consultation",
+      "type": "checkbox",
+      "source": "llm",
+      "step": "Consultation",
+      "description": "Every listed symptom the notes record for THIS consultation. Answer only from what is written; a symptom the notes do not mention is not a symptom the patient denied. Choose 'None of the above' only where the notes record symptoms and none of them are listed.",
+      "options": [
+        "Fever",
+        "Sore throat",
+        "Cough",
+        "Breathlessness",
+        "Chest pain",
+        "None of the above"
+      ]
+    },
+    {
       "id": "ward_class",
       "label": "Ward class the patient was admitted to",
       "type": "text",
       "source": "llm",
-      "step": "Admission details",
+      "step": "Hospitalisation",
       "description": "The ward class the patient was actually admitted to for THIS admission, not the class their policy entitles them to. Answer with one of the listed options exactly as worded.",
       "options": [
         "A (single room, air-conditioned)",
@@ -26,7 +160,7 @@
       "label": "Was this an emergency admission?",
       "type": "text",
       "source": "llm",
-      "step": "Admission details",
+      "step": "Hospitalisation",
       "description": "Whether the patient was admitted through the emergency department or as an unplanned admission. A planned or elective admission is No. If the notes do not say either way, leave this missing rather than assuming.",
       "options": ["Yes", "No"]
     },
@@ -35,41 +169,24 @@
       "label": "Name of hospital or medical institution",
       "type": "text",
       "source": "llm",
-      "step": "Admission details",
+      "step": "Hospitalisation",
       "description": "The full name of the hospital or medical institution the patient was admitted to. Not the clinic that referred them, and not the doctor's own practice."
     },
     {
-      "id": "diagnosis_category",
-      "label": "Primary diagnosis category",
+      "id": "admission_date",
+      "label": "Date of admission",
       "type": "text",
       "source": "llm",
-      "step": "Patient diagnosis",
-      "description": "The body system the PRINCIPAL diagnosis belongs to — the condition that caused this admission, not an incidental or historical one. Answer with one of the listed options exactly as worded.",
-      "options": [
-        "Cardiovascular",
-        "Respiratory",
-        "Gastrointestinal",
-        "Infectious disease",
-        "Musculoskeletal",
-        "Other"
-      ]
+      "step": "Hospitalisation",
+      "description": "The date the patient was admitted as an inpatient. An outpatient consultation has no admission date — leave it missing rather than reaching for the consultation date."
     },
     {
-      "id": "pre_existing",
-      "label": "Is this condition related to a pre-existing illness?",
+      "id": "discharge_date",
+      "label": "Date of discharge",
       "type": "text",
       "source": "llm",
-      "step": "Patient diagnosis",
-      "description": "Whether this condition arises from, or is a complication of, an illness the patient had before this admission. This drives whether an insurer pays, so answer Yes or No only where the notes state the prior illness; otherwise leave it missing for the doctor.",
-      "options": ["Yes", "No"]
-    },
-    {
-      "id": "clinical_findings",
-      "label": "Principal diagnosis and clinical findings",
-      "type": "text",
-      "source": "llm",
-      "step": "Patient diagnosis",
-      "description": "The principal diagnosis in the doctor's own clinical wording, with the examination and investigation findings that support it. Free text; quote the note rather than paraphrasing it."
+      "step": "Hospitalisation",
+      "description": "The date the patient was discharged from the admission above. Leave missing if the patient was not admitted, or is still an inpatient."
     }
   ]
 }
