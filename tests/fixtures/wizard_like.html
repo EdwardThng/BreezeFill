@@ -110,6 +110,25 @@
     existed, and print-derived insurer forms use this shape as freely as they
     use tables.
 
+    THOSE TWO CONTROLS CURRENTLY COME BACK AS `entry 2` AND `entry 3`, AND
+    THAT IS A BUG THIS FIXTURE REPRODUCES — not something it is asserting.
+    `instanceIndexOf` calls a container an entry when it has twins and opens
+    with a delimiter, a delimiter being anything before the first control that
+    is not a control and not a label bound to one. A grid-layout question row
+    opens with exactly that: a bare <div> holding the question text. So rule 6's
+    shape and the entry heuristic's shape are the same shape, and the two
+    features collide.
+
+    The reach is wider than these two boxes. `_live_sources` refuses to treat
+    any control with an `instance` as demographic — one patient record cannot
+    answer the second entry — so on a page laid out entirely in grid rows, which
+    is the print-derived insurer shape, EVERY demographic control is qualified
+    as an entry and none of them fill. That is the failure the 2026-08-09 work
+    was done to end, returning by a different route. Left unfixed here on
+    purpose: it is a change to a core heuristic and wants deciding
+    deliberately. Both dates sit in step 3, which the demo shows blank anyway,
+    so the wart is not on camera.
+
   - Per-step scoring (`locateSteps`): with one step in the DOM, a schema
     spanning all three should still fill the visible one instead of refusing at
     MIN_MATCH_RATE.
