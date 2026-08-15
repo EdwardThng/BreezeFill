@@ -1,45 +1,147 @@
 <!--
-  Synthetic two-step insurer wizard, for exercising the wizard support that is
-  built but has never met a real multi-step form.
+  Synthetic three-step insurer claim wizard.
+
+  TWO JOBS, ONE FILE. This is the extension's manual test page *and* the form
+  the website's demo video is shot against, and those pull in different
+  directions — a test page wants awkward shapes, a demo wants a form that looks
+  like something a doctor would be sent. Where they conflict the awkward shape
+  stays and is put somewhere the camera does not have to linger; the dev-only
+  controls are in a footer strip that `?demo=1` removes.
 
   Modelled on the AIA ClaimEZ structure described by the owner: a JS-rendered
   wizard whose URL does NOT change as the doctor advances. That single property
   is why `activeTab` survives the whole flow and why no host permission is
   needed — so this fixture is careful to move between steps WITHOUT touching
-  location, history, or the hash. Do not "improve" it with routing.
+  location, history, or the hash. Do not "improve" it with routing. (`?demo=1`
+  is read once at load and never written; it is not routing.)
 
-  What each part is here to test:
+  Serve it over http rather than opening the file directly — Chrome extensions
+  cannot touch file:// URLs without a permission most installs do not have:
 
-    - Two <fieldset> steps named by <legend>. `sectionFor()` reads the nearest
-      legend, so the outer one is the step name and a nested one is a radio
-      group's question. That nesting is the shape describeRadioGroup() expects.
-    - Three question types per step: <select>, a side-by-side radio group, and
-      free text — the three the owner named.
-    - Per-step scoring (`locateSteps`): with one step in the DOM, a schema
-      spanning both should still fill the visible one instead of refusing at
-      MIN_MATCH_RATE.
-    - Step re-identification: the MutationObserver in content/fill.js should
-      notice the shape change on Next and tell the panel to re-detect.
+    python3 -m http.server 8080 --directory tests/fixtures
+    open http://localhost:8080/wizard_like.html          # test page
+    open http://localhost:8080/wizard_like.html?demo=1   # demo video
+
+  `wizard_test_v1` describes this page, declares `hosts: ["localhost"]`, and is
+  `internal: true` — so the backend needs FORMFILL_SHOW_INTERNAL=1 before the
+  schema is offered at all, and without it every control is answered from its
+  own label instead of the schema's `description`. Both are worth seeing; the
+  video should be shot with it set.
+
+  ------------------------------------------------------------------ THE ARC
+
+  The steps are ordered so the demo tells the product's argument in sequence,
+  and each one is also the only fixture exercising something:
+
+    1. Patient details    — demographics, filled deterministically with no
+                            model call at all, plus the two-candidates refusal
+    2. Consultation       — the LLM section the panel's own sample note answers
+    3. Hospitalisation    — questions an outpatient note CANNOT answer, left
+                            blank on purpose
+
+  Step 3 is not padding. The pitch is precision over coverage, and a demo where
+  every box fills teaches the opposite lesson; a doctor watching needs to see
+  the panel decline. Shoot it. The fill report's "fill these yourself" section
+  is the frame worth keeping.
+
+  ------------------------------------------------- WHAT EACH PART IS TESTING
+
+  - Two <legend>-named steps became three, and step 1 is demographic. Since
+    2026-08-09 `_live_sources` resolves a control's label against the alias
+    table `demographics.py` owns, so those controls are answered from the
+    PatientRecord and their questions are REMOVED from the mapping call.
+    Before that they were `source="llm"`, the model read `[PATIENT]`, and every
+    one of them came back missing. Nothing in this fixture covered it.
+
+  - THE LABELS IN STEP 1 ARE EXACT, AND THAT IS THE POINT.
+    `demographic_field_for_label` normalises to letters and then strips only
+    *patient* qualifiers, so the reach is narrower than it reads:
+
+        "Patient's Full Name"      -> full_name        ✓
+        "NRIC / FIN"               -> nric             ✓
+        "Contact No."              -> phone            ✓
+        "Residential Address"      -> address          ✓
+
+        "Patient's Full Name (as in NRIC)"  -> nothing  ✗  parenthetical
+        "NRIC / FIN Number"                 -> nothing  ✗  trailing "number"
+        "Contact Number"                    -> nothing  ✗  ditto
+
+    The near-misses are not in the form. A control that silently declines to
+    fill is the wrong thing to put in front of a camera, and the refusals are
+    already asserted backend-side. They are written down here because the next
+    person to reword a label will otherwise break the demo and have no idea
+    why.
+
+  - NEGATIVE demographic cases ARE in the form, because they must never fill:
+    "Name of hospital or medical institution" and "Attending doctor and clinic"
+    both fail to resolve and go to the model as ordinary questions. The
+    qualifier list is an allowlist precisely so they do.
+
+  - What is deliberately ABSENT: two controls asking for the same demographic
+    ("Name" in the patient block and again in a physician block), which the
+    backend refuses by filling neither. It is a real rule and it is unit
+    tested; on screen it is one empty box next to another empty box, which
+    reads as the product failing rather than refusing.
+
+  - Insurer arrives PRE-FILLED. `applyOne` is gated by `hasExistingAnswer`, so
+    BreezeFill leaves it exactly as found and reports it already answered — a
+    filled control was filled by the doctor or by the insurer, and writing over
+    it replaces a human decision after the review step has already passed.
+
+  - Date of birth is a NATIVE <input type="date">, and it is the only one in
+    the repo. The control holds yyyy-mm-dd and silently EMPTIES ITSELF when
+    given anything else, which is the whole reason `applyDate` and
+    `writeOrRestore` exist — a write that reports filled while nothing landed,
+    and that clears whatever the doctor had typed. That guard was written from
+    reading the spec, never from running against a real one. Now it can be.
+
+  - Three question types per step: <select>, a side-by-side radio group, and
+    free text — the three the owner named. Plus a checkbox group.
+
+  - The checkbox group carries an explicit "None of the above". Without one,
+    nothing ticked means either unanswered or "none of these apply" and no
+    filler can separate the two, so the question is left for the doctor. With
+    one, empty becomes legible. Both branches matter; this is the positive.
+
+  - Two questions use a GRID LAYOUT — the question in one <div>, the control in
+    the next one over — so the control's own previous sibling is nothing at
+    all. Rule 6 in `rawLabelFor` walks up two hops to read the container's
+    previous sibling. 36 of RoboForm's 39 controls read as unlabelled before it
+    existed, and print-derived insurer forms use this shape as freely as they
+    use tables.
+
+  - Per-step scoring (`locateSteps`): with one step in the DOM, a schema
+    spanning all three should still fill the visible one instead of refusing at
+    MIN_MATCH_RATE.
+
+  - Step re-identification: the MutationObserver in content/fill.js should
+    notice the shape change on Next and tell the panel to re-detect. It must
+    never fill — advancing a step is the doctor using the insurer's form.
+
+  - Two dates, chosen so the ambiguity rule fires once and only once. The
+    consultation is 02/08/2026, whose day is under 13, so it reads as 2 August
+    or 8 February and is held for a confirm click whatever status it carries.
+    The first-consult date is 31/07/2026, which has one reading and is not
+    held. A demo showing only the held one would suggest the panel doubts every
+    date; showing only the unheld one loses the rule entirely.
 
   THE MOUNT/UNMOUNT TOGGLE ANSWERS AN OPEN QUESTION. CLAUDE.md records that
   `isFillable` in locate.js checks disabled and readOnly but NOT visibility, so
   on a wizard that keeps every step in the DOM behind `display:none`, every
   step scores as present and the filler would write into steps the doctor
-  cannot see. Nobody knows which shape ClaimEZ uses. The button at the bottom
+  cannot see. Nobody knows which shape ClaimEZ uses. The button in the footer
   switches this fixture between the two so the question can be settled by
   observation rather than guessed:
 
     "unmount"  — inactive step removed from the DOM   (default; safe)
     "hide"     — inactive step kept, display:none     (the suspected trap)
 
+  Shoot the video in unmount. Filling per step is the honest depiction, and
+  `applyPlan` is idempotent by design so advancing and filling again is safe.
+
   No patient data appears anywhere. The form is empty because the doctor is the
-  one who fills it, which also keeps this fixture trivially free of PHI.
-
-  Serve it over http rather than opening the file directly — Chrome extensions
-  cannot touch file:// URLs without a permission most installs do not have:
-
-    python3 -m http.server 8080 --directory tests/fixtures
-    open http://localhost:8080/wizard_like.html
+  one who fills it, which also keeps this fixture trivially free of PHI. The
+  one pre-filled control holds an insurer's name, which belongs to no patient.
 -->
 <!doctype html>
 <html lang="en">
@@ -59,7 +161,7 @@
       h1 { font-size: 1.15rem; margin: 0 0 .25rem; }
       .sub { color: #5d6b79; font-size: .875rem; margin: 0 0 1.5rem; }
 
-      .steps { display: flex; gap: .5rem; margin-bottom: 1.5rem; font-size: .8rem; }
+      .steps { display: flex; gap: .5rem; margin-bottom: 1.5rem; font-size: .8rem; flex-wrap: wrap; }
       .steps span { padding: .3rem .7rem; border-radius: 999px; background: #e3e8ed; color: #5d6b79; }
       .steps span.on { background: #0f6f5c; color: #fff; }
 
@@ -68,11 +170,12 @@
 
       .q { margin-bottom: 1.4rem; }
       .q > label { display: block; margin-bottom: .35rem; font-weight: 500; }
-      select, input[type="text"], textarea {
+      select, input[type="text"], input[type="date"], textarea {
         width: 100%; padding: .5rem .6rem; border: 1px solid #c3ccd5;
         border-radius: 4px; font: inherit; background: #fff; box-sizing: border-box;
       }
       textarea { min-height: 5.5rem; resize: vertical; }
+      .hint { color: #5d6b79; font-size: .8rem; margin: .3rem 0 0; }
 
       /* Side-by-side options: a nested fieldset, so the group's question comes
          from its own <legend> rather than from a neighbouring div. */
@@ -80,6 +183,14 @@
       .opts > legend { font-weight: 500; font-size: 1rem; margin-bottom: .4rem; }
       .row { display: flex; gap: 1.75rem; align-items: center; }
       .row label { font-weight: 400; }
+      .stack { display: flex; flex-direction: column; gap: .3rem; }
+      .stack label { font-weight: 400; }
+
+      /* Grid layout: question and control in SIBLING CONTAINERS, so the
+         control's own previousElementSibling is nothing at all. */
+      .grid { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.4rem; }
+      .grid > .col { flex: 1; }
+      .grid > .col:first-child { font-weight: 500; }
 
       .nav { display: flex; justify-content: space-between; margin-top: 1.75rem; }
       button {
@@ -88,6 +199,10 @@
       }
       button.ghost { background: #fff; color: #0f6f5c; }
       button:disabled { opacity: .4; cursor: default; }
+
+      .repeat-title { font-size: .95rem; margin: 1.75rem 0 .75rem; }
+      .entry { border-left: 3px solid #e3e8ed; padding-left: 1rem; margin-bottom: 1rem; }
+      .entry h4 { font-size: .85rem; color: #5d6b79; margin: 0 0 .75rem; text-transform: uppercase; letter-spacing: .04em; }
 
       .mode { max-width: 46rem; margin: 1rem auto 0; padding: 0 1rem; font-size: .8rem; color: #5d6b79; }
       .mode button { background: #fff; color: #33414f; border-color: #c3ccd5; padding: .25rem .6rem; }
@@ -100,14 +215,164 @@
         <p class="sub">Reference 4471902 · complete all steps before submitting</p>
 
         <div class="steps">
-          <span id="pip-1" class="on">1. Admission details</span>
-          <span id="pip-2">2. Patient diagnosis</span>
+          <span id="pip-1" class="on">1. Patient details</span>
+          <span id="pip-2">2. Consultation</span>
+          <span id="pip-3">3. Hospitalisation</span>
         </div>
 
         <form id="claim-wizard">
-          <!-- ============================ STEP 1 ============================ -->
+          <!-- ============================ STEP 1 ============================
+            Demographics. Every label here resolves through the alias table, so
+            these controls are answered by `assemble_claim` copying from the
+            PatientRecord — no model call, and their questions never reach the
+            grammar. See the label list at the top before rewording any of them.
+          -->
           <fieldset id="step-1" data-step="1">
-            <legend>Admission details</legend>
+            <legend>Patient details</legend>
+
+            <div class="q">
+              <label for="patient-name">Patient's Full Name</label>
+              <input type="text" id="patient-name" name="patientName" autocomplete="off" />
+            </div>
+
+            <div class="q">
+              <label for="patient-nric">NRIC / FIN</label>
+              <input type="text" id="patient-nric" name="patientNric" maxlength="9" autocomplete="off" />
+            </div>
+
+            <!-- Native date control. Holds yyyy-mm-dd and silently empties
+                 itself when handed anything else — the only one in the repo,
+                 and the thing `applyDate` and `writeOrRestore` were written
+                 for without ever meeting. -->
+            <div class="q">
+              <label for="patient-dob">Date of Birth</label>
+              <input type="date" id="patient-dob" name="patientDob" />
+              <p class="hint">The panel's pipeline carries DD/MM/YYYY throughout; this box wants ISO.</p>
+            </div>
+
+            <!-- The panel's sample note writes two phone numbers and two
+                 policy variants on purpose, so both hit the two-candidates
+                 refusal and the panel offers the choices instead of guessing.
+                 These are the boxes that stay empty until the doctor picks. -->
+            <div class="q">
+              <label for="patient-phone">Contact No.</label>
+              <input type="text" id="patient-phone" name="contactNo" autocomplete="off" />
+            </div>
+
+            <div class="q">
+              <label for="patient-policy">Policy Number</label>
+              <input type="text" id="patient-policy" name="policyNo" autocomplete="off" />
+            </div>
+
+            <div class="q">
+              <label for="patient-address">Residential Address</label>
+              <textarea id="patient-address" name="address"></textarea>
+            </div>
+
+            <!-- PRE-FILLED BY THE INSURER. Never overwritten, and reported as
+                 already answered rather than as a skip with no reason. -->
+            <div class="q">
+              <label for="insurer">Insurer</label>
+              <input type="text" id="insurer" name="insurer" value="AIA Singapore" />
+            </div>
+          </fieldset>
+
+          <!-- ============================ STEP 2 ============================
+            The section the panel's own sample note answers. Everything here is
+            `source: "llm"` and everything here should come back with a value
+            on that note — which is what makes step 3 legible as a refusal
+            rather than as the backend being down.
+          -->
+          <fieldset id="step-2" data-step="2">
+            <legend>Consultation</legend>
+
+            <!-- 02/08/2026 in the sample note: day under 13, so it reads two
+                 ways and is held for an explicit confirm whatever status it
+                 carries. Text rather than a native date, because the ambiguity
+                 the rule is about cannot exist in an ISO control. -->
+            <div class="q">
+              <label for="consult-date">Date of consultation</label>
+              <input type="text" id="consult-date" name="consultDate" placeholder="DD/MM/YYYY" />
+            </div>
+
+            <!-- 31/07/2026: one reading only, so NOT held. The pair is the
+                 demonstration; either alone misrepresents the rule. -->
+            <div class="q">
+              <label for="first-consult">Date the patient first consulted you for this condition</label>
+              <input type="text" id="first-consult" name="firstConsult" placeholder="DD/MM/YYYY" />
+            </div>
+
+            <div class="q">
+              <label for="diagnosis-category">Primary diagnosis category</label>
+              <select id="diagnosis-category" name="diagnosisCategory">
+                <option value="">— Select —</option>
+                <option>Cardiovascular</option>
+                <option>Respiratory</option>
+                <option>Gastrointestinal</option>
+                <option>Infectious disease</option>
+                <option>Musculoskeletal</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div class="q">
+              <label for="clinical-findings">Principal diagnosis and clinical findings</label>
+              <textarea id="clinical-findings" name="clinicalFindings"></textarea>
+            </div>
+
+            <div class="q">
+              <label for="treatment">Treatment or medication prescribed</label>
+              <textarea id="treatment" name="treatment"></textarea>
+            </div>
+
+            <div class="q">
+              <label for="mc-days">Number of days of medical leave certified</label>
+              <input type="text" id="mc-days" name="mcDays" />
+            </div>
+
+            <fieldset class="opts">
+              <legend>Was the patient referred to a specialist?</legend>
+              <div class="row">
+                <span><input type="radio" id="ref-yes" name="referred" value="Yes" />
+                  <label for="ref-yes">Yes</label></span>
+                <span><input type="radio" id="ref-no" name="referred" value="No" />
+                  <label for="ref-no">No</label></span>
+              </div>
+            </fieldset>
+
+            <!--
+              A checkbox group — several controls sharing one name, collapsed
+              into one question by describeCheckboxGroup, its wording taken
+              from this <legend> and its options from the individual labels.
+
+              "None of the above" is not decoration. A multi-select with
+              nothing ticked means either unanswered or "none of these apply",
+              and nothing can separate the two — so without an explicit none
+              the group is left for the doctor entirely. This is the branch
+              where it is fillable.
+            -->
+            <fieldset class="opts">
+              <legend>Presenting symptoms recorded at this consultation</legend>
+              <div class="stack">
+                <label><input type="checkbox" name="symptoms" value="Fever" /> Fever</label>
+                <label><input type="checkbox" name="symptoms" value="Sore throat" /> Sore throat</label>
+                <label><input type="checkbox" name="symptoms" value="Cough" /> Cough</label>
+                <label><input type="checkbox" name="symptoms" value="Breathlessness" /> Breathlessness</label>
+                <label><input type="checkbox" name="symptoms" value="Chest pain" /> Chest pain</label>
+                <label><input type="checkbox" name="symptoms" value="None of the above" /> None of the above</label>
+              </div>
+            </fieldset>
+          </fieldset>
+
+          <!-- ============================ STEP 3 ============================
+            Hospitalisation. An outpatient consultation note cannot answer any
+            of this, and that is the step's job: the panel should return these
+            missing and the fill report should list them under "fill these
+            yourself". Do not add a hospital admission to the sample note to
+            "improve" the demo — the blank is the argument.
+          -->
+          <fieldset id="step-3" data-step="3">
+            <legend>Hospitalisation</legend>
 
             <div class="q">
               <label for="ward-class">Ward class the patient was admitted to</label>
@@ -131,42 +396,25 @@
               </div>
             </fieldset>
 
+            <!-- Must NOT resolve as the patient's name. The qualifier list is
+                 an allowlist so that "Name of hospital…" reduces to itself and
+                 goes to the model as an ordinary question. -->
             <div class="q">
               <label for="institution">Name of hospital or medical institution</label>
               <input type="text" id="institution" name="institution" autocomplete="off" />
             </div>
-          </fieldset>
 
-          <!-- ============================ STEP 2 ============================ -->
-          <fieldset id="step-2" data-step="2">
-            <legend>Patient diagnosis</legend>
-
-            <div class="q">
-              <label for="diagnosis-category">Primary diagnosis category</label>
-              <select id="diagnosis-category" name="diagnosisCategory">
-                <option value="">— Select —</option>
-                <option>Cardiovascular</option>
-                <option>Respiratory</option>
-                <option>Gastrointestinal</option>
-                <option>Infectious disease</option>
-                <option>Musculoskeletal</option>
-                <option>Other</option>
-              </select>
+            <!-- GRID LAYOUT. The question is in one container and the control
+                 in the next, so previousElementSibling is nothing — rule 6 in
+                 rawLabelFor has to climb two hops to read these at all. -->
+            <div class="grid">
+              <div class="col">Date of admission</div>
+              <div class="col"><input type="text" name="admissionDate" placeholder="DD/MM/YYYY" /></div>
             </div>
 
-            <fieldset class="opts">
-              <legend>Is this condition related to a pre-existing illness?</legend>
-              <div class="row">
-                <span><input type="radio" id="pre-yes" name="preExisting" value="Yes" />
-                  <label for="pre-yes">Yes</label></span>
-                <span><input type="radio" id="pre-no" name="preExisting" value="No" />
-                  <label for="pre-no">No</label></span>
-              </div>
-            </fieldset>
-
-            <div class="q">
-              <label for="clinical-findings">Principal diagnosis and clinical findings</label>
-              <textarea id="clinical-findings" name="clinicalFindings"></textarea>
+            <div class="grid">
+              <div class="col">Date of discharge</div>
+              <div class="col"><input type="text" name="dischargeDate" placeholder="DD/MM/YYYY" /></div>
             </div>
 
             <!--
@@ -187,6 +435,11 @@
               shape for the scrubber), so this fixture is only useful as a test
               if the entry text is genuinely unreadable — otherwise it would be
               proving the wrong thing.
+
+              "Attending doctor and clinic" is also a demographic negative: it
+              must never resolve to the patient's name, and a control inside a
+              repeating entry is refused as demographic regardless — one
+              patient record cannot answer the second entry.
             -->
             <h3 class="repeat-title">Comorbidities</h3>
             <div id="entries">
@@ -223,7 +476,8 @@
         </form>
       </div>
 
-      <p class="mode">
+      <!-- Dev-only. `?demo=1` removes it; see the note at the top of the file. -->
+      <p class="mode" id="mode-strip">
         Step rendering:
         <strong id="mode-name">unmount (inactive step removed from the DOM)</strong>
         <button type="button" id="mode-toggle">switch</button>
@@ -235,14 +489,31 @@
       // Deliberately no routing. A real ClaimEZ wizard leaves the URL alone
       // until the final review step, and that is the property that keeps
       // activeTab alive across the whole flow. Nothing here touches
-      // location, history.pushState, or the hash.
+      // location, history.pushState, or the hash. `?demo=1` is READ once,
+      // below, and never written.
       (function () {
-        var steps = [document.getElementById("step-1"), document.getElementById("step-2")];
-        var pips = [document.getElementById("pip-1"), document.getElementById("pip-2")];
-        var placeholders = [document.createComment("step-1"), document.createComment("step-2")];
+        var steps = [
+          document.getElementById("step-1"),
+          document.getElementById("step-2"),
+          document.getElementById("step-3"),
+        ];
+        var pips = [
+          document.getElementById("pip-1"),
+          document.getElementById("pip-2"),
+          document.getElementById("pip-3"),
+        ];
+        var placeholders = steps.map(function (fs) {
+          return document.createComment(fs.id);
+        });
         var parent = document.getElementById("claim-wizard");
         var current = 0;
         var unmount = true; // false => keep in DOM behind display:none
+
+        // Demo mode hides the dev strip only. It must not change the form, or
+        // the video would be shot against a page the tests never see.
+        if (new URLSearchParams(location.search).has("demo")) {
+          document.getElementById("mode-strip").remove();
+        }
 
         function render() {
           steps.forEach(function (fs, i) {
