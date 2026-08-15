@@ -298,7 +298,7 @@ possible at all, and it is a property to preserve rather than a Fly detail.
 | `extension/fill/apply.js` | Writes values. Never overwrites an existing answer, never repeats an option within a repeating question, never submits |
 | `extension/content/fill.js` | The only code that touches the insurer's page |
 | `frontend/src/` | `Landing.tsx`, `Demo.tsx` (talks to nothing), `ClaimApp.tsx` at `#/app`, `privacy.html` in `public/` |
-| `tests/fixtures/wizard_like.html` | Two-step wizard + a repeating question with an "add another" button. The only thing exercising steps, entries and option questions |
+| `tests/fixtures/wizard_like.html` | **The test form and the demo-video form, one file** (reworked 2026-08-15). Three `<legend>`-named steps — demographics, the section the panel's sample note answers, the section it deliberately cannot — plus a repeating question with an "add another" button. The only thing exercising steps, entries, option questions, a **native `<input type="date">`**, a checkbox group with an explicit none-of-the-above, and grid-layout labels. `?demo=1` drops the dev strip. No test imports it; it is a browser fixture |
 | `api/index.py`, `vercel.json` | Vercel migration, prepared but not deployed |
 
 Three test suites, three runners: `pytest`, `npm test` (extension, from the
@@ -2084,10 +2084,32 @@ download route while the store review is running.
 
 **3. ~~Wizard support~~ — built 2026-08-04, first exercised 2026-08-06.**
 `tests/fixtures/wizard_like.html` and `wizard_test_v1` (`internal: true`) turn
-it on: two `<legend>`-named steps, three question types each, a URL that never
-changes, and a repeating question with an "add another" button. Against that
-fixture, whole-plan `locate` scores 3/6 and refuses while `locateSteps` scores
-3/3 and fills — the exact failure the per-step guard was written for.
+it on: `<legend>`-named steps, three question types each, a URL that never
+changes, and a repeating question with an "add another" button. Against the
+two-step version of that fixture, whole-plan `locate` scored 3/6 and refused
+while `locateSteps` scored 3/3 and filled — the exact failure the per-step
+guard was written for.
+
+**Reworked 2026-08-15 into three steps, and it is now also the form the
+website's demo video is shot against.** What that added, each of which was
+uncovered by any fixture before: a demographic step (since 2026-08-09
+`_live_sources` answers those controls from the record and removes their
+questions from the mapping call), the repo's only native `<input type="date">`,
+a checkbox group carrying an explicit "None of the above", two grid-layout
+labels, and a pre-filled control for the never-overwrite guard. The third step
+asks about a hospital admission the panel's sample note cannot answer, on
+purpose — a demo where every box fills teaches the opposite of the product's
+bet, so the blanks are part of the shot.
+
+**The step-1 labels are exact and must not be reworded casually.**
+`demographic_field_for_label` normalises to letters and strips only *patient*
+qualifiers, so `Contact No.` resolves and `Contact Number` does not; likewise
+`NRIC / FIN` against `NRIC / FIN Number`, and `Patient's Full Name` against
+`Patient's Full Name (as in NRIC)`. The near-misses are documented at the top
+of the fixture and deliberately kept out of the form — a box that silently
+declines to fill is the wrong thing to put in front of a camera. It is also a
+standing signal that **the alias table is narrower than the wordings real forms
+use**; the ClaimEZ dump is what would say by how much.
 
 The fixture also has a **mount/unmount toggle**, because the open question
 (should a step hidden behind `display:none` be filled?) is still open —
