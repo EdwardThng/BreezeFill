@@ -145,6 +145,9 @@ is acceptable. See **Working style** at the end of this file.
   `/download` zip nests under a folder and the store rejects it.
 - Run a changed sample note through `parse_demographics` rather than reading
   it; the panel's sample is held to what the parser actually returns.
+- Re-run `demographic_field_for_label` after rewording any demographic label —
+  `Contact No.` resolves and `Contact Number` does not, and the miss is a
+  silently blank box.
 - Check `field.options` before `field.type` anywhere that branches on a
   field's shape — an option-answered question is often a checkbox.
 - Assert the positive case alongside every refusal: a refusal is not evidence
