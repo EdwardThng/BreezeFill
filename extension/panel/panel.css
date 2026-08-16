@@ -63,6 +63,9 @@
   --confident-body: #2c6b4e;
   --check: #8a6a28;
   --check-line: #d9c9a8;
+  /* The marked sentence in the note pane. The same amber family as --check,
+     because it marks the thing the doctor is being asked to check. */
+  --check-mark: #fdf3dc;
   --missing: #6e6e73;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
@@ -676,6 +679,109 @@ details[open] > summary::before {
 
 details > *:not(summary) {
   margin-top: 10px;
+}
+
+/* ------------------------------------------------------------- the note  */
+
+/* Laid out rather than margined, so the note pane can be dropped between the
+   readiness bar and the rows without any of them growing a margin for it. */
+#mapped {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#mapped[hidden] {
+  display: none;
+}
+
+/* The consultation, on screen while the values taken from it are checked.
+
+   Sticky, not merely present. A claim with twenty questions is taller than
+   the panel, and a reference that scrolls out of view is the same trip back
+   and forth that having it on screen was meant to end. */
+.notepane {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.notepane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notepane-title {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Which row the highlight is following, and — when it is following nothing —
+   why not. A pane that silently stops marking anything reads as broken, and
+   "the model did not quote this" is worth knowing on a screen whose whole job
+   is checking where values came from. */
+.notepane-state {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notepane-toggle {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.notepane-toggle:hover {
+  background: none;
+  color: var(--text);
+}
+
+/* Positioned so that a mark inside it measures its offset against the text
+   box rather than against the sticky pane, which would count the header. */
+.notepane-text {
+  position: relative;
+  margin: 0;
+  padding: 9px 11px;
+  max-height: 132px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+.notepane-text[hidden] {
+  display: none;
+}
+
+.notepane-text mark {
+  background: var(--check-mark);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 0 2px;
+  box-shadow: inset 2px 0 0 var(--check);
 }
 
 /* --------------------------------------------------------- review + rows  */
