@@ -27,9 +27,16 @@ number gets written onto a claim and signed. So:
 - A date of birth is never taken from unlabelled text at all. A clinical note
   is full of dates — consultation, admission, discharge, MC — and every one of
   them is date-shaped.
-- A name is never guessed from anything. It comes from a labelled line, or
-  from the segment of a labelled patient line that no other rule claimed, or
-  not at all.
+- A name is never guessed from prose. It comes from a labelled line, or from
+  the one piece of a patient header that no other field claimed — and only
+  when that header has already proved what it is by yielding two other fields,
+  and only when the words are capitalised the way a name is. Two candidate
+  names means neither.
+- One piece, one field. A header block is cut into pieces and each piece is
+  claimed once, so a value read as an NRIC cannot also be part of the address.
+  This is not tidiness: the address rule used to take the whole line, which
+  put the patient's NRIC, birth date, phone and policy number into the address
+  box on any block nobody had labelled.
 
 Everything found is shown back to the doctor as an editable field. Nothing
 here is a final answer; it is a first draft of one.
@@ -408,19 +415,188 @@ def _classify_segment(segment: str) -> tuple[str, str] | None:
     return None
 
 
+# The separators inside a header block, in two strengths.
+#
+# A HARD separator is one a doctor only ever types between fields: a middot, a
+# pipe, a semicolon, an em dash, or the two-space gap they leave when lining a
+# block up. Splitting on these is always safe.
+#
+# A SOFT separator is a comma or a full stop, and both appear INSIDE values as
+# freely as they appear between them — "Lorong 4, Singapore 310018" is one
+# address written with a comma in it, and every sentence of the clinical note
+# ends in a full stop. They are used only inside a line already proved to be a
+# header (see `_header_pieces`), and the address rule below puts back what they
+# cut in half.
+_HARD_SEP = re.compile(r"\s*[·|;]\s*|\s{2,}|\s+—\s+")
+_SOFT_SEP = re.compile(r"\s*,\s*|\.\s+")
+
+# A name is at most this many words. A longer run of words with no digits in it
+# is a sentence, not somebody's name. Six rather than four because a Malay name
+# written in full — "Muhammad Nur Iskandar Bin Abdullah" — is five.
+MAX_NAME_WORDS = 6
+
+# The particles that sit inside a name in lower case and are still part of it.
+_NAME_PARTICLES = {"bin", "binte", "bte", "b", "s/o", "d/o", "a/l", "a/p",
+                   "van", "von", "de", "del", "der", "di", "da", "la", "le"}
+
+
+def _looks_like_a_name(text: str) -> bool:
+    """Words that could be somebody's name, rather than a phrase.
+
+    Capitalisation is the whole test, and it is a better one than length: a
+    name is written with capitals in every note ever typed, and the leftover
+    piece this has to reject — "patient reports ongoing epigastric discomfort"
+    — is a sentence fragment in lower case. Word count alone cannot separate
+    them, because a Malay name in full is as long as a short sentence.
+
+    The cost, stated: a name typed entirely in lower case is not read as one.
+    The doctor types the name themselves at step 1 regardless, so this costs a
+    prefilled box rather than an answer.
+    """
+    words = text.split()
+    if not (0 < len(words) <= MAX_NAME_WORDS):
+        return False
+    return all(
+        word.lower().strip(".") in _NAME_PARTICLES or word[:1].isupper()
+        for word in words
+    )
+
+# How many DIFFERENT fields a line must yield before it counts as a patient
+# header rather than a line of prose that happens to contain a number.
+#
+# Two, and they must be different fields: a line naming three dates is a
+# treatment history, while a line naming a date and an NRIC is a header. The
+# whole point of the count is that the pieces stop being independent guesses —
+# one shaped value in a sentence is a coincidence, two of different kinds on
+# one line is a block of fields.
+MIN_HEADER_FIELDS = 2
+
+
+def _split_spans(text: str, start: int, end: int, sep: re.Pattern[str]) -> list[tuple[int, int]]:
+    """`text[start:end]` cut at every separator, as spans into `text`.
+
+    Spans rather than strings, because the address rule joins neighbouring
+    pieces back together and has to give back what the note actually wrote —
+    including the comma the split removed.
+    """
+    spans: list[tuple[int, int]] = []
+    cursor = start
+    for match in sep.finditer(text, start, end):
+        if match.start() > cursor:
+            spans.append((cursor, match.start()))
+        cursor = match.end()
+    if cursor < end:
+        spans.append((cursor, end))
+    return spans
+
+
+def _piece_spans(line: str) -> list[tuple[int, int]]:
+    """One line cut into the pieces a header block is made of."""
+    pieces: list[tuple[int, int]] = []
+    for start, end in _split_spans(line, 0, len(line), _HARD_SEP):
+        pieces.extend(_split_spans(line, start, end, _SOFT_SEP))
+    return [(s, e) for s, e in pieces if line[s:e].strip()]
+
+
+def _header_pieces(line: str) -> tuple[dict[str, str], list[str]] | None:
+    """One line -> the fields it carries, or None if it is not a header line.
+
+    THE RULE THIS EXISTS FOR: a piece belongs to one field. An NRIC that has
+    been recognised as an NRIC is not also part of the address, and neither is
+    the date of birth, the phone number or the policy number. Before this, the
+    address was "the line that has a postal code in it", so a header block
+    written without a `Patient:` label put the entire block — name, NRIC, date
+    of birth, phone, policy and all — into the address box, while the fields
+    those values belonged to sat empty beside it.
+
+    Two things make it safe to read a line nobody labelled:
+
+    - It must yield `MIN_HEADER_FIELDS` different fields before anything is
+      taken from it, so a sentence of clinical text is never read as a block.
+    - The name is still not guessed from words. It is the ONE leftover piece
+      with no digits in it, on a line that has already proved what it is, and
+      two such pieces means neither — the same refusal every other field makes.
+
+    Returns the fields found and the name candidates, or None for prose.
+    """
+    spans = _piece_spans(line)
+    classified: list[tuple[int, int, str, str] | None] = []
+    found: dict[str, str] = {}
+
+    for start, end in spans:
+        piece = line[start:end]
+        result = _classify_segment(piece)
+        if result is None or result[0] == "full_name":
+            # Kept as a hole rather than dropped: the address rule walks back
+            # over these, and the name is chosen from among them.
+            classified.append(None)
+            continue
+        field, value = result
+        classified.append((start, end, field, value))
+        found.setdefault(field, value)
+
+    if len(found) < MIN_HEADER_FIELDS:
+        return None
+
+    # The address is the run ENDING at the piece that carries the postal code,
+    # extended back over neighbouring pieces that no field claimed and that
+    # carry a digit. That is what puts "18 Toa Payoh Lorong 4" back together
+    # with "Singapore 310018" after the comma split — and what stops the walk
+    # at the name, which has no digits in it.
+    for index, item in enumerate(classified):
+        if item is None or item[2] != "address":
+            continue
+        start, end = item[0], item[1]
+        back = index - 1
+        while back >= 0 and classified[back] is None:
+            piece_start, piece_end = spans[back]
+            if not re.search(r"\d", line[piece_start:piece_end]):
+                break
+            start = piece_start
+            back -= 1
+        found["address"] = line[start:end].strip(" ,.;·|")
+        break
+
+    # Whatever is left with no digits in it, once every other field has taken
+    # its own piece. Exactly one is a name; two is a question this cannot
+    # answer, so it answers neither.
+    names = [
+        piece
+        for (s, e), item in zip(spans, classified)
+        if item is None
+        and not re.search(r"\d", (piece := line[s:e].strip(" ,.;·|")))
+        and _looks_like_a_name(piece)
+    ]
+    return found, names
+
+
 def _parse_patient_line(value: str) -> dict[str, tuple[str, str]]:
     """A labelled patient line, which may carry the whole block at once."""
+    # Tried first, and on the raw value rather than on `SEGMENT_SPLIT`'s
+    # segments: a block written with commas — "Patient: Chua Beng Huat,
+    # S7211043C, 04/11/1972" — has no middot and no double space in it, so the
+    # segment split sees one segment and the whole block became the name.
+    header = _header_pieces(value)
+    if header is not None:
+        fields, names = header
+        found = {field: (found_, "patient-line") for field, found_ in fields.items()}
+        # A labelled line names the patient, so its leftover piece is the name
+        # without needing the evidence an unlabelled line has to produce.
+        if len(names) == 1:
+            found.setdefault("full_name", (names[0], "patient-line"))
+        return found
+
     segments = [s for s in SEGMENT_SPLIT.split(value) if s and s.strip()]
-    found: dict[str, tuple[str, str]] = {}
     if len(segments) <= 1:
         return {"full_name": (value.strip(), "labelled")}
 
+    found = {}
     for segment in segments:
         classified = _classify_segment(segment)
         if classified is None:
             continue
         field, parsed = classified
-        # First segment of a kind wins; a patient line does not list two NRICs.
+        # First segment of a kind wins; a patient line lists one NRIC.
         found.setdefault(field, (parsed, "patient-line"))
     return found
 
@@ -752,6 +928,12 @@ def _address_lines(text: str) -> list[str]:
     for line in _logical_lines(text):
         if not POSTAL_PATTERN.search(line):
             continue
+        # A header block is not an address, however many postal codes it
+        # contains. `_header_pieces` has already taken the address out of it
+        # piece by piece; taking the whole line here as well would be the bug
+        # that rule exists to fix, arriving by the back door.
+        if _header_pieces(line) is not None:
+            continue
         # A label with no colon never reached LABELLED_LINE, so it is still
         # attached. It introduces the address; it is not part of it.
         cleaned = _ADDRESS_LABEL_PREFIX.sub("", line.strip()).strip()
@@ -824,8 +1006,26 @@ def parse_demographics(text: str) -> ParsedDemographics:
             continue
         record(field, value, "labelled")
 
+    # A patient header written without a label in front of it.
+    #
+    # Third, so anything the doctor labelled still wins. What this adds is the
+    # block that names its fields by position rather than by label — the shape
+    # every CMS export and every hand-typed header actually uses — and the
+    # property that makes it worth having: each piece is claimed by exactly one
+    # field, so a value already read as an NRIC, a date of birth, a phone
+    # number or a policy number cannot also turn up inside the address.
+    for line in _logical_lines(text):
+        header = _header_pieces(line)
+        if header is None:
+            continue
+        fields, names = header
+        for field, value in fields.items():
+            record(field, value, "header-line")
+        if len(names) == 1:
+            record("full_name", names[0], "header-line")
+
     # Labels sitting mid-line, which the line-anchored rule above cannot see.
-    # Runs second so an explicitly labelled line always wins, and only ever
+    # Runs after so an explicitly labelled line always wins, and only ever
     # fills fields still empty.
     for line in _logical_lines(text):
         line_found, line_choices = _labelled_anywhere(line)

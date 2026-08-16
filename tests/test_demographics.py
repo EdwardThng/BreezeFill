@@ -724,3 +724,96 @@ class TestTheInsurer:
             if not insurer or schema.get("internal"):
                 continue
             assert insurer in canonical, f"{path.name} names an insurer not in INSURERS"
+
+
+class TestAHeaderNobodyLabelled:
+    """A patient block written without `Patient:` in front of it.
+
+    The rule being guarded is one piece, one field. Before this, a block with
+    no label was read by the address rule alone — "the line with a postal code
+    in it" — so the whole block went into the address box while the NRIC, date
+    of birth, phone and policy boxes it was made of sat empty next to it.
+
+    Reading an unlabelled line is a loosening, so the tests that matter are the
+    ones showing what still refuses: prose is not a header, and a name is still
+    never taken from words alone.
+    """
+
+    HEADER = (
+        "Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·\n"
+        "18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902\n"
+        "AIA Singapore\n"
+    )
+
+    def test_every_field_lands_in_its_own_box(self) -> None:
+        parsed = parse_demographics(self.HEADER)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.nric == "S7211043C"
+        assert parsed.dob == "1972-11-04"
+        assert parsed.phone == "91112233"
+        assert parsed.policy_number == "GHS-4471902"
+        assert parsed.insurer == "AIA"
+
+    def test_the_address_is_the_address_and_nothing_else(self) -> None:
+        # The whole point. Every one of these was inside the address string.
+        parsed = parse_demographics(self.HEADER)
+        assert parsed.address == "18 Toa Payoh Lorong 4, Singapore 310018"
+        for taken in ("S7211043C", "04/11/1972", "91112233", "GHS-4471902", "Chua"):
+            assert taken not in parsed.address
+
+    def test_a_comma_separated_block_reads_the_same_way(self) -> None:
+        # The comma is the separator AND a character inside the address, which
+        # is why the address is rebuilt from the note's own text rather than
+        # from the pieces the split produced.
+        text = (
+            "Chua Beng Huat, S7211043C, 04/11/1972, 91112233, "
+            "18 Toa Payoh Lorong 4, Singapore 310018, Policy GHS-4471902\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.address == "18 Toa Payoh Lorong 4, Singapore 310018"
+        assert parsed.nric == "S7211043C"
+
+    def test_a_labelled_block_written_with_commas_reads_too(self) -> None:
+        text = "Patient: Chua Beng Huat, S7211043C, 04/11/1972, 91112233\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.dob == "1972-11-04"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # One shaped value in a sentence is a coincidence, not a block.
+            "08/05/2026. Reviewed. Ongoing epigastric discomfort.\n",
+            # Three dates is a treatment history: the count is of different
+            # FIELDS, so this is one field however many times it appears.
+            "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n",
+            # A number with a word in front of it is not that field's value.
+            "Referred to Dr Lim, tel 62551234, on 04/11/2026.\n",
+        ],
+    )
+    def test_prose_is_not_a_header(self, text: str) -> None:
+        parsed = parse_demographics(text)
+        assert parsed.full_name is None
+        assert parsed.address is None
+
+    def test_two_nameless_pieces_yield_no_name(self) -> None:
+        # The same refusal every other field makes. A name has no shape, so
+        # there is nothing to break the tie with — and a wrong name is the one
+        # error redaction cannot recover from, since it is the value the note
+        # is scrubbed against.
+        text = "Chua Beng Huat · Tan Wei Ling · S7211043C · 91112233\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name is None
+        assert parsed.nric == "S7211043C"
+
+    def test_a_sentence_is_too_long_to_be_a_name(self) -> None:
+        text = "S7211043C · 91112233 · patient reports ongoing epigastric discomfort\n"
+        assert parse_demographics(text).full_name is None
+
+    def test_an_address_on_its_own_line_is_unaffected(self) -> None:
+        # One field on the line, so it is not a header — the old rule still
+        # owns this case and still takes the whole line.
+        text = "NRIC: S8012345D\nBlk 118 Bishan St 12 #07-21, S570118\n"
+        parsed = parse_demographics(text)
+        assert parsed.address == "Blk 118 Bishan St 12 #07-21, S570118"
