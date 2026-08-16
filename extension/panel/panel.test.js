@@ -1723,3 +1723,119 @@ describe("confirming a value", () => {
     expect($("fill-btn").disabled).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The note, kept beside the values that came out of it
+// ---------------------------------------------------------------------------
+//
+// Checking a mapped value is a comparison between the model's answer and what
+// the note said, and the panel used to show one at a time. `source` — the
+// sentence the model is told to quote verbatim — has been on every row since
+// mapping.py was written and was never rendered.
+
+const NOTE = "Seen 02/08/2026. Dx acute tonsillitis. MC 2 days.";
+
+const QUOTED = {
+  field_id: "diagnosis",
+  label: "Diagnosis of all conditions treated",
+  field_type: "text",
+  help: null,
+  value: "Acute tonsillitis",
+  status: "extracted",
+  source: "Dx acute tonsillitis.",
+  needs_review: false,
+  recheck: null,
+};
+
+async function mapWithNote(fields, note = NOTE) {
+  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
+  const panel = loadPanel();
+  await settle();
+  $("paste").value = note;
+  $("full-name").value = "Chua Beng Huat";
+  $("nric").value = "S7211043C";
+  $("dob").value = "1972-11-04";
+  $("insurer").value = "AIA";
+  await panel.onMap();
+  return panel;
+}
+
+const marked = () => $("note-text").querySelector("mark");
+
+describe("the note pane", () => {
+  test("shows the consultation as it was pasted", async () => {
+    await mapWithNote([QUOTED]);
+
+    expect($("note-text").textContent).toBe(NOTE);
+  });
+
+  test("marks nothing until a row is read", async () => {
+    // Marking one before the doctor has looked at anything would claim they
+    // are checking it.
+    await mapWithNote([QUOTED]);
+
+    expect(marked()).toBeNull();
+    expect($("note-following").textContent).toBe("");
+  });
+
+  test("marks the sentence a value came from, and names the row", async () => {
+    await mapWithNote([QUOTED]);
+
+    $("rows").children[0].click();
+
+    expect(marked().textContent).toBe("Dx acute tonsillitis.");
+    expect($("note-text").textContent).toBe(NOTE);
+    expect($("note-following").textContent).toBe(QUOTED.label);
+  });
+
+  test("follows the keyboard as well as the mouse", async () => {
+    await mapWithNote([QUOTED]);
+
+    $("rows")
+      .children[0].querySelector("textarea")
+      .dispatchEvent(new window.Event("focusin", { bubbles: true }));
+
+    expect(marked().textContent).toBe("Dx acute tonsillitis.");
+  });
+
+  test("marks NOTHING when the quote is not in the note verbatim", async () => {
+    // The rule this whole pane rests on. A fuzzy match would draw a highlight
+    // around a sentence the value did not come from, on the one screen whose
+    // job is showing the doctor where a value came from — a wrong citation
+    // rendered exactly like a right one.
+    await mapWithNote([{ ...QUOTED, source: "Diagnosis: acute tonsillitis" }]);
+
+    $("rows").children[0].click();
+
+    expect(marked()).toBeNull();
+    expect($("note-text").textContent).toBe(NOTE);
+    expect($("note-following").textContent).toBe("quote not found in the note");
+  });
+
+  test("tells the two silent cases apart", async () => {
+    // A value the model did not quote and a value that never came from the
+    // note at all are different facts, and a blank pane says neither.
+    await mapWithNote([{ ...QUOTED, source: null, status: "demographic" }]);
+
+    $("rows").children[0].click();
+
+    expect(marked()).toBeNull();
+    expect($("note-following").textContent).toBe("not taken from the note");
+  });
+
+  test("folds away without losing the note", async () => {
+    await mapWithNote([QUOTED]);
+
+    $("note-toggle").click();
+
+    expect($("note-text").hidden).toBe(true);
+    expect($("note-toggle").textContent).toBe("Show");
+    expect($("note-toggle").getAttribute("aria-expanded")).toBe("false");
+    expect($("note-text").textContent).toBe(NOTE);
+
+    $("note-toggle").click();
+
+    expect($("note-text").hidden).toBe(false);
+    expect($("note-toggle").textContent).toBe("Hide");
+  });
+});
