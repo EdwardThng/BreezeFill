@@ -1034,7 +1034,7 @@ describe("looking back at a finished step", () => {
     await settle();
     await toReview(panel);
 
-    expect(doneRow("Check these")).toBeUndefined();
+    expect(doneRow("Verify")).toBeUndefined();
     expect([...document.querySelectorAll(".done-row")]).toHaveLength(2);
     expect($("nric").value).toBe("S7211043C");
   });
