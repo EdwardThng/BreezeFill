@@ -1016,6 +1016,24 @@ describe("everything pasted is one corpus", () => {
     expect(sent.text).toContain("S7211043C");
   });
 
+  test("the name typed at step 1 goes with the paste", async () => {
+    // It turns finding the name in a header block from a judgement into a
+    // check. Without it the parser has to decide which capitalised piece of
+    // "Chua Beng Huat · Tan Wei Ling · S7211043C" is the patient, and a wrong
+    // answer is the one that matters: the name is what the note is scrubbed
+    // against, so the real one stays in the text sent to the model.
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("paste").value = "Chua Beng Huat · Tan Wei Ling · S7211043C";
+    await panel.parsePaste();
+
+    const sent = JSON.parse(
+      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
+    );
+    expect(sent.full_name).toBe("Chua Beng Huat");
+  });
+
   test("the text sent is exactly what was pasted", async () => {
     // No separator bolted on, now that there is nothing to join it to.
     const panel = loadPanel();

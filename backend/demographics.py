@@ -440,6 +440,38 @@ _NAME_PARTICLES = {"bin", "binte", "bte", "b", "s/o", "d/o", "a/l", "a/p",
                    "van", "von", "de", "del", "der", "di", "da", "la", "le"}
 
 
+def _same_name(piece: str, known: str) -> bool:
+    """Is this piece the name the doctor already typed?
+
+    Case and spacing are forgiven, and so is the ordering: a CMS exports
+    "Chua Beng Huat" where the doctor typed "Beng Huat Chua" often enough that
+    `redaction.py` carries the same reversal, and for the same reason — the
+    two are one person, and a piece that fails to match is a piece that stays
+    in the note.
+
+    Nothing else is forgiven. This is a check, not a search: a piece either is
+    the name on the claim or it is something else on the page.
+    """
+    def key(text: str) -> str:
+        return " ".join(text.lower().replace(",", " ").split())
+
+    wanted, got = key(known), key(piece)
+    if not wanted or not got:
+        return False
+    if got == wanted:
+        return True
+    # Both rotations, because either half can be the surname: a CMS that puts
+    # the surname first writes "Chua Beng Huat" where the doctor typed "Beng
+    # Huat Chua", and one that puts it last does the reverse.
+    parts = wanted.split()
+    if len(parts) < 2:
+        return False
+    return got in (
+        " ".join(parts[1:] + parts[:1]),
+        " ".join(parts[-1:] + parts[:-1]),
+    )
+
+
 def _looks_like_a_name(text: str) -> bool:
     """Words that could be somebody's name, rather than a phrase.
 
@@ -498,7 +530,9 @@ def _piece_spans(line: str) -> list[tuple[int, int]]:
     return [(s, e) for s, e in pieces if line[s:e].strip()]
 
 
-def _header_pieces(line: str) -> tuple[dict[str, str], list[str]] | None:
+def _header_pieces(
+    line: str, known_name: str = ""
+) -> tuple[dict[str, str], list[str]] | None:
     """One line -> the fields it carries, or None if it is not a header line.
 
     THE RULE THIS EXISTS FOR: a piece belongs to one field. An NRIC that has
@@ -513,9 +547,13 @@ def _header_pieces(line: str) -> tuple[dict[str, str], list[str]] | None:
 
     - It must yield `MIN_HEADER_FIELDS` different fields before anything is
       taken from it, so a sentence of clinical text is never read as a block.
-    - The name is still not guessed from words. It is the ONE leftover piece
-      with no digits in it, on a line that has already proved what it is, and
-      two such pieces means neither — the same refusal every other field makes.
+    - The name is not guessed when it does not have to be. The doctor types it
+      at step 1, BEFORE pasting anything — it is the one value the panel
+      insists on, because redaction cannot find a name by shape — so when
+      `known_name` is given this only CHECKS which piece is that name. No
+      match, no name, whatever the piece looks like. Only a caller that has no
+      name to check against falls back to reading one out of the block, and
+      then only from capitalised words on a line that has proved what it is.
 
     Returns the fields found and the name candidates, or None for prose.
     """
@@ -557,26 +595,33 @@ def _header_pieces(line: str) -> tuple[dict[str, str], list[str]] | None:
         found["address"] = line[start:end].strip(" ,.;·|")
         break
 
-    # Whatever is left with no digits in it, once every other field has taken
-    # its own piece. Exactly one is a name; two is a question this cannot
-    # answer, so it answers neither.
-    names = [
+    # Whatever is left, once every other field has taken its own piece.
+    #
+    # With a name to check against this is a lookup and cannot be wrong. The
+    # other piece of "Chua Beng Huat · Tan Wei Ling · S7211043C" is somebody
+    # else — a next of kin, a referring doctor — and stays unclaimed, which is
+    # exactly what could not be told apart without the name in hand.
+    leftovers = [
         piece
         for (s, e), item in zip(spans, classified)
-        if item is None
-        and not re.search(r"\d", (piece := line[s:e].strip(" ,.;·|")))
-        and _looks_like_a_name(piece)
+        if item is None and not re.search(r"\d", (piece := line[s:e].strip(" ,.;·|")))
     ]
-    return found, names
+    if known_name:
+        return found, [p for p in leftovers if _same_name(p, known_name)]
+
+    # No name to check against: read one, under every fence in
+    # `_looks_like_a_name`. Exactly one candidate is a name; two is a question
+    # this cannot answer, so it answers neither.
+    return found, [p for p in leftovers if _looks_like_a_name(p)]
 
 
-def _parse_patient_line(value: str) -> dict[str, tuple[str, str]]:
+def _parse_patient_line(value: str, known_name: str = "") -> dict[str, tuple[str, str]]:
     """A labelled patient line, which may carry the whole block at once."""
     # Tried first, and on the raw value rather than on `SEGMENT_SPLIT`'s
     # segments: a block written with commas — "Patient: Chua Beng Huat,
     # S7211043C, 04/11/1972" — has no middot and no double space in it, so the
     # segment split sees one segment and the whole block became the name.
-    header = _header_pieces(value)
+    header = _header_pieces(value, known_name)
     if header is not None:
         fields, names = header
         found = {field: (found_, "patient-line") for field, found_ in fields.items()}
@@ -942,7 +987,7 @@ def _address_lines(text: str) -> list[str]:
     return lines
 
 
-def parse_demographics(text: str) -> ParsedDemographics:
+def parse_demographics(text: str, known_name: str = "") -> ParsedDemographics:
     """The whole pasted block -> a draft PatientRecord.
 
     Never raises: unparseable input is an empty result, which the doctor fills
@@ -982,7 +1027,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
         value = match.group(2).strip()
 
         if field == "full_name":
-            for name, (parsed, source) in _parse_patient_line(value).items():
+            for name, (parsed, source) in _parse_patient_line(value, known_name).items():
                 record(name, parsed, source)
             continue
         if field == "dob":
@@ -1015,7 +1060,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
     # field, so a value already read as an NRIC, a date of birth, a phone
     # number or a policy number cannot also turn up inside the address.
     for line in _logical_lines(text):
-        header = _header_pieces(line)
+        header = _header_pieces(line, known_name)
         if header is None:
             continue
         fields, names = header

@@ -817,3 +817,53 @@ class TestAHeaderNobodyLabelled:
         text = "NRIC: S8012345D\nBlk 118 Bishan St 12 #07-21, S570118\n"
         parsed = parse_demographics(text)
         assert parsed.address == "Blk 118 Bishan St 12 #07-21, S570118"
+
+
+class TestTheNameIsCheckedNotGuessed:
+    """The doctor types the name at step 1, before the paste box exists.
+
+    That is not a convenience, it is the panel's first question, and it is
+    asked first because `redaction.py` cannot find a name by shape — nothing
+    can be scrubbed of a name nobody supplied. So by the time there is a block
+    to parse, the name is already known, and finding it in the block is a
+    lookup rather than a judgement.
+
+    What that buys is the case nothing else could settle: two capitalised
+    pieces on one header, one of them the patient and one of them somebody
+    else.
+    """
+
+    HEADER = (
+        "Chua Beng Huat · Tan Wei Ling · S7211043C · 04/11/1972 · 91112233 ·\n"
+        "18 Toa Payoh Lorong 4, Singapore 310018\n"
+    )
+
+    def test_the_piece_that_is_the_name_is_the_one_that_matches(self) -> None:
+        parsed = parse_demographics(self.HEADER, known_name="Chua Beng Huat")
+        assert parsed.full_name == "Chua Beng Huat"
+        # And the other person on the line is not read as anything.
+        assert "Tan Wei Ling" not in (parsed.address or "")
+
+    def test_a_surname_written_the_other_way_round_still_matches(self) -> None:
+        # A CMS exporting surname-first against a doctor who typed it last, or
+        # the reverse. `redaction.py` forgives the same rotation, and for the
+        # same reason: they are one person, and a piece that does not match is
+        # a piece left in the note.
+        for typed in ("Beng Huat Chua", "CHUA BENG HUAT", "Chua  Beng Huat"):
+            parsed = parse_demographics(self.HEADER, known_name=typed)
+            assert parsed.full_name == "Chua Beng Huat", typed
+
+    def test_a_name_that_matches_nothing_on_the_line_yields_no_name(self) -> None:
+        # Neither piece is this patient, so neither is taken — the guess that
+        # would have picked one is not reached when a name was supplied.
+        parsed = parse_demographics(self.HEADER, known_name="Nurul Aisyah")
+        assert parsed.full_name is None
+        # Everything else on the line still parses; only the name is withheld.
+        assert parsed.nric == "S7211043C"
+
+    def test_without_a_name_it_falls_back_to_reading_one(self) -> None:
+        # A caller that is not the panel has nothing to check against, so the
+        # fenced guess is still there — and still refuses two candidates.
+        assert parse_demographics(self.HEADER).full_name is None
+        one_name = "Chua Beng Huat · S7211043C · 04/11/1972 · 91112233\n"
+        assert parse_demographics(one_name).full_name == "Chua Beng Huat"

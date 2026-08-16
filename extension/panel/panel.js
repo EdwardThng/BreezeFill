@@ -586,7 +586,11 @@ async function parsePaste() {
     const response = await fetch(`${apiBase()}/parse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: pastedText() }),
+      // The name goes with the paste. Step 1 asked for it before this box
+      // existed, so the parser never has to work out which piece of a header
+      // block is the patient — it checks, which cannot be wrong, and the
+      // piece beside it stays unclaimed instead of being read as a name.
+      body: JSON.stringify({ text: pastedText(), full_name: $("full-name").value.trim() }),
     });
     if (!response.ok) throw new Error(String(response.status));
     parsed = await response.json();
