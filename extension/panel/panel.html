@@ -127,9 +127,10 @@
         </label>
         <!--
           Synthetic throughout, and deliberately awkward: two phone numbers so
-          the sole-match rule has to refuse both, a policy number written two
-          ways, and a first-consult date that is not the consultation date. A
-          sample that parsed cleanly would demonstrate the wrong thing.
+          the sole-match rule has to refuse both, one policy number written two
+          ways so the dedupe has to recognise it as one, and a first-consult
+          date that is not the consultation date. A sample that parsed cleanly
+          would demonstrate the wrong thing.
         -->
         <button id="sample-note" class="sample" type="button">
           Use a sample note

@@ -112,9 +112,10 @@ const REQUIRED_FIELDS = ["full-name", "dob"];
 // It is deliberately awkward rather than tidy, because a sample that parsed
 // cleanly would demonstrate the wrong thing. It carries two phone numbers, so
 // the sole-match rule in demographics.py has to refuse both rather than guess;
-// a policy number written two ways; and a first-consult date that is not the
-// consultation date, which is exactly the distinction a schema description
-// exists to draw.
+// a policy number written two ways, which resolves rather than refusing,
+// because both renderings name one policy; and a first-consult date that is
+// not the consultation date, which is exactly the distinction a schema
+// description exists to draw.
 const SAMPLE_NOTE = `Tan Wei Ling, F, 47
 NRIC S8012345D  DOB 14/03/1978
 HP 9123 4567 / 6123 4567

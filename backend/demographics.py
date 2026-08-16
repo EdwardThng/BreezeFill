@@ -605,6 +605,47 @@ def _dedupe_key(field: str, value: str) -> str:
     return digits
 
 
+# A policy number as its two halves: the insurer's prefix and the digits that
+# identify the policy. The separator is not one of them — `GHS-88213004`,
+# `GHS/88213004` and `GHS88213004` are one reference written three ways.
+_POLICY_PARTS = re.compile(r"^([A-Z]{2,5})[-/]?(\d{4,})$")
+
+
+def _same_policy(a: str, b: str) -> bool:
+    """Whether two policy numbers are one reference written two ways.
+
+    Not a key, because sameness here is a relation rather than a canonical
+    form: the digits must be identical AND one prefix must extend the other.
+    `GH-88213004` and `GHS-88213004` are the same policy with the prefix
+    truncated once, which is what a note looks like when someone typed it
+    twice; `GE-88213004` and `GHS-88213004` are not, because neither prefix
+    contains the other and those are two insurers.
+
+    Requiring the digits to match is what keeps this from merging real
+    references. The residual case — two genuinely different policies sharing a
+    full digit run, one of whose prefixes extends the other — needs an
+    insurer's numbering to collide with another's on the same patient's note,
+    which is a different failure from the one being fixed and a much rarer one.
+    """
+    left, right = _POLICY_PARTS.match(a), _POLICY_PARTS.match(b)
+    if not left or not right:
+        return False
+    if left.group(2) != right.group(2):
+        return False
+    return left.group(1).startswith(right.group(1)) or right.group(1).startswith(left.group(1))
+
+
+def _duplicate_index(field: str, value: str, kept: list[str]) -> int | None:
+    """Where `value` has already been seen, by this field's idea of sameness."""
+    key = _dedupe_key(field, value)
+    for index, existing in enumerate(kept):
+        if _dedupe_key(field, existing) == key:
+            return index
+        if field == "policy_number" and _same_policy(existing, value):
+            return index
+    return None
+
+
 def _shaped_candidates(
     field: str, pattern: re.Pattern[str], text: str
 ) -> list[str]:
@@ -615,21 +656,27 @@ def _shaped_candidates(
     one candidate rather than a question. One candidate is the value; more than
     one is a question for the doctor; none is a genuine blank.
 
-    The FIRST rendering survives, not a canonical one: the list reads the way
-    the note reads, and the value written onto the form is the one the doctor
-    typed.
+    The rendering the note wrote FIRST survives, not a canonical one: the list
+    reads the way the note reads, and the value written onto the form is the
+    one the doctor typed.
+
+    A policy number is the one exception, and it is not a ranking. When two
+    renderings are the same reference and one prefix extends the other, the
+    fuller one replaces the shorter — both readings agree about the policy, so
+    keeping `GH-88213004` over `GHS-88213004` would put a truncated prefix on
+    a claim to honour an ordering rule that exists to preserve the doctor's own
+    wording. The wording is the same wording; one of them is just cut short.
     """
     out: list[str] = []
-    seen: set[str] = set()
     for raw in _all_matches(pattern, text):
         value = _normalised(field, raw)
         if not value:
             continue
-        key = _dedupe_key(field, value)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(value)
+        at = _duplicate_index(field, value, out)
+        if at is None:
+            out.append(value)
+        elif field == "policy_number" and len(value) > len(out[at]):
+            out[at] = value
     return out
 
 

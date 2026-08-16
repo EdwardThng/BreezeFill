@@ -80,12 +80,18 @@ Dx acute tonsillitis. Rx amoxicillin 500mg TDS x 7 days. MC 2 days.
 | dob | 1978-03-14 | labelled-inline |
 | phone | *blank* | — (choices: `9123 4567`, `6123 4567`) |
 | address | Blk 118 Bishan St 12 #07-21, S570118 | sole-match |
-| policy_number | *blank* | — (choices: `GHS-88213004`, `GH-88213004`) |
+| policy_number | GHS-88213004 | labelled-inline — one policy written two ways, not two |
 | insurer | *blank* | — |
 
-Two blanks that are questions rather than misses. **The panel should show both
-as pick-lists** — that is the thing to check on screen, since a blank the
-doctor cannot account for reads as the product failing to look.
+The phone is a blank that is a question rather than a miss. **The panel should
+show it as a pick-list** — that is the thing to check on screen, since a blank
+the doctor cannot account for reads as the product failing to look.
+
+The policy number is the other half of the same idea. `GH-88213004` is
+`GHS-88213004` with the prefix cut short — same digits, one prefix inside the
+other — so it resolves instead of asking, and the fuller prefix is what goes on
+the form. Two prefixes that do NOT contain each other, `GHS-` and `GE-`, are two
+insurers and still refuse.
 
 `DOB 14/03/1978` resolving at all is the point of the inline pass: an unlabelled
 date is never taken, so without the label this field stays empty.

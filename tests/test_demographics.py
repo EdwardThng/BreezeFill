@@ -239,7 +239,12 @@ class TestLabelsAnywhereInALine:
         # "HP 9123 4567 / 6123 4567" names two numbers and nothing here can
         # tell which the form wants. Same refusal as unlabelled prose.
         assert parse_demographics(self.SAMPLE).phone is None
-        assert parse_demographics(self.SAMPLE).policy_number is None
+
+    def test_two_policy_prefixes_from_two_insurers_yield_neither(self) -> None:
+        # The refusal that survives the dedupe: neither prefix contains the
+        # other, so these are two references and not one written twice.
+        text = "Policy GHS-88213004 or GE-88213004\n"
+        assert parse_demographics(text).policy_number is None
 
     def test_a_label_followed_by_the_wrong_shape_yields_nothing(self) -> None:
         # The label says which field; the shape says whether the thing after it
@@ -424,10 +429,31 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["9123 4567", "6123 4567"]
 
-    def test_two_policy_numbers_are_offered(self) -> None:
+    def test_one_policy_written_twice_is_not_a_question(self) -> None:
+        # `GH-88213004` is `GHS-88213004` with the prefix cut short — same
+        # digits, and one prefix contains the other. The doctor was being asked
+        # to choose between a policy number and itself.
         parsed = parse_demographics(self.SAMPLE)
+        assert parsed.policy_number == "GHS-88213004"
+        assert "policy_number" not in parsed.choices
+
+    def test_the_fuller_prefix_survives_whichever_came_first(self) -> None:
+        # The one place the first-written rendering does not win, and it is not
+        # a ranking: both readings agree about the policy, so keeping the
+        # truncated one would put a prefix on a claim that the insurer did not
+        # issue, to honour a rule that exists to preserve the doctor's wording.
+        parsed = parse_demographics("Policy GH-88213004, also written GHS-88213004\n")
+        assert parsed.policy_number == "GHS-88213004"
+
+    def test_two_policies_with_different_digits_are_still_offered(self) -> None:
+        parsed = parse_demographics("Policy GHS-88213004 or GHS-77104002\n")
         assert parsed.policy_number is None
-        assert parsed.choices["policy_number"] == ["GHS-88213004", "GH-88213004"]
+        assert parsed.choices["policy_number"] == ["GHS-88213004", "GHS-77104002"]
+
+    def test_a_separator_is_not_part_of_the_reference(self) -> None:
+        parsed = parse_demographics("Policy GHS-88213004 (GHS88213004 in the system)\n")
+        assert parsed.policy_number == "GHS-88213004"
+        assert "policy_number" not in parsed.choices
 
     def test_candidates_keep_the_order_the_note_wrote_them_in(self) -> None:
         # Not a ranking — but if the doctor is choosing between two numbers,
