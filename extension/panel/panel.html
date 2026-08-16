@@ -62,11 +62,6 @@
       <!-- Step 1 — the name ---------------------------------------------- -->
       <section class="step" id="step-name" aria-labelledby="h-name">
         <h2 id="h-name">Who is this claim for?</h2>
-        <p class="step-sub">
-          Type the patient's name yourself. BreezeFill never guesses this one —
-          a name has no shape for a pattern to find, so it is the one value the
-          note cannot be scrubbed of unless you supply it.
-        </p>
         <label class="field">
           <span>Full name</span>
           <input
@@ -81,9 +76,8 @@
 
       <!-- Step 2 — the consultation -------------------------------------- -->
       <section class="step" id="step-note" aria-labelledby="h-note" hidden>
-        <h2 id="h-note">Paste the consultation</h2>
         <!--
-          One box, and the second paragraph is what replaced a second one.
+          One box, and the heading is what carries what two paragraphs used to.
           Claim forms ask for things a consultation note does not hold — the
           admitting hospital's own reference, a ward class, an operation code
           from the billing system — and those used to have a step of their own.
@@ -92,14 +86,9 @@
           reference under their note gets exactly what a separate box gave them
           and one less screen to walk through.
         -->
-        <p class="step-sub">
-          Exactly as it sits in your CMS — demographics header and clinical
-          note together. Messy is fine.
-        </p>
-        <p class="step-sub">
-          Add anything else the form asks for underneath: admission references,
-          ward class, billing codes. It is read the same way.
-        </p>
+        <h2 id="h-note">
+          Paste the clinical note, and anything else the form needs
+        </h2>
 
         <!--
           What is being read, not a choice to make. BreezeFill answers the
@@ -139,10 +128,14 @@
         <button id="note-next" class="primary" type="button">
           Find patient details
         </button>
-        <p class="note">
-          Pattern matching, never a model. The identifiers found here are what
-          the note is scrubbed against before any of it is sent anywhere.
-        </p>
+        <!--
+          The guarantee, stated where the doctor is about to hand over the
+          note. It is the accurate form of the claim: the paste does reach the
+          backend — pass 1 needs the demographics as the dictionary it scrubs
+          with — and what it never reaches is the model. `privacy.html` words
+          it the same way, and a store reviewer reads both.
+        -->
+        <p class="note">The model never sees who this is.</p>
       </section>
 
       <!-- Step 3 — check what was found ---------------------------------- -->
@@ -160,12 +153,7 @@
         form never asks about is not worth stopping a doctor over.
       -->
       <section class="step" id="step-check" aria-labelledby="h-check" hidden>
-        <h2 id="h-check">Check these</h2>
-        <p class="step-sub">
-          Found by pattern in what you pasted. Correct anything that is wrong —
-          this is the dictionary the note is redacted against, so it has to be
-          right before anything is sent.
-        </p>
+        <h2 id="h-check">Verify</h2>
 
         <!--
           The same card as a review row, deliberately. A doctor checking values
