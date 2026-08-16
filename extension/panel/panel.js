@@ -785,7 +785,6 @@ async function onMap() {
     state.confirmed.clear();
     renderRows();
     showStep("review");
-    $("step-fill").hidden = false;
     setStatus(status, "");
   } catch (error) {
     setStatus(status, messageFor(error), "error");
@@ -968,7 +967,6 @@ const STEPS = [
   { key: "extra", section: "step-extra", title: "Other notes" },
   { key: "details", section: "step-details", title: "Patient details" },
   { key: "review", section: "step-review", title: "Review" },
-  { key: "fill", section: "step-fill", title: "Fill" },
 ];
 
 /** A one-line summary of a finished step, for its collapsed row. */
@@ -992,14 +990,7 @@ function summaryOf(key) {
   return "";
 }
 
-/**
- * Show one step, collapse everything behind it, hide everything ahead.
- *
- * `step-fill` is deliberately exempt from the "hide what is ahead" rule:
- * "Check this page" answers "can BreezeFill see this form at all", which is a
- * different question from "did the model produce good values" and is worth
- * being able to ask before anything has been pasted.
- */
+/** Show one step, collapse everything behind it, hide everything ahead. */
 function showStep(key) {
   state.step = key;
   const index = STEPS.findIndex((s) => s.key === key);
@@ -1007,16 +998,11 @@ function showStep(key) {
   for (const [i, step] of STEPS.entries()) {
     const el = $(step.section);
     if (!el) continue;
-    if (step.key === "fill") continue; // always reachable, see above
     el.hidden = i !== index;
   }
 
   const done = $("done-rows");
-  done.replaceChildren(
-    ...STEPS.slice(0, index)
-      .filter((s) => s.key !== "fill")
-      .map((s) => doneRow(s))
-  );
+  done.replaceChildren(...STEPS.slice(0, index).map((s) => doneRow(s)));
 
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
@@ -1238,39 +1224,6 @@ async function onPageChanged() {
   );
 }
 
-async function onCheck() {
-  const status = $("fill-status");
-  setStatus(status, "Reading the page…", "busy");
-  try {
-    const plan = fillPlan();
-    const response = await ask({ action: "survey", plan });
-
-    // Nothing mapped yet: this is a connectivity check, not a match check.
-    // Reporting "matched 0 of 0, will not fill" would read as a failure when
-    // it is actually the answer "yes, I can see this page".
-    if (!plan.length) {
-      setStatus(
-        status,
-        `Connected to ${response.host}. Found ${response.controlCount} fillable field${response.controlCount === 1 ? "" : "s"}. Map a note to see which ones match.`
-      );
-      $("fill-report").replaceChildren();
-      return;
-    }
-
-    const { matched, intended, safeToFill } = response.report;
-    setStatus(
-      status,
-      safeToFill
-        ? `Matched ${matched} of ${intended} fields on ${response.host}.`
-        : `Only matched ${matched} of ${intended} fields on ${response.host}. BreezeFill will not fill a page it does not recognise.`,
-      safeToFill ? null : "error"
-    );
-    renderReport({ ...response, applied: [] });
-  } catch (error) {
-    setStatus(status, error.message, "error");
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Growing the bank
 // ---------------------------------------------------------------------------
@@ -1414,7 +1367,6 @@ $("sample-note").addEventListener("click", () => {
 });
 
 $("map-btn").addEventListener("click", onMap);
-$("check-btn").addEventListener("click", onCheck);
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen

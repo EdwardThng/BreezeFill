@@ -237,22 +237,18 @@
           <i id="review-progress" style="width: 0%"></i>
         </div>
         <div id="rows"></div>
-      </section>
 
-      <!-- Step 6 — the page ---------------------------------------------- -->
-      <!--
-        Not hidden behind review. "Check this page" is useful before any note
-        has been mapped — it answers "can BreezeFill see this form at all",
-        which is a different question from "did the model produce good values"
-        and worth being able to ask on its own. Fill stays disabled until there
-        is something confirmed to write.
-      -->
-      <section class="step" id="step-fill" aria-labelledby="h-fill">
-        <h2 id="h-fill">Write it onto the page</h2>
-        <div class="row-actions">
-          <button id="check-btn" type="button">Check this page</button>
-          <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
-        </div>
+        <!--
+          Fill closes the review rather than opening a step of its own. The
+          doctor confirms a value and writes it from the same place; a separate
+          card asked them to leave the rows they had just approved, and its
+          heading was the only thing explaining what the button did.
+
+          Disabled until something is confirmed, which is the confirm-before-
+          write guarantee expressed in the markup: there is no path from a
+          mapped value to the page that does not pass through the rows above.
+        -->
+        <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
         <p class="status" id="fill-status" role="status"></p>
         <div id="fill-report"></div>
       </section>
