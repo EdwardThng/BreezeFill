@@ -111,17 +111,18 @@ Review 09/08/2026 if not better. MC 1 day.
 |---|---|---|
 | full_name | *blank* | — a name has no shape, and is never guessed |
 | nric | S9012345A | sole-match |
-| dob | *blank*, with `2026-08-02` and `2026-08-09` suggested | — never taken from unlabelled text |
+| dob | *blank*, nothing suggested | — never taken from unlabelled text, and this note holds no date old enough to be one |
 | phone | 98765432 | sole-match |
 | address | Blk 5 Marine Terrace #12-34, Singapore 440005. | sole-match |
 
 The two blanks are the design. Three dates sit in this note and none of them is
 a birth date; a shape rule that took one would have taken the consultation date.
 
-The dates are *offered* though, as suggestions the doctor clicks or ignores.
-That is the distinction to watch on screen: the box is empty, and underneath it
-sits "2 found in the note — pick the patient's". Nothing is pre-selected, so a
-consultation date still cannot reach a claim without a deliberate click.
+Nor are they *suggested*. Both sit inside the clinical window — the two years a
+note's own business reaches back over — so they read as the episode being
+claimed for, which is what they are. Add a date from decades ago to this paste
+and it appears under the empty box as a suggestion; that is the shape to test
+if you want to see the suggestion path at all.
 
 Cosmetic: the address keeps its trailing full stop, because the line is the
 value and only the postal code was the evidence.
@@ -154,12 +155,14 @@ Continue amlodipine 5mg OM. No contact number on file. Review in 3 months.
 delimiter guard in `PHONE_IN_TEXT` has been loosened — that value would reach a
 claim deterministically, skipping both the model and the review step.
 
-The blank date of birth is the one that still has nothing behind it. Every
-other case now suggests the dates it found, but `14/03/78` is not a date to
-this parser at all — a two-digit year is rejected before it can become a
-candidate — so the doctor who wrote the birth date in the note gets the same
-empty box as one who never mentioned it. That is the remaining gap, and the
-only case here where the note says something the panel does not repeat back.
+The blank date of birth is the one case here where the note says something the
+panel does not repeat back. `14/03/78` is not a date to this parser at all — a
+two-digit year is rejected before it can become a candidate — so a doctor who
+wrote the birth date gets the same empty box as one who never mentioned it.
+
+That is deliberate rather than missed, and it is the same judgement the
+recency rule makes: a date whose century is not stated cannot be read as a
+birth date, because the century is exactly the part that would decide it.
 
 ---
 
@@ -296,14 +299,18 @@ The email is ignored — nothing on a claim form asks for it.
    demographic-label gotcha; these cases show it recovering rather than
    failing, which is worth knowing before anyone "fixes" it.
 
-3. **A two-digit year yields a silent blank** (case 4), and it is now the only
-   silent one. Since dates found in the note are offered as suggestions,
-   every other case shows the doctor what it saw; `14/03/78` is rejected
-   before it becomes a candidate, so a note that *does* state the birth date
-   produces the same empty box as one that never mentioned it. Reading it as
-   1978 is a pivot rule, and a pivot is a guess — but a guess offered as a
-   suggestion is only ever a click away from being corrected, which is a
-   different bargain from a guess written into the field.
+3. **A two-digit year yields a silent blank** (case 4). Reading `14/03/78` as
+   1978 needs a pivot rule, and a pivot is a guess about the century — which
+   is the whole question. It is consistent with the recency rule rather than
+   an oversight: both say that a date whose year is not fully stated is not
+   evidence of a birth date. The cost is that a note which *does* state the
+   birth date, in a format a person reads without hesitating, produces the
+   same empty box as one that never mentioned it.
+
+4. **None of these seven notes exercises the suggestion path**, now that the
+   clinical window filters recent dates out. Every date in all seven is from
+   the current episode. To see a suggestion, paste a note carrying a date
+   from decades ago — that is the case worth adding as an eighth.
 
 ## NO LABELS
 

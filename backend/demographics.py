@@ -509,6 +509,59 @@ def _shaped_candidates(
     return out
 
 
+# How far back a note's own business reaches. Inside this window a date is
+# describing the episode being claimed for — the consultation, the admission,
+# the discharge, the review, the first consult for this condition, the surgery
+# the year before. Outside it, a date in a clinical note is overwhelmingly a
+# birth date, because nothing else that old gets written down as a bare date.
+#
+# Two years rather than one: an episode routinely opens in the previous
+# calendar year, and a first-consult date twelve months back is common enough
+# that offering it as a birth date would put a plausible wrong answer one click
+# away on ordinary notes.
+#
+# What this costs, stated rather than discovered later: an INFANT's birth date
+# is inside the window, so an unlabelled one is not offered. That is the right
+# side to fail on — the alternative offers every consultation date on every
+# note, which is noise on all of them to catch a birth date on a few — and it
+# is recoverable, since a paediatric claim states the date of birth in the
+# header where the labelled rules read it directly.
+CLINICAL_WINDOW_YEARS = 2
+
+
+def _birth_date_candidates(text: str) -> list[str]:
+    """The dates in the note that could plausibly be a birth date.
+
+    Recency is the only signal available without reading meaning, and it is a
+    surprisingly good one: a note's dates cluster around the episode, and a
+    birth date does not. So a date inside the clinical window is taken to be
+    describing the episode, and only what falls outside it is offered.
+
+    A date with no year at all — "seen 2/8", "MC from 15/3" — never reaches
+    here: `DATE_IN_TEXT` requires a year and `parse_date` requires four digits
+    of it. That is the same judgement by a different route. A yearless date is
+    shorthand, and shorthand is how a doctor writes THIS year, which makes it
+    a consultation date; a birth date written that way could not be read
+    anyway, since the century is exactly what is missing.
+
+    Filtering rather than ranking, deliberately. The candidate list is evidence
+    handed to the doctor, and a list that put the likeliest first would be this
+    module deciding after all — quietly, in the one place nobody would look for
+    a decision. Either a date could be a birth date or it could not.
+    """
+    today = date.today()
+    try:
+        cutoff = today.replace(year=today.year - CLINICAL_WINDOW_YEARS)
+    except ValueError:  # 29 February, on a year whose counterpart has none
+        cutoff = date(today.year - CLINICAL_WINDOW_YEARS, 2, 28)
+
+    return [
+        iso
+        for iso in _shaped_candidates("dob", DATE_IN_TEXT, text)
+        if date.fromisoformat(iso) <= cutoff
+    ]
+
+
 def _address_lines(text: str) -> list[str]:
     """Every line carrying a Singapore postal code, in order.
 
@@ -625,13 +678,12 @@ def parse_demographics(text: str) -> ParsedDemographics:
     # are shown the list instead of an empty box with nothing behind it.
     #
     # The hazard is real and is the reason this was refused for so long: every
-    # admission, discharge and review date is in here, and the birth date may
-    # not be. It survives being offered because a choice is not a fill. Nothing
-    # is pre-selected and no candidate reaches the field without a click, so
-    # the worst case is a list the doctor ignores — which is what an empty box
-    # gets them today anyway.
+    # admission, discharge and review date is date-shaped too. It survives
+    # being offered because a choice is not a fill — nothing is pre-selected
+    # and no candidate reaches the field without a click — and because the
+    # clinical dates are now filtered out rather than listed alongside.
     if "dob" not in values:
-        offer("dob", _shaped_candidates("dob", DATE_IN_TEXT, text), minimum=1)
+        offer("dob", _birth_date_candidates(text), minimum=1)
 
     if "address" not in values:
         candidates = _address_lines(text)

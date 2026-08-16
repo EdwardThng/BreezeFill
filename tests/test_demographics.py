@@ -507,28 +507,70 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         text = "Chua Beng Huat attended with Tan Wei Ling today.\n"
         assert "full_name" not in parse_demographics(text).choices
 
-    def test_dates_in_prose_are_offered_but_never_taken(self) -> None:
+    # Written relative to today rather than as literals: every assertion here
+    # turns on how old a date is, so a hard-coded year would start failing on
+    # a date nobody chose.
+    @staticmethod
+    def _years_ago(years: int) -> str:
+        today = date.today()
+        try:
+            return today.replace(year=today.year - years).strftime("%d/%m/%Y")
+        except ValueError:  # 29 February
+            return date(today.year - years, 2, 28).strftime("%d/%m/%Y")
+
+    def test_a_recent_date_is_the_consultation_and_is_not_offered(self) -> None:
         # The refusal that must survive: a clinical note is nothing but dates —
-        # consultation, admission, discharge, MC — and none of them is known to
-        # be a birth date, so not one of them is ever WRITTEN into the field.
-        #
-        # They are shown, though. The alternative was an empty box with nothing
-        # behind it, on a field the claim requires, and the doctor is the only
-        # one who can say which date is which. A choice is not a fill: nothing
-        # is pre-selected and no candidate reaches the field without a click.
-        text = "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n"
+        # consultation, admission, discharge, MC — and none of them is a birth
+        # date, so not one is ever written into the field. They are not even
+        # offered, because inside the clinical window a date is describing the
+        # episode being claimed for.
+        text = (
+            f"Seen {self._years_ago(0)}, first consult {self._years_ago(1)}, "
+            f"review {self._years_ago(0)}.\n"
+        )
         parsed = parse_demographics(text)
         assert parsed.dob is None
-        assert parsed.choices["dob"] == ["2026-08-02", "2026-07-31", "2026-08-09"]
+        assert "dob" not in parsed.choices
 
-    def test_a_lone_date_is_offered_rather_than_filled(self) -> None:
-        # Everywhere else a single candidate IS the answer — one NRIC in the
-        # note is the patient's NRIC. A date is the exception: one date in a
-        # note is overwhelmingly the consultation, not a birth date, so it is
-        # offered and never recorded. This is why `offer` takes a minimum.
-        parsed = parse_demographics("Seen 02/08/2026. Sore throat, settling.\n")
+    def test_an_old_date_is_offered_because_nothing_else_is_that_old(self) -> None:
+        # The other side. A note does not carry decade-old dates unless it is
+        # saying when someone was born, so the blank stops being silent — the
+        # doctor is shown what the note said and clicks, or ignores it.
+        # No dob label anywhere — "born" is one, and would send these down the
+        # labelled route instead, which believes what the note claims.
+        text = (
+            f"47F. Records go back to {self._years_ago(47)}. "
+            f"Seen {self._years_ago(0)} for review.\n"
+        )
+        parsed = parse_demographics(text)
         assert parsed.dob is None
-        assert parsed.choices["dob"] == ["2026-08-02"]
+        assert parsed.choices["dob"] == [self._iso_years_ago(47)]
+
+    @staticmethod
+    def _iso_years_ago(years: int) -> str:
+        today = date.today()
+        try:
+            return today.replace(year=today.year - years).isoformat()
+        except ValueError:
+            return date(today.year - years, 2, 28).isoformat()
+
+    def test_a_lone_old_date_is_offered_rather_than_filled(self) -> None:
+        # Everywhere else a single candidate IS the answer — one NRIC in the
+        # note is the patient's NRIC. A date is the exception however old it
+        # is: nothing SAID this was a birth date, so it is offered and never
+        # recorded. This is why `offer` takes a minimum.
+        parsed = parse_demographics(f"Longstanding asthma since {self._years_ago(40)}.\n")
+        assert parsed.dob is None
+        assert parsed.choices["dob"] == [self._iso_years_ago(40)]
+
+    def test_a_date_with_no_year_is_never_a_birth_date(self) -> None:
+        # "seen 2/8" is how a doctor writes this year, and a birth date written
+        # that way could not be read anyway — the century is exactly what is
+        # missing. Neither the pattern nor parse_date accepts one, so this is
+        # the same judgement arrived at by a different route.
+        parsed = parse_demographics("Seen 2/8, review 9/8. MC from 15/3.\n")
+        assert parsed.dob is None
+        assert "dob" not in parsed.choices
 
     def test_a_date_of_birth_that_resolved_is_not_also_a_question(self) -> None:
         # The note states one, so the dates in the clinical text below it are
