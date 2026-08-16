@@ -2058,6 +2058,22 @@ at once. Paste `extension/learn/dump.js` into the console on the form page,
 run `breezefillLearn.dump()` per step, then `mergeDumps([...])`. Read it before
 sharing it — see `extension/README.md` for the residual risks.
 
+**Four open questions now wait on this one dump**, and it is worth listing them
+together because each has been deferred rather than guessed:
+
+1. Should a step hidden behind `display:none` be filled? (`isFillable`)
+2. Should `enrich` refuse a taken control the way `locate` does?
+3. How do you tell a grid-layout question row from a repeating-entry opener?
+   Today you cannot, and on a wholly grid-laid-out form that refuses every
+   demographic control — see the trap.
+4. What wordings do the real labels use? The demographic alias table is
+   narrower than ordinary phrasing (`Contact No.` yes, `Contact Number` no)
+   and widening it on a guess is how the wrong label starts resolving.
+
+Three of the four were found by building things against a verbal description
+and finding the description did not decide them. That is the argument for
+getting the dump before writing more mechanism, not after.
+
 **2. ~~Finish the Vercel migration~~ — done 2026-08-05.** Production is live and
 public, the key is set for both environments, `DEFAULT_API_BASE` points at it,
 and Fly is destroyed. One residual: **previews sit behind Deployment
