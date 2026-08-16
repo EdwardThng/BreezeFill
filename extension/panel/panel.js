@@ -619,8 +619,9 @@ async function parsePaste() {
 function renderChoices(choices) {
   for (const [id, key] of Object.entries(DEMOGRAPHIC_FIELDS)) {
     const box = $(`choices-${id}`);
-    // full_name and insurer have no slot: neither has a shape, so neither can
-    // produce candidates without guessing which words are a value.
+    // full_name has no slot: it has no shape, so it cannot produce candidates
+    // without guessing which words are a value. The insurer does have one — a
+    // closed list of names — so a note mentioning two of them asks here.
     if (!box) continue;
     box.textContent = "";
 

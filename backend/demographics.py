@@ -116,6 +116,93 @@ PHONE_IN_TEXT = re.compile(
     rf"(?<!{_TOKEN_CHAR}){SG_PHONE_PATTERN.pattern}(?!{_TOKEN_CHAR})"
 )
 
+# The insurers a Singapore GP actually bills, and what a note calls them.
+#
+# An insurer is the one demographic with no shape and no infinite range: there
+# are a few dozen of them, they are spelled the same way every time, and the
+# list changes about once a year. So it is a vocabulary, and a vocabulary is a
+# shape — which is what lets this field be found in prose at all.
+#
+# The canonical name on the left is what goes on the form, and for an insurer
+# whose form is in the bank it is **the same string as that schema's
+# `insurer`** — a value that disagreed with the schema would look like two
+# insurers to anything comparing them.
+#
+# THE RULE FOR ADDING A VARIATION: a variation that is also an ordinary English
+# word, or the first word of an institution's name, must be qualified. Bare
+# "Income" matches "discussed income protection"; bare "Raffles" matches
+# "Raffles Hospital A&E", which is in half the notes in Singapore; bare "GE"
+# matches the policy prefix `GE-88213`; bare "FWD" matches the `Fwd:` on a
+# pasted email. Each of those writes a wrong insurer onto a claim
+# deterministically, under a green "from the details you entered" badge — the
+# model never sees this field and cannot disagree with it.
+#
+# Plan names (PruShield, IncomeShield, HealthShield Gold Max) identify an
+# insurer just as well and are deliberately absent: mapping a plan to its
+# insurer is a fact about the market rather than about the words on the page,
+# and one that goes stale without anything failing.
+INSURERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # The seven Integrated Shield insurers, which is what a GP meets most.
+    ("AIA", ("AIA", "AIA Singapore")),
+    (
+        "Great Eastern",
+        ("Great Eastern", "Great Eastern Life", "Great Eastern Life Assurance"),
+    ),
+    ("HSBC Life", ("HSBC Life", "HSBC Insurance", "HSBC Life Singapore")),
+    ("Income", ("Income Insurance", "NTUC Income")),
+    (
+        "Prudential",
+        ("Prudential", "Prudential Assurance", "Prudential Singapore"),
+    ),
+    ("Raffles Health Insurance", ("Raffles Health Insurance",)),
+    ("Singlife", ("Singlife", "Singapore Life", "Singlife with Aviva")),
+    # Rebranded, and kept as their own names rather than rewritten to the new
+    # ones. A note saying "Aviva" is echoed back as Aviva: restating it as
+    # Singlife would put a word on the claim that the doctor did not write and
+    # may not agree with.
+    ("Aviva", ("Aviva", "Aviva Singapore")),
+    ("AXA", ("AXA", "AXA Insurance", "AXA Singapore")),
+    # The commercial and international insurers behind employer panels and
+    # expatriate cover.
+    ("Aetna", ("Aetna", "Aetna International")),
+    ("Allianz", ("Allianz", "Allianz Partners")),
+    ("Bupa", ("Bupa", "Bupa Global")),
+    ("China Life", ("China Life",)),
+    ("China Taiping", ("China Taiping",)),
+    ("Chubb", ("Chubb", "Chubb Insurance")),
+    ("Cigna", ("Cigna", "Cigna Healthcare")),
+    ("Etiqa", ("Etiqa", "Etiqa Insurance")),
+    ("FWD", ("FWD Insurance", "FWD Singapore")),
+    ("Henner", ("Henner", "Henner Group")),
+    ("Liberty", ("Liberty Insurance",)),
+    ("Manulife", ("Manulife", "Manulife Singapore")),
+    ("MSIG", ("MSIG", "MSIG Insurance")),
+    ("QBE", ("QBE", "QBE Insurance")),
+    ("Sompo", ("Sompo", "Sompo Insurance")),
+    ("Tokio Marine", ("Tokio Marine", "Tokio Marine Life")),
+)
+
+# Normalised variation -> the name that goes on the form.
+_INSURER_BY_VARIATION = {
+    " ".join(variation.lower().split()): canonical
+    for canonical, variations in INSURERS
+    for variation in variations
+}
+
+# Longest variation first, so "Great Eastern Life" wins over "Great Eastern"
+# and "AIA Singapore" over "AIA". Both collapse to one canonical name anyway —
+# what the ordering buys is that the match covers the whole phrase, so the
+# leftover " Life" cannot read as anything else.
+INSURER_PATTERN = re.compile(
+    r"\b(?:"
+    + "|".join(
+        r"\s+".join(re.escape(word) for word in variation.split())
+        for variation in sorted(_INSURER_BY_VARIATION, key=len, reverse=True)
+    )
+    + r")\b",
+    re.IGNORECASE,
+)
+
 # A Singapore postal code, which is what makes an address segment an address.
 POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d)")
 
@@ -125,8 +212,14 @@ _ADDRESS_LABEL_PREFIX = re.compile(
 )
 
 # The fields a label may introduce ANYWHERE in a line, each with the shape its
-# value has to take. Name and insurer are deliberately absent: they have no
-# shape, so there would be nothing to confirm a guess against.
+# value has to take. The name is deliberately absent: it has no shape, so there
+# would be nothing to confirm a guess against.
+#
+# The insurer used to be absent for the same reason and is not any more. Its
+# shape is a closed vocabulary rather than a pattern — `INSURER_PATTERN` matches
+# a name off the list and nothing else — which answers the same question a
+# regex answers for an NRIC: is the thing after this label really a value for
+# this field.
 #
 # Address is absent for a different reason, and it is not "no shape" — it has
 # one, and `_sole_address` uses it. It is absent because this pass returns the
@@ -137,6 +230,7 @@ SHAPED_FIELDS = {
     "phone": PHONE_IN_TEXT,
     "policy_number": POLICY_PATTERN,
     "dob": DATE_IN_TEXT,
+    "insurer": INSURER_PATTERN,
 }
 
 # Longest alias, in words: "date of birth".
@@ -300,6 +394,13 @@ def _classify_segment(segment: str) -> tuple[str, str] | None:
     if POSTAL_PATTERN.search(text):
         return "address", text
 
+    # Before the name rule, because an insurer's name has no digits in it
+    # either — "Patient: Tan Wei Ling · S8012345D · AIA" ends with a segment
+    # that is a perfectly good name by every test but this one.
+    insurer = _canonical_insurer(text)
+    if insurer:
+        return "insurer", insurer
+
     # Anything left with no digits in it is the name. A segment with digits
     # that matched none of the rules above is unidentified, and stays that way.
     if not re.search(r"\d", text):
@@ -440,9 +541,32 @@ def _all_matches(pattern: re.Pattern[str], text: str) -> list[str]:
     return seen
 
 
+def _canonical_insurer(text: str) -> str | None:
+    """A string naming a known insurer -> the name this repo writes for it.
+
+    Two readings, in order. The whole string may BE an insurer's name, which is
+    what a labelled line usually holds. Failing that, one may sit inside it —
+    "AIA Singapore (GHS plan)" is an insurer plus a parenthetical, and the
+    parenthetical is not part of the answer.
+
+    Two different insurers inside one string yields None, the same refusal the
+    rest of the module makes: nothing here can tell which one the form wants.
+    """
+    exact = _INSURER_BY_VARIATION.get(" ".join(text.lower().split()))
+    if exact:
+        return exact
+    found = _shaped_candidates("insurer", INSURER_PATTERN, text)
+    return found[0] if len(found) == 1 else None
+
+
 def _normalised(field: str, raw: str) -> str | None:
     """One raw match, in the form the field actually holds, or None if the
     shape matched but the value does not survive validation."""
+    if field == "insurer":
+        # The name this repo uses, not the one the note wrote: "AIA Singapore"
+        # and "AIA" are one insurer, and a schema's `insurer` is the string
+        # anything comparing them will compare against.
+        return _INSURER_BY_VARIATION.get(" ".join(raw.lower().split()))
     if field == "nric":
         cleaned = raw.replace(" ", "").upper()
         return cleaned if NRIC_PATTERN.fullmatch(cleaned) else None
@@ -642,6 +766,15 @@ def parse_demographics(text: str) -> ParsedDemographics:
             if NRIC_PATTERN.fullmatch(cleaned):
                 record("nric", cleaned, "labelled")
             continue
+        if field == "insurer":
+            # A known insurer is written the way this repo writes it; an
+            # unknown one is kept exactly as the doctor typed it. That last
+            # part is the important half: the list is the insurers a GP meets
+            # most, not every insurer that exists, and dropping a labelled
+            # answer for being off the list would turn a correct value into a
+            # blank on the one line where the doctor already said what it is.
+            record("insurer", _canonical_insurer(value) or value, "labelled")
+            continue
         record(field, value, "labelled")
 
     # Labels sitting mid-line, which the line-anchored rule above cannot see.
@@ -660,7 +793,17 @@ def parse_demographics(text: str) -> ParsedDemographics:
     # every date in the note would invite the doctor to pick a consultation
     # date as a birth date, which is why `dob` is offered as a choice only from
     # a region a label already said was a date of birth).
-    for field, pattern in (("nric", NRIC_PATTERN), ("phone", PHONE_IN_TEXT)):
+    # The insurer joins them because its vocabulary is as good as a shape: a
+    # note that names one insurer and no other has answered the question, and a
+    # note that names two — the patient's and the one that declined last time —
+    # has not, so it asks. What it cannot do is name one that is not on the
+    # list, which is why the labelled line above still wins and still keeps
+    # whatever the doctor wrote.
+    for field, pattern in (
+        ("nric", NRIC_PATTERN),
+        ("phone", PHONE_IN_TEXT),
+        ("insurer", INSURER_PATTERN),
+    ):
         if field in values:
             continue
         candidates = _shaped_candidates(field, pattern, text)

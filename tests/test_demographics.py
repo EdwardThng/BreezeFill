@@ -590,3 +590,111 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         parsed = parse_demographics("DOB 14/03/1978 or 15/03/1978\n")
         assert parsed.dob is None
         assert parsed.choices["dob"] == ["1978-03-14", "1978-03-15"]
+
+
+class TestTheInsurer:
+    """The one demographic whose values are a closed list.
+
+    Everything else here is found by shape or by label. An insurer has no shape
+    — "Great Eastern" and "Tan Wei Ling" are the same thing to a regex — but it
+    does have a vocabulary, and a vocabulary answers the same question: is the
+    thing in front of me a value for this field, or just words.
+
+    So the risk moves. It is no longer "will it find one", it is "will it find
+    one that is not there", because this field is copied onto the claim without
+    the model ever seeing it and shows up green as something the doctor
+    entered. Most of the tests below are refusals for that reason.
+    """
+
+    def test_an_insurer_named_in_prose_is_taken(self) -> None:
+        parsed = parse_demographics("Seen 02/08/2026, sore throat. Covered by AIA.\n")
+        assert parsed.insurer == "AIA"
+        assert parsed.sources["insurer"] == "sole-match"
+
+    def test_a_variation_is_written_the_way_the_repo_writes_it(self) -> None:
+        # The schema for this insurer says "Great Eastern". A value that
+        # disagreed with it would read as a second insurer to anything
+        # comparing the two.
+        text = "Insured under Great Eastern Life Assurance.\n"
+        assert parse_demographics(text).insurer == "Great Eastern"
+
+    def test_one_insurer_written_two_ways_is_one_insurer(self) -> None:
+        # Both spellings canonicalise before the count is taken, so this is a
+        # value rather than a question. Also pins the longest-first ordering:
+        # "AIA Singapore" must match whole rather than leaving " Singapore".
+        text = "AIA Singapore policy, verified with AIA on 02/08.\n"
+        assert parse_demographics(text).insurer == "AIA"
+
+    def test_two_insurers_are_offered_rather_than_guessed(self) -> None:
+        text = "Prudential rejected the earlier claim; now covered by NTUC Income.\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer is None
+        assert parsed.choices["insurer"] == ["Prudential", "Income"]
+
+    def test_a_labelled_insurer_beats_one_mentioned_in_the_note(self) -> None:
+        text = "Insurer: Singlife\nPreviously with Aviva.\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer == "Singlife"
+        assert parsed.sources["insurer"] == "labelled"
+
+    def test_a_label_with_no_colon_still_reads(self) -> None:
+        parsed = parse_demographics("NRIC S8012345D  Insurer MSIG\n")
+        assert parsed.insurer == "MSIG"
+
+    def test_an_insurer_in_a_compound_patient_line(self) -> None:
+        # Without the insurer rule this segment has no digits, which is the
+        # test for a name — and the name slot is already taken, so it was
+        # dropped silently.
+        text = "Patient: Tan Wei Ling · S8012345D · 14/03/1978 · Cigna\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Tan Wei Ling"
+        assert parsed.insurer == "Cigna"
+
+    def test_an_insurer_the_list_does_not_know_is_kept_as_written(self) -> None:
+        # The list is the insurers a GP meets most, not every insurer there is.
+        # A labelled line is the doctor stating the answer, and dropping it for
+        # being off the list would turn a correct value into a blank.
+        text = "Insurer: Pacific Cross Insurance\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer == "Pacific Cross Insurance"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # The institution case, and the reason "Raffles" alone is not a
+            # variation: half the notes in Singapore name a hospital.
+            "Referred to Raffles Hospital A&E for review.\n",
+            "Seen at Raffles Medical, Bishan.\n",
+            # The English-word case.
+            "Discussed income protection and MC entitlement.\n",
+            # The policy-prefix case: GE- is a Great Eastern policy, but "GE"
+            # is not a name and matching it here would fill the field from a
+            # string that is already the policy number.
+            "Policy GE-88213004, patient to verify cover.\n",
+            # The pasted-email case. "Fwd:" is not FWD Insurance.
+            "Fwd: referral letter attached.\n",
+        ],
+    )
+    def test_a_word_that_only_looks_like_an_insurer_is_refused(self, text: str) -> None:
+        parsed = parse_demographics(text)
+        assert parsed.insurer is None
+        assert "insurer" not in parsed.choices
+
+    def test_the_canonical_names_match_the_schemas(self) -> None:
+        # A parsed insurer and a schema's `insurer` are two answers to one
+        # question, and they are compared by string. Drift here is invisible
+        # until something reads them side by side.
+        import json
+        from pathlib import Path
+
+        from demographics import INSURERS
+
+        canonical = {name for name, _ in INSURERS}
+        schemas = Path(__file__).resolve().parent.parent / "backend" / "schemas"
+        for path in schemas.glob("*.json"):
+            schema = json.loads(path.read_text(encoding="utf-8"))
+            insurer = schema.get("insurer")
+            # Internal fixtures name insurers that do not exist.
+            if not insurer or schema.get("internal"):
+                continue
+            assert insurer in canonical, f"{path.name} names an insurer not in INSURERS"
