@@ -57,6 +57,13 @@ type, checkbox included)
 reasonable clinical inference from the notes) | "missing" (not determinable)
 - source: the verbatim snippet from the notes that supports the value, or \
 an empty string when status is "missing"
+- reasoning: ONLY when status is "inferred", one sentence saying why that \
+value follows from that snippet — naming the value and what it was worked out \
+from. Empty string for "extracted" and "missing". An extracted value is \
+already in its snippet and needs no argument; an inferred one is not, and the \
+doctor is signing it as their own clinical statement, so they have to be able \
+to see the step you took. Example: for value "J03.90" from "Dx acute \
+tonsillitis", reasoning is "J03.90 is the ICD-10 code for acute tonsillitis."
 
 The costs here are not symmetric. A field you leave blank costs the doctor a \
 few seconds to write in by hand. A field you fill wrongly can be signed and \
@@ -201,10 +208,27 @@ class FormSchema(BaseModel):
         return self
 
 
+def _remerged_or_none(text: str | None, redaction_map: dict[str, str]) -> str | None:
+    """A supporting string, restored to the doctor's own words — or nothing.
+
+    Unlike a value, there is no half-answer worth keeping here: a citation
+    carrying a token nobody can resolve cannot be checked against the note, so
+    it is dropped. Losing a highlight costs the doctor a moment; showing one
+    that points at "[REDACTED_9]" costs them their trust in the rest.
+    """
+    if not text:
+        return None
+    merged, unresolved = remerge(text, redaction_map)
+    return None if unresolved else merged
+
+
 class FieldAnswer(BaseModel):
     value: str | bool | None
     status: Literal["extracted", "inferred", "missing"]
     source: str | None = None
+    # Why an inferred value follows from the sentence it quotes. Only ever set
+    # for status="inferred" — see assemble_claim, which drops it otherwise.
+    reasoning: str | None = None
 
 
 class MappedField(BaseModel):
@@ -220,7 +244,14 @@ class MappedField(BaseModel):
     value: str | bool | None
     # "demographic" = deterministic copy, pre-approved green in the UI
     status: Literal["extracted", "inferred", "missing", "demographic"]
+    # The sentence in the doctor's own note that supports this value, remerged
+    # out of the redacted copy the model read. The panel marks it.
     source: str | None
+    # Set only when status is "inferred": why that value follows from that
+    # sentence. An extracted value is IN its sentence and needs no argument;
+    # an inferred one is not, and is the value the doctor is most at risk of
+    # signing without noticing it was never written down.
+    reasoning: str | None = None
     # Guardrail 3: anything not directly extracted (or containing an
     # unresolved token) requires an explicit click to accept.
     needs_review: bool
@@ -272,8 +303,14 @@ def build_output_schema(fields: list[FormField]) -> dict[str, Any]:
                             "enum": ["extracted", "inferred", "missing"],
                         },
                         "source": {"type": "string"},
+                        # A plain string like everything else here. The panel
+                        # marks `source` in the note beside the value, and for
+                        # an inference the value is NOT in that sentence —
+                        # "J03.90" is nowhere in "Dx acute tonsillitis." This
+                        # is the sentence that closes that gap.
+                        "reasoning": {"type": "string"},
                     },
-                    "required": ["id", "value", "status", "source"],
+                    "required": ["id", "value", "status", "source", "reasoning"],
                     "additionalProperties": False,
                 },
             }
@@ -455,10 +492,12 @@ def _coerce_answer(field: FormField, item: Any) -> FieldAnswer:
     elif field.type == "date":
         parsed = _apply_date_format(field, value)
     source = item.get("source")
+    reasoning = item.get("reasoning")
     return FieldAnswer(
         value=parsed,
         status=status,
         source=source if isinstance(source, str) and source else None,
+        reasoning=reasoning if isinstance(reasoning, str) and reasoning else None,
     )
 
 
@@ -653,6 +692,25 @@ def assemble_claim(
         # token branch above blanked the value, so that row gets no recheck
         # reason and keeps the one its status gives it.
         recheck = _date_recheck(field, value)
+
+        # The citation and its argument get the same treatment the value got.
+        # Both were written against the REDACTED note, so a sentence naming the
+        # patient comes back as "[PATIENT] seen 02/08" and can never be found
+        # in the doctor's own paste — the citation fails silently on exactly
+        # the sentences that carry an identifier. And an unresolved token is
+        # worse than no citation at all: it is a citation the doctor cannot
+        # check, rendered exactly like one they can. So it is dropped rather
+        # than shown, which costs a highlight and never a wrong one.
+        source = _remerged_or_none(answer.source, redaction_map)
+        # Only an inference argues for itself. An extracted value is in the
+        # sentence it quotes, so a sentence explaining it is the model
+        # rationalising something it read straight off the page.
+        reasoning = (
+            _remerged_or_none(answer.reasoning, redaction_map)
+            if status == "inferred"
+            else None
+        )
+
         rows.append(
             MappedField(
                 field_id=field.id,
@@ -662,7 +720,8 @@ def assemble_claim(
                 help=field.description,
                 value=value,
                 status=status,
-                source=answer.source,
+                source=source,
+                reasoning=reasoning,
                 needs_review=needs_review or recheck is not None,
                 recheck=recheck,
                 options=field.options,
