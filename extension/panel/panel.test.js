@@ -787,7 +787,7 @@ describe("a form the bank does not have, end to end", () => {
     expect(JSON.parse(mapCall[1].body).fields.map((f) => f.label)).toEqual(
       CONTROLS.map((c) => c.label)
     );
-    expect($("step-review").hidden).toBe(false);
+    expect($("mapped").hidden).toBe(false);
 
     // 4. The inferred row still has to be confirmed by hand — the fallback
     //    does not get to skip the review step just because it had no schema.
@@ -992,8 +992,9 @@ describe("looking back at a finished step", () => {
 
     expect(row.querySelector(".done-body").hidden).toBe(false);
     expect(row.textContent).toContain("Ward class B1");
-    // The whole point: the review is still there, and the step was not reopened.
-    expect($("step-review").hidden).toBe(false);
+    // The whole point: the rows are still there, and the step was not reopened.
+    expect($("step-check").hidden).toBe(false);
+    expect($("mapped").hidden).toBe(false);
     expect($("step-note").hidden).toBe(true);
     expect($("step-counter").textContent).toContain("of");
   });
@@ -1023,21 +1024,19 @@ describe("looking back at a finished step", () => {
     row.querySelector(".link").click();
 
     expect($("step-name").hidden).toBe(false);
-    expect($("step-review").hidden).toBe(true);
+    expect($("step-check").hidden).toBe(true);
   });
 
-  test("the details row lists the values that were found", async () => {
+  test("the demographics are not also collapsed into a row", async () => {
+    // They are on the screen the doctor is looking at, still editable. A done
+    // row for them would be the third place the same values appeared.
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
-    const row = doneRow("Patient details");
-    row.querySelector(".done-head").click();
-
-    expect(row.textContent).toContain("S7211043C");
-    // Empty fields are not listed: a row of blanks says nothing.
-    expect(row.querySelectorAll(".done-detail-key").length).toBeGreaterThan(0);
-    expect(row.textContent).not.toContain("policy number\n\n");
+    expect(doneRow("Check these")).toBeUndefined();
+    expect([...document.querySelectorAll(".done-row")]).toHaveLength(2);
+    expect($("nric").value).toBe("S7211043C");
   });
 });
 

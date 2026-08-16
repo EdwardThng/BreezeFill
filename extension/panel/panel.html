@@ -52,7 +52,7 @@
       </span>
       <!-- Overwritten by showStep on the first render; this is what shows for
            the instant before that, so it has to agree with STEPS. -->
-      <span class="step-counter" id="step-counter">Step 1 of 4</span>
+      <span class="step-counter" id="step-counter">Step 1 of 3</span>
     </header>
 
     <div class="scroll" id="scroll">
@@ -159,8 +159,8 @@
         have a box for it — it plays no part in redaction, so an insurer the
         form never asks about is not worth stopping a doctor over.
       -->
-      <section class="step" id="step-details" aria-labelledby="h-details" hidden>
-        <h2 id="h-details">Check these</h2>
+      <section class="step" id="step-check" aria-labelledby="h-check" hidden>
+        <h2 id="h-check">Check these</h2>
         <p class="step-sub">
           Found by pattern in what you pasted. Correct anything that is wrong —
           this is the dictionary the note is redacted against, so it has to be
@@ -224,35 +224,46 @@
 
         <button id="map-btn" class="primary" type="button">Map fields</button>
         <p class="status" id="map-status" role="status"></p>
-      </section>
 
-      <!-- Step 5 — review ------------------------------------------------ -->
-      <section class="step" id="step-review" aria-labelledby="h-review" hidden>
-        <h2 id="h-review">Review</h2>
-        <p class="note" id="review-summary"></p>
         <!--
-          Readiness as a bar rather than a count alone: the doctor should be
-          able to see how much is left without reading. It never advances on
-          its own — only a confirm click or an edit moves it.
+          The form's own questions, in the same card as the values above and
+          on the same screen. They used to be a step of their own called
+          Review, which meant the panel asked the doctor to check values twice,
+          in two layouts, under two headings — once for what the note gave up
+          and once for what the model made of it. It is one job: read what is
+          about to be used, correct what is wrong.
+
+          Hidden until there is something to show. An empty progress bar over
+          an empty list is a promise the panel has not kept yet, and it sat
+          above the button that would have kept it.
+
+          The ORDER on this screen is load-bearing. The values above are the
+          dictionary the note is redacted against, so they are corrected before
+          Map fields is pressed; the rows below only exist after it. Anything
+          that moves the demographics under the rows moves the correction after
+          the send.
         -->
-        <div class="progress" aria-hidden="true">
-          <i id="review-progress" style="width: 0%"></i>
+        <div id="mapped" hidden>
+          <p class="note" id="review-summary"></p>
+          <!--
+            Readiness as a bar rather than a count alone: the doctor should be
+            able to see how much is left without reading. It never advances on
+            its own — only a confirm click or an edit moves it.
+          -->
+          <div class="progress" aria-hidden="true">
+            <i id="review-progress" style="width: 0%"></i>
+          </div>
+          <div id="rows"></div>
+
+          <!--
+            Disabled until something is confirmed, which is the confirm-before-
+            write guarantee expressed in the markup: there is no path from a
+            mapped value to the page that does not pass through the rows above.
+          -->
+          <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
+          <p class="status" id="fill-status" role="status"></p>
+          <div id="fill-report"></div>
         </div>
-        <div id="rows"></div>
-
-        <!--
-          Fill closes the review rather than opening a step of its own. The
-          doctor confirms a value and writes it from the same place; a separate
-          card asked them to leave the rows they had just approved, and its
-          heading was the only thing explaining what the button did.
-
-          Disabled until something is confirmed, which is the confirm-before-
-          write guarantee expressed in the markup: there is no path from a
-          mapped value to the page that does not pass through the rows above.
-        -->
-        <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
-        <p class="status" id="fill-status" role="status"></p>
-        <div id="fill-report"></div>
       </section>
 
       <!--

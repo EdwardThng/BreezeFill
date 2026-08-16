@@ -868,7 +868,13 @@ async function onMap() {
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
-    showStep("review");
+    // The rows join the screen the doctor is already on rather than replacing
+    // it: the values they just checked are what these answers were derived
+    // from, and are still theirs to correct. showStep is called anyway — it is
+    // where mapping is pressed from, and saying so keeps the panel consistent
+    // when it is driven directly rather than walked through.
+    showStep("check");
+    $("mapped").hidden = false;
     setStatus(status, "");
   } catch (error) {
     setStatus(status, messageFor(error), "error");
@@ -1048,8 +1054,7 @@ function renderRow(row) {
 const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
-  { key: "details", section: "step-details", title: "Patient details" },
-  { key: "review", section: "step-review", title: "Review" },
+  { key: "check", section: "step-check", title: "Check these" },
 ];
 
 /** A one-line summary of a finished step, for its collapsed row. */
@@ -1059,12 +1064,9 @@ function summaryOf(key) {
     const words = $("paste").value.trim().split(/\s+/).filter(Boolean).length;
     return `${words} word${words === 1 ? "" : "s"} pasted`;
   }
-  if (key === "details") {
+  if (key === "check") {
     const found = Object.keys(DEMOGRAPHIC_FIELDS).filter((id) => $(id).value.trim()).length;
     return `${found} of ${Object.keys(DEMOGRAPHIC_FIELDS).length} found`;
-  }
-  if (key === "review") {
-    return `${readyRows().length} value${readyRows().length === 1 ? "" : "s"} confirmed`;
   }
   return "";
 }
@@ -1102,7 +1104,7 @@ function showStep(key) {
 function doneDetails(key) {
   if (key === "name") return [["Full name", $("full-name").value.trim()]];
   if (key === "note") return [[null, $("paste").value.trim()]];
-  if (key === "details") {
+  if (key === "check") {
     return Object.keys(DEMOGRAPHIC_FIELDS)
       .map((id) => [labelOf(id), $(id).value.trim()])
       .filter(([, value]) => value);
@@ -1486,7 +1488,7 @@ $("note-next").addEventListener("click", () => {
     $("paste").focus();
     return;
   }
-  showStep("details");
+  showStep("check");
 });
 
 // Fills the paste box only. The name is not written in: the doctor typed it
