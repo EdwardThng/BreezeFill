@@ -1367,6 +1367,27 @@ describe("choosing between candidates", () => {
     expect($("choices-phone").textContent).toContain("2");
   });
 
+  test("a single suggested date is offered, not filled", async () => {
+    // The date of birth is the one field where a lone candidate is still a
+    // question: a note carrying one date is carrying the consultation date,
+    // not a birth date. Everywhere else a single match is the value and never
+    // reaches this list, so relaxing the count only ever affects this field.
+    const panel = loadPanel();
+    await settle();
+
+    routes["/parse"] = () =>
+      respond({ ...PARSED, dob: null, choices: { dob: ["2026-08-02"] } });
+    $("paste").value = "Seen 02/08/2026. Sore throat, settling.";
+    await panel.parsePaste();
+
+    const buttons = [...$("choices-dob").querySelectorAll("button")];
+    expect(buttons.map((b) => b.textContent)).toEqual(["2026-08-02"]);
+    expect($("dob").value).toBe("");
+    // Singular wording: "2 found — pick one" reads as a miscount when there is
+    // only one thing to look at.
+    expect($("choices-dob").textContent).toContain("is this the patient's?");
+  });
+
   test("picking one fills the field and clears the question", async () => {
     const panel = loadPanel();
     await settle();

@@ -627,11 +627,17 @@ function renderChoices(choices) {
     const options = choices[key] || [];
     // A value the doctor typed, or one an earlier pass resolved, is an answer.
     // Re-asking would invite them to undo a decision they already made.
-    if (options.length < 2 || state.touched.has(id) || $(id).value.trim()) continue;
+    if (!options.length || state.touched.has(id) || $(id).value.trim()) continue;
 
     const why = document.createElement("p");
     why.className = "choices-why";
-    why.textContent = `${options.length} found in the note — pick the patient's:`;
+    // A single candidate only ever reaches here for the date of birth, which
+    // is never taken from unlabelled text however alone it is. For every other
+    // field a lone match is the value, so it arrives filled rather than asked.
+    why.textContent =
+      options.length === 1
+        ? "Found in the note — is this the patient's?"
+        : `${options.length} found in the note — pick the patient's:`;
     box.appendChild(why);
 
     for (const option of options) {

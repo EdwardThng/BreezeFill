@@ -552,9 +552,18 @@ def parse_demographics(text: str) -> ParsedDemographics:
             values[field] = value
             sources[field] = source
 
-    def offer(field: str, candidates: list[str]) -> None:
-        """More than one candidate: hand them over rather than dropping them."""
-        if field not in choices and len(candidates) > 1:
+    def offer(field: str, candidates: list[str], minimum: int = 2) -> None:
+        """Candidates the parser would not choose between, handed over rather
+        than dropped.
+
+        `minimum` is 2 everywhere except the date of birth, and the asymmetry
+        follows from what a lone candidate means. For a shaped field a single
+        match IS the answer — `record` takes it — so a one-item list could only
+        ever be a value pretending to be a question. A date of birth is never
+        taken from unlabelled text at all, so its single candidate has nowhere
+        else to go: offering it is the only way it reaches the doctor.
+        """
+        if field not in choices and len(candidates) >= minimum:
             choices[field] = candidates
 
     for line in _logical_lines(text):
@@ -606,6 +615,23 @@ def parse_demographics(text: str) -> ParsedDemographics:
             record(field, candidates[0], "sole-match")
         else:
             offer(field, candidates)
+
+    # The dates, once nothing has claimed one as the birth date.
+    #
+    # Still never RECORDED from unlabelled text — that rule is unchanged and is
+    # what stops a consultation date being written onto a claim. What changes
+    # is that the blank is no longer silent: a note is full of dates, and the
+    # doctor is the only one who knows which of them is a birth date, so they
+    # are shown the list instead of an empty box with nothing behind it.
+    #
+    # The hazard is real and is the reason this was refused for so long: every
+    # admission, discharge and review date is in here, and the birth date may
+    # not be. It survives being offered because a choice is not a fill. Nothing
+    # is pre-selected and no candidate reaches the field without a click, so
+    # the worst case is a list the doctor ignores — which is what an empty box
+    # gets them today anyway.
+    if "dob" not in values:
+        offer("dob", _shaped_candidates("dob", DATE_IN_TEXT, text), minimum=1)
 
     if "address" not in values:
         candidates = _address_lines(text)

@@ -111,12 +111,17 @@ Review 09/08/2026 if not better. MC 1 day.
 |---|---|---|
 | full_name | *blank* | — a name has no shape, and is never guessed |
 | nric | S9012345A | sole-match |
-| dob | *blank* | — never taken from unlabelled text |
+| dob | *blank*, with `2026-08-02` and `2026-08-09` suggested | — never taken from unlabelled text |
 | phone | 98765432 | sole-match |
 | address | Blk 5 Marine Terrace #12-34, Singapore 440005. | sole-match |
 
 The two blanks are the design. Three dates sit in this note and none of them is
 a birth date; a shape rule that took one would have taken the consultation date.
+
+The dates are *offered* though, as suggestions the doctor clicks or ignores.
+That is the distinction to watch on screen: the box is empty, and underneath it
+sits "2 found in the note — pick the patient's". Nothing is pre-selected, so a
+consultation date still cannot reach a claim without a deliberate click.
 
 Cosmetic: the address keeps its trailing full stop, because the line is the
 value and only the postal code was the evidence.
@@ -149,8 +154,12 @@ Continue amlodipine 5mg OM. No contact number on file. Review in 3 months.
 delimiter guard in `PHONE_IN_TEXT` has been loosened — that value would reach a
 claim deterministically, skipping both the model and the review step.
 
-The blank date of birth is correct but unhelpful: a doctor who wrote `14/03/78`
-gets no feedback about why. Worth a look at how the panel presents it.
+The blank date of birth is the one that still has nothing behind it. Every
+other case now suggests the dates it found, but `14/03/78` is not a date to
+this parser at all — a two-digit year is rejected before it can become a
+candidate — so the doctor who wrote the birth date in the note gets the same
+empty box as one who never mentioned it. That is the remaining gap, and the
+only case here where the note says something the panel does not repeat back.
 
 ---
 
@@ -287,6 +296,24 @@ The email is ignored — nothing on a claim form asks for it.
    demographic-label gotcha; these cases show it recovering rather than
    failing, which is worth knowing before anyone "fixes" it.
 
-3. **A two-digit year yields a silent blank** (case 4). Correct — `14/03/78`
-   could be 1978 or a consultation date in 2078 — but the doctor gets no
-   explanation, unlike the two-candidate blanks which at least offer choices.
+3. **A two-digit year yields a silent blank** (case 4), and it is now the only
+   silent one. Since dates found in the note are offered as suggestions,
+   every other case shows the doctor what it saw; `14/03/78` is rejected
+   before it becomes a candidate, so a note that *does* state the birth date
+   produces the same empty box as one that never mentioned it. Reading it as
+   1978 is a pivot rule, and a pivot is a guess — but a guess offered as a
+   suggestion is only ever a click away from being corrected, which is a
+   different bargain from a guess written into the field.
+
+## NO LABELS
+
+Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
+18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902
+AIA Singapore
+
+14/03/2026, 0930h. 2-day history of periumbilical pain migrating to RIF.
+Admitted 14/03/2026, laparoscopic appendicectomy 15/03/2026, discharged
+17/03/2026. MC 7 days from 15/03/2026.
+
+Dr Tan Mei Ling, MCR M08842B, Family Physician.
+Braddell Family Clinic, 22 Braddell Road, Singapore 359915. Tel 62551234.

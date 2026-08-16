@@ -507,15 +507,35 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         text = "Chua Beng Huat attended with Tan Wei Ling today.\n"
         assert "full_name" not in parse_demographics(text).choices
 
-    def test_dates_in_prose_are_never_offered_as_a_date_of_birth(self) -> None:
-        # The refusal that must survive this change. A clinical note is
-        # nothing but dates — consultation, admission, discharge, MC — so a
-        # list of every date in the note invites the doctor to pick a
-        # consultation date as a birth date, one click, looking exactly like
-        # a correct answer on the form.
+    def test_dates_in_prose_are_offered_but_never_taken(self) -> None:
+        # The refusal that must survive: a clinical note is nothing but dates —
+        # consultation, admission, discharge, MC — and none of them is known to
+        # be a birth date, so not one of them is ever WRITTEN into the field.
+        #
+        # They are shown, though. The alternative was an empty box with nothing
+        # behind it, on a field the claim requires, and the doctor is the only
+        # one who can say which date is which. A choice is not a fill: nothing
+        # is pre-selected and no candidate reaches the field without a click.
         text = "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n"
         parsed = parse_demographics(text)
         assert parsed.dob is None
+        assert parsed.choices["dob"] == ["2026-08-02", "2026-07-31", "2026-08-09"]
+
+    def test_a_lone_date_is_offered_rather_than_filled(self) -> None:
+        # Everywhere else a single candidate IS the answer — one NRIC in the
+        # note is the patient's NRIC. A date is the exception: one date in a
+        # note is overwhelmingly the consultation, not a birth date, so it is
+        # offered and never recorded. This is why `offer` takes a minimum.
+        parsed = parse_demographics("Seen 02/08/2026. Sore throat, settling.\n")
+        assert parsed.dob is None
+        assert parsed.choices["dob"] == ["2026-08-02"]
+
+    def test_a_date_of_birth_that_resolved_is_not_also_a_question(self) -> None:
+        # The note states one, so the dates in the clinical text below it are
+        # not a question about it.
+        text = "DOB: 14/03/1978\nSeen 02/08/2026, review 09/08/2026.\n"
+        parsed = parse_demographics(text)
+        assert parsed.dob == "1978-03-14"
         assert "dob" not in parsed.choices
 
     def test_two_dates_behind_a_dob_label_are_offered(self) -> None:
