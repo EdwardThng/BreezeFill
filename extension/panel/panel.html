@@ -290,11 +290,6 @@
       <section class="step" id="step-page" aria-labelledby="h-page" hidden>
         <h2 id="h-page">This page</h2>
 
-        <div class="watch" id="watch">
-          <span class="watch-dot" aria-hidden="true"></span>
-          <span id="watch-text">Reading this page…</span>
-        </div>
-
         <!-- What was found, and the button that sends it. Hidden once mapped. -->
         <div class="prompt" id="map-prompt" hidden>
           <strong id="prompt-title"></strong>
@@ -305,13 +300,21 @@
         <p class="status" id="map-status" role="status"></p>
 
         <div id="mapped" hidden>
+          <!--
+            The answer to the button the doctor just pressed, above everything
+            they have already dealt with. It used to sit under the rows and the
+            Fill button, so pressing Fill landed them at the top of a list of
+            values they had just finished checking with the outcome somewhere
+            below the fold.
+          -->
+          <div id="fill-report"></div>
           <p class="note" id="review-summary"></p>
           <!--
             Readiness as a bar rather than a count alone: the doctor should be
             able to see how much is left without reading. It never advances on
             its own — only a confirm click or an edit moves it.
           -->
-          <div class="progress" aria-hidden="true">
+          <div class="progress" id="review-progress-box" aria-hidden="true">
             <!-- Empty at rest, and the stylesheet says so: the bar is scaled
                  rather than resized, so an inline width here would pin it to
                  nothing and the scale would never show. -->
@@ -327,7 +330,6 @@
           -->
           <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
           <p class="status" id="fill-status" role="status"></p>
-          <div id="fill-report"></div>
         </div>
       </section>
 
