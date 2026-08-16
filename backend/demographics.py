@@ -954,6 +954,62 @@ def _birth_date_candidates(text: str) -> list[str]:
     ]
 
 
+# Words that name somebody who is not the patient.
+#
+# The unlabelled pass believes a shape that occurs exactly once, and that rule
+# has one hole its own docstring names: the clinic's number under the doctor's
+# signature. Two numbers in a note and it refuses both; ONE number and it
+# writes the clinic's onto the claim, green, as a value the doctor entered.
+# Uniqueness was doing all the work, and uniqueness is not ownership.
+#
+# So a value with one of these words in front of it on the same line is known
+# not to be the patient's, and is dropped before the count is taken. Case 5 of
+# docs/patient_details_cases.md is the whole argument: `Clinic tel 62551234`
+# and `Next of kin contact 91112233` were only ever saved by there being two of
+# them.
+#
+# Deliberately NOT here: "dr", which is also how an address abbreviates Drive
+# ("Bishan Dr, Singapore 570118"), and "surgery", which is a procedure in every
+# other note. A word that appears in ordinary clinical prose cannot be a
+# disqualifier — it would silently blank correct values instead of wrong ones.
+_OTHER_OWNER = re.compile(
+    r"\b(?:clinic|polyclinic|hospital|medical\s+cent(?:re|er)|practice|pharmacy"
+    r"|employer|company|workplace"
+    r"|next\s+of\s+kin|nok|kin|caregiver|carer|guardian"
+    r"|spouse|husband|wife|father|mother|son|daughter|brother|sister|sibling"
+    r"|emergency|doctor|physician|referring)\b",
+    re.IGNORECASE,
+)
+
+
+def _owned_by_someone_else(line: str, at: int) -> bool:
+    """Does anything before position `at` on this line claim the value?"""
+    return bool(_OTHER_OWNER.search(line[:at]))
+
+
+def _without_other_owners(pattern: re.Pattern[str], text: str) -> str:
+    """`text` with every match of `pattern` that belongs to somebody else
+    blanked out, so the unlabelled pass never counts it as a candidate.
+
+    Blanked rather than the line dropped, and that is the whole reason this is
+    per-value: `S6123456B, seen together with her husband S6234567C` carries
+    the patient's own NRIC and somebody else's on ONE line. Dropping the line
+    loses both; dropping the second match leaves exactly one candidate, which
+    is the patient's, which is the answer.
+
+    Spaces of equal length rather than deletion, so every other rule that reads
+    this text still sees the offsets the note actually has.
+    """
+    out: list[str] = []
+    for line in _logical_lines(text):
+        for match in reversed(list(pattern.finditer(line))):
+            if _owned_by_someone_else(line, match.start()):
+                span = match.end() - match.start()
+                line = line[: match.start()] + " " * span + line[match.end():]
+        out.append(line)
+    return "\n".join(out)
+
+
 def _address_lines(text: str) -> list[str]:
     """Every line carrying a Singapore postal code, in order.
 
@@ -971,7 +1027,12 @@ def _address_lines(text: str) -> list[str]:
     """
     lines: list[str] = []
     for line in _logical_lines(text):
-        if not POSTAL_PATTERN.search(line):
+        postal = POSTAL_PATTERN.search(line)
+        if not postal:
+            continue
+        # "Clinic address 9 Serangoon Road, Singapore 218000" is an address,
+        # and it is not this patient's. Same rule the shaped fields get.
+        if _owned_by_someone_else(line, postal.start()):
             continue
         # A header block is not an address, however many postal codes it
         # contains. `_header_pieces` has already taken the address out of it
@@ -1098,7 +1159,13 @@ def parse_demographics(text: str, known_name: str = "") -> ParsedDemographics:
     ):
         if field in values:
             continue
-        candidates = _shaped_candidates(field, pattern, text)
+        # Anything a clinic, an employer or a next of kin has already claimed
+        # is gone before the count is taken — uniqueness decides this pass, so
+        # a value that is unique and somebody else's is the worst input it can
+        # be given.
+        candidates = _shaped_candidates(
+            field, pattern, _without_other_owners(pattern, text)
+        )
         if len(candidates) == 1:
             record(field, candidates[0], "sole-match")
         else:

@@ -145,17 +145,19 @@ class TestLabelledLines:
 
 class TestRefusals:
     def test_two_phone_numbers_means_neither(self) -> None:
-        # No labelled line to settle it: the patient's and the clinic's are
-        # indistinguishable by shape, so the field stays blank.
-        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        # No labelled line to settle it and nothing naming an owner, so the
+        # two are indistinguishable by shape and the field stays blank.
+        text = "Reviewed today. Contactable on 91112233 or 98887777.\n"
         assert parse_demographics(text).phone is None
 
     def test_one_phone_number_in_prose_is_taken(self) -> None:
         assert parse_demographics("Contactable on 91112233.\n").phone == "91112233"
 
     def test_a_second_nric_in_the_note_blocks_the_guess(self) -> None:
-        # Case 6's shape: a note that mentions a family member.
-        text = "Patient S7211043C attended with her husband S7106114A.\n"
+        # Two of them and nothing saying whose is whose. When the note DOES
+        # say — "her husband S7106114A" — the other one is disqualified rather
+        # than counted; see TestAValueSomebodyElseOwns.
+        text = "S7211043C and S7106114A both attended today.\n"
         assert parse_demographics(text).nric is None
 
     def test_a_lone_nric_in_prose_is_taken(self) -> None:
@@ -255,9 +257,11 @@ class TestLabelsAnywhereInALine:
     def test_a_qualified_label_is_not_the_patients(self) -> None:
         # "Clinic tel" and "Next of kin phone" are labels for somebody else.
         # The qualifying word in front is what says so, so a label has to open
-        # the line or follow a separator to count.
+        # the line or follow a separator to count — and the same word then
+        # keeps the number out of the unlabelled pass too, which is why the
+        # patient's own number survives here as the only candidate.
         text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
-        assert parse_demographics(text).phone is None
+        assert parse_demographics(text).phone == "91112233"
 
     def test_a_label_after_a_separator_still_counts(self) -> None:
         parsed = parse_demographics("Pt details, NRIC S8012345D, DOB 14/03/1978\n")
@@ -353,7 +357,7 @@ class TestAnAddressIsFoundByItsPostalCode:
         # claim as the patient's.
         text = (
             f"{self.ADDRESS}\n\nSeen 02/08/2026. Sore throat.\n"
-            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+            "Blk 501 Bishan St 11 #01-02, S570501\n"
         )
         assert parse_demographics(text).address is None
 
@@ -461,9 +465,9 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         assert parse_demographics(self.SAMPLE).choices["phone"][0] == "9123 4567"
 
     def test_two_phones_in_prose_are_offered_too(self) -> None:
-        # The clinic's own number under the signature. Same collision, found
-        # by the unlabelled rule rather than the labelled one.
-        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        # Two numbers with nothing to separate them, found by the unlabelled
+        # rule rather than the labelled one.
+        text = "Reviewed today. Contactable on 91112233 or 62551234.\n"
         parsed = parse_demographics(text)
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["91112233", "62551234"]
@@ -471,7 +475,7 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
     def test_two_addresses_are_offered(self) -> None:
         text = (
             "Blk 118 Bishan St 12 #07-21, S570118\n\nSeen 02/08/2026.\n"
-            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+            "Blk 501 Bishan St 11 #01-02, S570501\n"
         )
         parsed = parse_demographics(text)
         assert parsed.address is None
@@ -497,7 +501,7 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         # `6512 3456` opens with the country code's own digits. Stripping them
         # would leave six digits, which would collide with any other number in
         # the note that happens to start 65.
-        text = "Reviewed today. Home 6512 3456. Clinic 6534 5678.\n"
+        text = "Reviewed today. Home 6512 3456. Also on 6534 5678.\n"
         parsed = parse_demographics(text)
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["6512 3456", "6534 5678"]
@@ -505,7 +509,7 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
     def test_two_different_numbers_are_still_two_candidates(self) -> None:
         # The dedupe must not become a merge: these are genuinely two numbers
         # and the refusal to choose between them is the point.
-        text = "Contactable on 91112233. Clinic tel 62551234.\n"
+        text = "Contactable on 91112233. Second number 62551234.\n"
         parsed = parse_demographics(text)
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["91112233", "62551234"]
@@ -867,3 +871,86 @@ class TestTheNameIsCheckedNotGuessed:
         assert parse_demographics(self.HEADER).full_name is None
         one_name = "Chua Beng Huat · S7211043C · 04/11/1972 · 91112233\n"
         assert parse_demographics(one_name).full_name == "Chua Beng Huat"
+
+
+class TestAValueSomebodyElseOwns:
+    """The hole the unlabelled pass had, and the word that closes it.
+
+    That pass believes a shape that occurs exactly once. Its own docstring
+    names the failure it was written to avoid — the clinic's number under the
+    doctor's signature — and it only avoided it when a SECOND number happened
+    to be present. One number in the note and the clinic's went onto the claim,
+    green, as a value the doctor entered. Uniqueness was doing all the work,
+    and uniqueness is not ownership.
+
+    So a value with `clinic`, `next of kin`, `employer`, `husband` and the rest
+    in front of it on the same line is dropped before the count is taken. Two
+    consequences, and the second is the better one: the wrong value stops being
+    taken, and the right value stops being refused for standing next to it.
+    """
+
+    def test_a_lone_clinic_number_is_not_the_patients(self) -> None:
+        # docs/patient_details_cases.md case 6, and the defect it recorded.
+        text = (
+            "Patient: Goh Siew Lan\n"
+            "Seen 11/08/2026. Follow-up of type 2 diabetes.\n"
+            "Clinic address 9 Serangoon Road, Singapore 218000. Tel 62221234.\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.address is None
+        # And it is not offered either: this is not a value nobody could
+        # choose between, it is a value known to belong to somebody else.
+        assert "phone" not in parsed.choices
+
+    def test_the_patients_number_survives_the_clinics(self) -> None:
+        # The other half. Before, two numbers meant neither, so a note with a
+        # clinic footer could not yield a phone at all.
+        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        assert parse_demographics(text).phone == "91112233"
+
+    def test_a_family_members_nric_does_not_block_the_patients(self) -> None:
+        # One line, two NRICs, and the note says which is which. Dropping the
+        # whole line would lose both, so the disqualification is per value and
+        # reads only what sits BEFORE it.
+        text = "S6123456B, seen together with her husband S6234567C.\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S6123456B"
+        assert "nric" not in parsed.choices
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Clinic tel 62551234",
+            "Next of kin contact 91112233",
+            "Employer contact 62551234",
+            "Emergency contact 91112233",
+            "Caregiver mobile 91112233",
+        ],
+    )
+    def test_the_words_that_disqualify(self, line: str) -> None:
+        assert parse_demographics(f"Seen 09/08/2026.\n{line}\n").phone is None
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            # "Dr" is how an address abbreviates Drive, and a disqualifier that
+            # fires on it would blank correct addresses.
+            "Blk 5 Bishan Dr #01-02, Singapore 570118",
+            # "surgery" is a procedure in every other note.
+            "For surgery. Contactable on 91112233",
+        ],
+    )
+    def test_a_word_from_ordinary_notes_does_not_disqualify(self, line: str) -> None:
+        parsed = parse_demographics(f"{line}\n")
+        assert parsed.address is not None or parsed.phone is not None
+
+    def test_a_labelled_value_is_never_disqualified(self) -> None:
+        # The doctor wrote it against the field, on a line that also says
+        # "Clinic". They said this is the patient's NRIC, so it is: only the
+        # unlabelled pass reads ownership, because only the unlabelled pass is
+        # guessing whose value it found.
+        text = "Clinic visit today  NRIC S8012345D\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S8012345D"
+        assert parsed.sources["nric"] == "labelled-inline"
