@@ -30,9 +30,19 @@
   --surface: #fcfcfb;
   --field: #ffffff;
 
-  /* Ink */
+  /* Ink.
+
+     `--muted` and `--muted-strong` deliberately hold the same value. The old
+     `--muted` (#86868b) measured 3.3:1 on --paper and 3.5:1 on --surface, and
+     every role carrying it is 10–12.5px body copy — taglines, field labels,
+     status lines, help text — so it failed WCAG AA (4.5:1) everywhere it was
+     used, on a tool a GP reads between patients.
+
+     The two names are kept rather than collapsed because they mark intent. If
+     the tones are separated again, it must be by darkening --muted-strong,
+     never by lightening --muted back. */
   --text: #1d1d1f;
-  --muted: #86868b;
+  --muted: #6e6e73;
   --muted-strong: #6e6e73;
 
   /* Hairlines — close in value to the fill they separate, so structure is
@@ -53,7 +63,7 @@
   --confident-body: #2c6b4e;
   --check: #8a6a28;
   --check-line: #d9c9a8;
-  --missing: #86868b;
+  --missing: #6e6e73;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
   --accent: #0071e3;
@@ -63,12 +73,23 @@
   --disabled-line: #e0e0dc;
   --disabled-ink: #a5a5a0;
 
-  --focus-ring: rgba(29, 29, 31, 0.06);
-  --focus-line: #b9b9b4;
+  /* The keyboard user's only position cue, so it is held to SC 1.4.11's 3:1
+     for non-text contrast. The old #b9b9b4 measured 1.95:1 — present in the
+     stylesheet and invisible on screen — and a 6% halo could not be seen at
+     all. This is a form-filling tool; tabbing through it is the normal way to
+     use it, not an accessibility edge case. */
+  --focus-ring: rgba(29, 29, 31, 0.13);
+  --focus-line: #7c7c78;
 
   --danger: #9a2b22;
   --danger-bg: #fdf2f1;
   --danger-line: #ebcfcc;
+
+  /* Entering elements start fast and settle, so the panel answers a click on
+     the frame the eye is watching. CSS's built-in `ease` is too weak to read
+     as intentional, and `ease-in` would delay exactly the moment being
+     watched. Every entrance below uses this; nothing uses `ease-in`. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
   --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -170,7 +191,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  animation: pf-rise 0.26s ease both;
+  animation: pf-rise 0.26s var(--ease-out) both;
 }
 
 .done-head {
@@ -222,10 +243,12 @@ body {
   white-space: nowrap;
 }
 
+/* Not --disabled-ink: this row is expandable, so the glyph saying so is an
+   affordance rather than a disabled state, and 2.4:1 hid it. */
 .done-chevron {
   flex: none;
   font-size: 17px;
-  color: var(--disabled-ink);
+  color: var(--muted);
   transition: transform 0.22s ease;
 }
 
@@ -238,7 +261,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  animation: pf-rise 0.22s ease both;
+  animation: pf-rise 0.22s var(--ease-out) both;
 }
 
 .done-body[hidden] {
@@ -258,7 +281,9 @@ body {
   font-size: 10.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--disabled-ink);
+  /* Content, not a disabled control: this is the field's name in a finished
+     step. --disabled-ink measured 2.4:1 on it. */
+  color: var(--muted);
 }
 
 /* The pasted note, shown as it was typed. Capped rather than allowed to push
@@ -284,7 +309,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: pf-rise 0.3s ease both;
+  animation: pf-rise 0.3s var(--ease-out) both;
 }
 
 .step[hidden] {
@@ -407,8 +432,10 @@ button:disabled {
   border-color: #35353a;
 }
 
+/* 0.99 on a control this wide is below the threshold at which a press is felt
+   at all — it read as no feedback. */
 .primary:active:not(:disabled) {
-  transform: scale(0.99);
+  transform: scale(0.97);
 }
 
 /* The one accent element in the panel. */
@@ -663,12 +690,19 @@ details > *:not(summary) {
   overflow: hidden;
 }
 
+/* Driven by transform rather than width: width is a layout property, so every
+   step of the animation re-laid-out and repainted the review list underneath
+   it. scaleX runs on the compositor and looks identical here — the bar is a
+   plain rounded rectangle, and the parent clips it. */
 .progress > i {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--text);
   border-radius: 999px;
-  transition: width 0.45s cubic-bezier(0.22, 0.7, 0.3, 1);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.25s var(--ease-out);
 }
 
 .review-row {
@@ -680,20 +714,32 @@ details > *:not(summary) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  animation: pf-rise 0.26s ease both;
+  animation: pf-rise 0.26s var(--ease-out) both;
   transition: background 0.24s ease, border-color 0.24s ease,
-    border-left-color 0.24s ease;
+    box-shadow 0.24s ease;
 }
 
-/* State is a 3px left rule plus a word — never colour alone. */
+/* State is a 3px left rule plus a word — never colour alone.
+
+   Drawn as an inset shadow rather than a left border. A border changed the
+   card's content inset (1px + 12px on a stateless row against 3px + 13px on a
+   stated one), so a list holding both sat 3px out of line down its left edge;
+   and replacing the left border with a coloured one on stated rows only would
+   have deleted the hairline from the rest. A shadow leaves the box model
+   alone, so every row aligns and every row keeps its outline. */
 .review-row.pending {
-  border-left: 3px solid var(--check);
-  padding-left: 13px;
+  box-shadow: inset 3px 0 0 var(--check);
 }
 
 .review-row.confirmed {
-  border-left: 3px solid var(--confident);
-  padding-left: 13px;
+  box-shadow: inset 3px 0 0 var(--confident);
+}
+
+/* A row that was already on screen before the last render. It has not
+   entered, so it must not play an entrance — see renderRows in panel.js. */
+.review-row.no-enter,
+.done-row.no-enter {
+  animation: none;
 }
 
 .review-row .badge {
@@ -783,7 +829,7 @@ button.confirm:active:not(:disabled) {
   border-radius: 11px;
   padding: 12px;
   margin-top: 10px;
-  animation: pf-rise 0.26s ease both;
+  animation: pf-rise 0.26s var(--ease-out) both;
 }
 
 .report-block h3 {
@@ -857,17 +903,6 @@ button.confirm:active:not(:disabled) {
   }
 }
 
-@keyframes pf-tick {
-  from {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 @keyframes pf-spin {
   to {
     transform: rotate(360deg);
@@ -886,8 +921,21 @@ button.confirm:active:not(:disabled) {
   .report-block {
     animation: none;
   }
+
+  /* Position changes, not the colour and opacity ones that aid comprehension.
+     The progress bar still fills, the chevrons still point where they point —
+     they simply arrive rather than travel. */
+  .progress > i,
+  .done-chevron,
+  details > summary::before {
+    transition: none;
+  }
+
+  /* Stopping the spinner leaves a static ring with one dark quadrant, which
+     communicates nothing and reads as a stalled control. The status line
+     beside it already says what is happening in words. */
   .status.busy::after {
-    animation: none;
+    display: none;
   }
 }
 
