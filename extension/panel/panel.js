@@ -1054,7 +1054,7 @@ function renderRow(row) {
 const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
-  { key: "check", section: "step-check", title: "Check these" },
+  { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
 ];
 
 /** A one-line summary of a finished step, for its collapsed row. */
@@ -1170,7 +1170,10 @@ function doneRow(step) {
   const edit = document.createElement("button");
   edit.type = "button";
   edit.className = "link";
-  edit.textContent = `Edit ${step.title.toLowerCase()}`;
+  // A step whose title is a verb cannot be lowercased into a label — "Verify"
+  // gives "Edit verify". Such a step carries its own wording; the rest still
+  // read correctly off the title.
+  edit.textContent = step.edit || `Edit ${step.title.toLowerCase()}`;
   edit.addEventListener("click", () => showStep(step.key));
   body.append(edit);
 
