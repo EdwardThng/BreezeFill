@@ -159,6 +159,14 @@ const state = {
   /** Whether the details drawer has already opened itself for this paste. */
   openedForMissing: false,
   /**
+   * The questions read off the page the doctor is looking at NOW.
+   *
+   * Refreshed by scanPage on every page change, and deliberately not the same
+   * thing as `rows`: these are questions nobody has answered yet. Mapping is
+   * what turns them into rows, and it only happens on a click.
+   */
+  pageFields: [],
+  /**
    * Whether the doctor picked the form themselves.
    *
    * Detection re-runs when a wizard step renders, and it must never overrule
@@ -868,12 +876,13 @@ async function onMap() {
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
-    // The rows join the screen the doctor is already on rather than replacing
-    // it: the values they just checked are what these answers were derived
-    // from, and are still theirs to correct. showStep is called anyway — it is
-    // where mapping is pressed from, and saying so keeps the panel consistent
-    // when it is driven directly rather than walked through.
-    showStep("check");
+    // showStep is called anyway — this is where mapping is pressed from, and
+    // saying so keeps the panel consistent when it is driven directly rather
+    // than walked through.
+    showStep("page");
+    // The offer is spent: these questions have been mapped, and the button
+    // that offered them would now re-ask the model the same thing.
+    $("map-prompt").hidden = true;
     $("mapped").hidden = false;
     setStatus(status, "");
   } catch (error) {
@@ -1055,6 +1064,7 @@ const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
   { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
+  { key: "page", section: "step-page", title: "This page" },
 ];
 
 /** A one-line summary of a finished step, for its collapsed row. */
@@ -1065,9 +1075,12 @@ function summaryOf(key) {
     return `${words} word${words === 1 ? "" : "s"} pasted`;
   }
   if (key === "check") {
-    const found = Object.keys(DEMOGRAPHIC_FIELDS).filter((id) => $(id).value.trim()).length;
-    return `${found} of ${Object.keys(DEMOGRAPHIC_FIELDS).length} found`;
+    // Not a count. Once the doctor has passed this step the interesting fact
+    // about these values is not how many were found — it is what happens to
+    // them, and that is the one thing they cannot check for themselves.
+    return "Kept confidential — never sent to the AI";
   }
+  if (key === "page") return `${state.rows.length} questions read`;
   return "";
 }
 
@@ -1105,9 +1118,19 @@ function doneDetails(key) {
   if (key === "name") return [["Full name", $("full-name").value.trim()]];
   if (key === "note") return [[null, $("paste").value.trim()]];
   if (key === "check") {
-    return Object.keys(DEMOGRAPHIC_FIELDS)
-      .map((id) => [labelOf(id), $(id).value.trim()])
-      .filter(([, value]) => value);
+    return [
+      [
+        null,
+        "Held in this panel for as long as it is open, and nowhere else. " +
+          "Used for two things: as the dictionary your note is scrubbed against, " +
+          "and copied onto the form directly. The AI is shown the scrubbed note " +
+          "and never these values. Closing the panel discards them; nothing is " +
+          "written to disk.",
+      ],
+      ...Object.keys(DEMOGRAPHIC_FIELDS)
+        .map((id) => [labelOf(id), $(id).value.trim()])
+        .filter(([, value]) => value),
+    ];
   }
   return [];
 }
@@ -1342,6 +1365,59 @@ function renderReport(response) {
 }
 
 /**
+ * Read the page in front of the doctor, and say what is on it.
+ *
+ * No model call, and that is the whole design of this step. Surveying is the
+ * injected script reading labels in the page it is already in; mapping is the
+ * request that leaves the browser. Keeping them apart is what lets the panel
+ * follow a doctor through four wizard sections without four model calls
+ * nobody asked for — it looks at each one and waits to be told to answer it.
+ *
+ * Called when the check step is passed, and again every time the page becomes
+ * a different page.
+ */
+async function scanPage() {
+  setWatch("Reading this page…", false);
+  $("map-prompt").hidden = true;
+  setStatus($("map-status"), "");
+
+  let fields = [];
+  try {
+    fields = await liveFields();
+  } catch (error) {
+    setWatch("Cannot read this page.", false);
+    setStatus($("map-status"), messageFor(error), "error");
+    return;
+  }
+
+  state.pageFields = fields;
+  const where = state.host ? `Watching ${state.host}.` : "Watching this page.";
+
+  if (!fields.length) {
+    // Not an error. A wizard opens on a verification or a landing section as
+    // often as not, and saying "none here, I am still watching" is the honest
+    // report — the old panel called this a failure and stopped.
+    setWatch(`${where} No questions on it that BreezeFill can answer yet.`, true);
+    return;
+  }
+
+  setWatch(`${where} ${fields.length} question${fields.length === 1 ? "" : "s"} on it.`, true);
+  $("prompt-title").textContent =
+    `${fields.length} question${fields.length === 1 ? "" : "s"} found on this page.`;
+  $("prompt-why").textContent =
+    "Nothing has been sent yet. Mapping asks the model to answer these from your scrubbed note.";
+  $("map-btn").textContent =
+    `Map ${fields.length === 1 ? "this question" : `these ${fields.length} questions`}`;
+  $("map-prompt").hidden = false;
+}
+
+/** The line that says what the panel is looking at, and whether it is live. */
+function setWatch(text, live) {
+  $("watch-text").textContent = text;
+  $("watch").classList.toggle("live", Boolean(live));
+}
+
+/**
  * A wizard step rendered on the tab the doctor granted us.
  *
  * Two things happen, and neither of them is filling. Identification re-runs,
@@ -1358,11 +1434,22 @@ function renderReport(response) {
  */
 async function onPageChanged() {
   await detectForm();
-  if (!state.rows.length) return;
-  setStatus(
-    $("fill-status"),
-    "This page changed — press Fill again to write the fields on this step."
-  );
+  if (state.step !== "page") return;
+
+  // The answers on screen belong to the section that has just been left. They
+  // are not offered against the new one: a value mapped for "date of
+  // admission" is not an answer to whatever question happens to sit in the
+  // same position here, and leaving them up would invite a fill that wrote
+  // last section's answers into this one.
+  state.rows = [];
+  state.edited.clear();
+  state.confirmed.clear();
+  renderRows();
+  $("mapped").hidden = true;
+  setStatus($("fill-status"), "");
+  $("fill-report").replaceChildren();
+
+  await scanPage();
 }
 
 // ---------------------------------------------------------------------------
@@ -1505,6 +1592,23 @@ $("sample-note").addEventListener("click", () => {
 });
 
 $("map-btn").addEventListener("click", onMap);
+// Leaving the check step is what seals the demographics: they are complete,
+// they are the dictionary, and from here the panel's job is the page.
+$("check-next").addEventListener("click", () => {
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+  if (missing.length) {
+    setStatus(
+      $("check-status"),
+      `Still needed: ${missing.map(labelOf).join(", ")}.`,
+      "error"
+    );
+    $(missing[0]).focus();
+    return;
+  }
+  setStatus($("check-status"), "");
+  showStep("page");
+  scanPage();
+});
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
@@ -1555,6 +1659,7 @@ globalThis.breezefillPanel = {
   patientRecord,
   detectForm,
   onPageChanged,
+  scanPage,
   bestCandidate,
   fillPlan,
   draftSchema,

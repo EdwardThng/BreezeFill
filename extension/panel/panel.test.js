@@ -993,7 +993,7 @@ describe("looking back at a finished step", () => {
     expect(row.querySelector(".done-body").hidden).toBe(false);
     expect(row.textContent).toContain("Ward class B1");
     // The whole point: the rows are still there, and the step was not reopened.
-    expect($("step-check").hidden).toBe(false);
+    expect($("step-page").hidden).toBe(false);
     expect($("mapped").hidden).toBe(false);
     expect($("step-note").hidden).toBe(true);
     expect($("step-counter").textContent).toContain("of");
@@ -1024,19 +1024,23 @@ describe("looking back at a finished step", () => {
     row.querySelector(".link").click();
 
     expect($("step-name").hidden).toBe(false);
-    expect($("step-check").hidden).toBe(true);
+    expect($("step-page").hidden).toBe(true);
   });
 
-  test("the demographics are not also collapsed into a row", async () => {
-    // They are on the screen the doctor is looking at, still editable. A done
-    // row for them would be the third place the same values appeared.
+  test("the sealed row says what happens to the identifiers, not how many", async () => {
+    // Once the doctor has passed this step, the interesting fact about these
+    // values is not that six were found. It is what they are used for, which
+    // is the one thing the doctor cannot check for themselves.
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
-    expect(doneRow("Verify")).toBeUndefined();
-    expect([...document.querySelectorAll(".done-row")]).toHaveLength(2);
-    expect($("nric").value).toBe("S7211043C");
+    const row = doneRow("Verify");
+    expect(row.textContent).toContain("never sent to the AI");
+
+    row.querySelector(".done-head").click();
+    expect(row.textContent).toContain("nowhere else");
+    expect(row.textContent).toContain("S7211043C");
   });
 });
 
@@ -1170,16 +1174,50 @@ describe("when a wizard step renders", () => {
     expect(actions).not.toContain("fill");
   });
 
-  test("with values waiting, the doctor is told the page moved", async () => {
+  test("the answers to the section just left are taken down", async () => {
+    // They belong to the questions that were on screen a moment ago. Left up,
+    // they invite a fill that writes the last section's answers into this one.
     const panel = loadPanel();
     await settle();
+    panel.state.step = "page";
     panel.state.rows = [
       { field_id: "icd", label: "ICD-10 Code", value: "K35.80", status: "extracted", needs_review: false },
     ];
 
     await panel.onPageChanged();
 
-    expect($("fill-status").textContent).toMatch(/press Fill again/i);
+    expect(panel.state.rows).toHaveLength(0);
+    expect($("mapped").hidden).toBe(true);
+  });
+
+  test("the new section is read, and then it waits", async () => {
+    // Read, not mapped. Four wizard sections would otherwise be four model
+    // calls nobody asked for.
+    const panel = loadPanel();
+    await settle();
+    panel.state.step = "page";
+    globalThis.fetch.mockClear();
+
+    await panel.onPageChanged();
+
+    expect($("map-prompt").hidden).toBe(false);
+    expect($("prompt-title").textContent).toContain("2 questions");
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-live"))
+    ).toHaveLength(0);
+  });
+
+  test("a section with nothing answerable says so and keeps watching", async () => {
+    const panel = loadPanel();
+    await settle();
+    panel.state.step = "page";
+    page.survey = { ...page.survey, liveFields: [], controlCount: 0 };
+
+    await panel.onPageChanged();
+
+    expect($("map-prompt").hidden).toBe(true);
+    expect($("watch-text").textContent).toMatch(/no questions on it/i);
+    expect($("watch").className).toContain("live");
   });
 
   test("the message arrives through chrome.runtime, not a direct call", async () => {

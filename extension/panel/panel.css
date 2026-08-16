@@ -529,6 +529,73 @@ button.link:hover {
   white-space: nowrap;
 }
 
+/* ------------------------------------------------------------- this page  */
+
+/* What the panel is looking at. Dashed while it reads, solid with a live dot
+   once it is watching — the difference between "working" and "standing by" is
+   the only thing this line has to carry. */
+.watch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted-strong);
+  background: var(--paper);
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+
+.watch.live {
+  border-style: solid;
+}
+
+.watch-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--check);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+
+.watch.live .watch-dot {
+  background: var(--confident);
+}
+
+@keyframes pf-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* The offer to map. Amber rather than green: nothing has been sent yet, and
+   the doctor is the one who decides whether it is. */
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: #fbf7ef;
+  border: 1px solid var(--check-line);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.prompt[hidden] {
+  display: none;
+}
+
+.prompt strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.prompt p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted-strong);
+}
+
 /* ---------------------------------------------------------------- drawers */
 
 details.found,
@@ -808,6 +875,10 @@ button.confirm:active:not(:disabled) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .watch-dot {
+    animation: none;
+  }
+
   .done-row,
   .done-body,
   .step,

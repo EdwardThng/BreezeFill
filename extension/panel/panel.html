@@ -56,7 +56,7 @@
       </span>
       <!-- Overwritten by showStep on the first render; this is what shows for
            the instant before that, so it has to agree with STEPS. -->
-      <span class="step-counter" id="step-counter">Step 1 of 3</span>
+      <span class="step-counter" id="step-counter">Step 1 of 4</span>
     </header>
 
     <div class="scroll" id="scroll">
@@ -214,27 +214,51 @@
           </label>
         </details>
 
-        <button id="map-btn" class="primary" type="button">Map fields</button>
+        <!--
+          The check screen ends here. What follows it is a different question —
+          "what does this page ask" — and it is asked of the page the doctor is
+          looking at NOW, which on a wizard is not the page they were looking at
+          when they pasted the note.
+        -->
+        <button id="check-next" class="primary" type="button">
+          Save and look at this page
+        </button>
+        <p class="status" id="check-status" role="status"></p>
+      </section>
+
+      <!-- Step 4 — the page in front of the doctor ------------------------ -->
+      <!--
+        The note no longer waits for the right page to be showing. It is
+        pasted, checked and sealed first; only then does the panel read the
+        page, and it reads it again every time the page becomes a different
+        one. That is the whole point of this step existing: mapping used to
+        fire once, against whatever happened to be on screen the moment the
+        note was ready — which on ClaimEZ is the verification section, holding
+        none of the questions a consultation note can answer.
+
+        Nothing here maps by itself. The panel says what it found and waits for
+        a click, because four wizard sections would otherwise be four model
+        calls nobody asked for. And nothing here fills by itself either:
+        advancing a section is the doctor using the insurer's form, not asking
+        BreezeFill for anything.
+      -->
+      <section class="step" id="step-page" aria-labelledby="h-page" hidden>
+        <h2 id="h-page">This page</h2>
+
+        <div class="watch" id="watch">
+          <span class="watch-dot" aria-hidden="true"></span>
+          <span id="watch-text">Reading this page…</span>
+        </div>
+
+        <!-- What was found, and the button that sends it. Hidden once mapped. -->
+        <div class="prompt" id="map-prompt" hidden>
+          <strong id="prompt-title"></strong>
+          <p id="prompt-why"></p>
+          <button id="map-btn" class="primary" type="button">Map these questions</button>
+        </div>
+
         <p class="status" id="map-status" role="status"></p>
 
-        <!--
-          The form's own questions, in the same card as the values above and
-          on the same screen. They used to be a step of their own called
-          Review, which meant the panel asked the doctor to check values twice,
-          in two layouts, under two headings — once for what the note gave up
-          and once for what the model made of it. It is one job: read what is
-          about to be used, correct what is wrong.
-
-          Hidden until there is something to show. An empty progress bar over
-          an empty list is a promise the panel has not kept yet, and it sat
-          above the button that would have kept it.
-
-          The ORDER on this screen is load-bearing. The values above are the
-          dictionary the note is redacted against, so they are corrected before
-          Map fields is pressed; the rows below only exist after it. Anything
-          that moves the demographics under the rows moves the correction after
-          the send.
-        -->
         <div id="mapped" hidden>
           <p class="note" id="review-summary"></p>
           <!--
