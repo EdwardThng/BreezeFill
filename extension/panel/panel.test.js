@@ -896,6 +896,86 @@ describe("the record posted to /map", () => {
 // One box
 // ---------------------------------------------------------------------------
 
+describe("looking back at a finished step", () => {
+  // Expanding a done row used to BE reopening the step, so a doctor on the
+  // review screen who wanted to check what they had pasted got the paste box
+  // back with the review hidden behind it — they lost the thing they were
+  // reading in order to answer a question about it.
+
+  /** Drive the panel to the review screen, the way the doctor does. */
+  async function toReview(panel) {
+    $("paste").value = "Patient: Chua Beng Huat\n\nWard class B1.";
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    await panel.onMap();
+  }
+
+  const doneRow = (title) =>
+    [...document.querySelectorAll(".done-row")].find((row) =>
+      row.querySelector(".done-title").textContent.includes(title)
+    );
+
+  test("expanding one shows what went in, without leaving the review", async () => {
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+
+    const row = doneRow("Consultation note");
+    row.querySelector(".done-head").click();
+
+    expect(row.querySelector(".done-body").hidden).toBe(false);
+    expect(row.textContent).toContain("Ward class B1");
+    // The whole point: the review is still there, and the step was not reopened.
+    expect($("step-review").hidden).toBe(false);
+    expect($("step-note").hidden).toBe(true);
+    expect($("step-counter").textContent).toContain("of");
+  });
+
+  test("it collapses again", async () => {
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+
+    const row = doneRow("Patient");
+    row.querySelector(".done-head").click();
+    row.querySelector(".done-head").click();
+
+    expect(row.querySelector(".done-body").hidden).toBe(true);
+    expect(row.dataset.open).toBe("false");
+  });
+
+  test("editing is still one click away, and still reopens the step", async () => {
+    // Kept deliberately: showing is now the default, but a doctor who spots a
+    // wrong name in the row needs somewhere to go from there.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+
+    const row = doneRow("Patient");
+    row.querySelector(".done-head").click();
+    row.querySelector(".link").click();
+
+    expect($("step-name").hidden).toBe(false);
+    expect($("step-review").hidden).toBe(true);
+  });
+
+  test("the details row lists the values that were found", async () => {
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+
+    const row = doneRow("Patient details");
+    row.querySelector(".done-head").click();
+
+    expect(row.textContent).toContain("S7211043C");
+    // Empty fields are not listed: a row of blanks says nothing.
+    expect(row.querySelectorAll(".done-detail-key").length).toBeGreaterThan(0);
+    expect(row.textContent).not.toContain("policy number\n\n");
+  });
+});
+
 describe("everything pasted is one corpus", () => {
   // There used to be a second box, for the things a claim form asks about that
   // a consultation note does not hold — a ward class, an admission reference.

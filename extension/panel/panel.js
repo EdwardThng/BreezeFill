@@ -1047,14 +1047,35 @@ function showStep(key) {
   if (scroll) scroll.scrollTop = 0;
 }
 
-/** A finished step, as a row that reopens it. */
+/**
+ * What a finished step holds, as read-only lines for its expanded row.
+ *
+ * Read-only on purpose. The row answers "what did I put in" — asked most often
+ * from the review screen, with a mapped claim on it — and the answer must not
+ * cost the doctor the screen they asked from. Editing is still one click away
+ * on the row itself; it is just no longer the only thing the row can do.
+ */
+function doneDetails(key) {
+  if (key === "name") return [["Full name", $("full-name").value.trim()]];
+  if (key === "note") return [[null, $("paste").value.trim()]];
+  if (key === "details") {
+    return Object.keys(DEMOGRAPHIC_FIELDS)
+      .map((id) => [labelOf(id), $(id).value.trim()])
+      .filter(([, value]) => value);
+  }
+  return [];
+}
+
+/** A finished step, as a row that shows what went into it. */
 function doneRow(step) {
   const wrap = document.createElement("div");
   wrap.className = "done-row";
+  wrap.dataset.open = "false";
 
   const head = document.createElement("button");
   head.type = "button";
   head.className = "done-head";
+  head.setAttribute("aria-expanded", "false");
 
   const tick = document.createElement("span");
   tick.className = "done-tick";
@@ -1075,10 +1096,46 @@ function doneRow(step) {
   chevron.textContent = "›";
 
   head.append(tick, label, chevron);
-  // The chevron is the affordance; reopening a step keeps everything already
-  // entered, and every later step stays reachable from its own row.
-  head.addEventListener("click", () => showStep(step.key));
-  wrap.append(head);
+
+  // The body is built now and revealed on click rather than built on demand:
+  // it reads the inputs, and reading them once at render time is what makes
+  // the row a record of the step as it was finished.
+  const body = document.createElement("div");
+  body.className = "done-body";
+  body.hidden = true;
+
+  for (const [name, value] of doneDetails(step.key)) {
+    const line = document.createElement("p");
+    line.className = name ? "done-detail" : "done-detail done-note";
+    if (name) {
+      const key = document.createElement("span");
+      key.className = "done-detail-key";
+      key.textContent = name;
+      line.append(key, document.createTextNode(value));
+    } else {
+      line.textContent = value;
+    }
+    body.append(line);
+  }
+
+  // The old behaviour, kept but no longer the only one. Expanding a row used
+  // to BE reopening the step, which sent a doctor asking "what did I paste"
+  // back to the paste box with the review they were reading hidden behind it.
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "link";
+  edit.textContent = `Edit ${step.title.toLowerCase()}`;
+  edit.addEventListener("click", () => showStep(step.key));
+  body.append(edit);
+
+  head.addEventListener("click", () => {
+    const open = wrap.dataset.open !== "true";
+    wrap.dataset.open = String(open);
+    head.setAttribute("aria-expanded", String(open));
+    body.hidden = !open;
+  });
+
+  wrap.append(head, body);
   return wrap;
 }
 

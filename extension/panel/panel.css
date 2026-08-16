@@ -241,6 +241,39 @@ body {
   animation: pf-rise 0.22s ease both;
 }
 
+.done-body[hidden] {
+  display: none;
+}
+
+.done-detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.done-detail-key {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--disabled-ink);
+}
+
+/* The pasted note, shown as it was typed. Capped rather than allowed to push
+   the review off screen — the row is a reminder of what went in, not a second
+   place to read the consultation. */
+.done-note {
+  white-space: pre-wrap;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.done-body .link {
+  align-self: flex-start;
+}
+
 /* ------------------------------------------------------------ active step */
 
 .step {
