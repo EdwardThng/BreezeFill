@@ -1528,6 +1528,59 @@ together; a wizard shows one step at a time. Without that check, a form keeping
 its steps in the DOM behind `display:none` has every step read as an entry and
 every label pointlessly qualified.
 
+**…and a GRID-LAYOUT QUESTION ROW is indistinguishable from an entry opener
+(found 2026-08-15, unfixed).** The delimiter rule above is what makes rule 6's
+own shape misfire. Rule 6 exists for the layout where the question sits in one
+`<div>` and the control in the next one over; that means the row's first child
+is a bare element holding text, which is not a control and not a label bound to
+one — a delimiter, exactly. So the row reads as an entry, its twins are the
+ordinary question rows beside it, and the labels come back qualified.
+
+Reproduced in `tests/fixtures/wizard_like.html`: two grid rows come back as
+`Date of admission (entry 2)` and `Date of discharge (entry 3)`. That much is
+cosmetic. **The reach is not.** `_live_sources` refuses to treat any control
+carrying an `instance` as demographic — one patient record cannot answer the
+second entry — so on a page laid out *entirely* in grid rows the whole
+demographic block is qualified and **none of it fills**. Probed directly on a
+four-control grid block: `Patient's Full Name`, `NRIC / FIN`, `Contact No.` and
+`Residential Address` came back as entries 1 to 4. That is the failure the
+2026-08-09 demographics work was done to end, returning by a different route,
+on the shape 36 of RoboForm's 39 controls use and that print-derived insurer
+forms use freely.
+
+Left unfixed on purpose: it is a change to a core heuristic, and both plausible
+discriminators (require the delimiter to be non-empty *prose*? require the
+twins to differ in control count? read the row's position?) trade one
+false-positive class for another. **The ClaimEZ dump settles which shape
+actually matters** — the same dump that settles the visibility question and the
+`locate`/`enrich` disagreement. Do not close it by widening `hasDelimiter` in
+passing.
+
+**A demographic label has to match the alias table exactly, and the table is
+narrower than it reads (2026-08-15).** `demographic_field_for_label` normalises
+to letters and then strips only *patient* qualifiers, so the reach stops at the
+alias list itself:
+
+| resolves | does not |
+|---|---|
+| `Patient's Full Name` | `Patient's Full Name (as in NRIC)` |
+| `NRIC / FIN` | `NRIC / FIN Number` |
+| `Contact No.` | `Contact Number` |
+| `Residential Address` | — |
+
+The refusals are correct behaviour — the qualifier list is an allowlist so that
+`Hospital name` and `Doctor's name` cannot resolve — but the near-misses above
+are ordinary wordings, not adversarial ones, and each costs a field that then
+comes back blank with nothing explaining why. `tests/fixtures/wizard_like.html`
+uses the resolving column and documents the other one at the top; **do not
+reword a step-1 label there without re-running
+`demographic_field_for_label`.**
+
+Widening the table is not the move until the ClaimEZ dump says what the real
+labels are. Adding `number` or a parenthetical-stripper as a guess is how
+`Employer name (as in records)` starts resolving to the patient's name, and a
+demographic reaches the doctor **already green**.
+
 **A sample note that only parses in one format is a demo that fails in front
 of a doctor (2026-08-08).** The panel's "Use a sample note" strip carries the
 values the design spec shows as found — `S8012345D`, `14/03/1978`,
