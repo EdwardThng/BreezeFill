@@ -66,6 +66,8 @@
   /* The marked sentence in the note pane. The same amber family as --check,
      because it marks the thing the doctor is being asked to check. */
   --check-mark: #fdf3dc;
+  /* The value itself, inside the sentence that carries it. */
+  --check-hit: #f4dfa6;
   --missing: #6e6e73;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
@@ -697,24 +699,37 @@ details > *:not(summary) {
 
 /* The consultation, on screen while the values taken from it are checked.
 
-   Sticky, not merely present. A claim with twenty questions is taller than
-   the panel, and a reference that scrolls out of view is the same trip back
-   and forth that having it on screen was meant to end. */
+   A SIBLING of the scroller rather than sticky inside it. Sticky pinned at the
+   scroll container's padding edge, so rows kept sliding through the strip
+   above the pane and it read as a rendering fault. A sibling cannot have one.
+
+   A third of the panel by flex, so it stays a third whatever height the
+   browser window is — a fixed pixel height stops being a third the moment the
+   doctor resizes anything. */
 .notepane {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex: 0 0 33%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  overflow: hidden;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.notepane[hidden] {
+  display: none;
+}
+
+/* Folded away, the pane is its header and nothing else. */
+.notepane[data-folded="true"] {
+  flex: none;
 }
 
 .notepane-head {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 11px;
+  padding: 7px 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -727,10 +742,10 @@ details > *:not(summary) {
   color: var(--muted);
 }
 
-/* Which row the highlight is following, and — when it is following nothing —
-   why not. A pane that silently stops marking anything reads as broken, and
-   "the model did not quote this" is worth knowing on a screen whose whole job
-   is checking where values came from. */
+/* Which row the mark is following, and — when it is following nothing — why
+   not. A pane that silently stops marking anything reads as broken, and "the
+   model did not quote this" is worth knowing on a screen whose whole job is
+   checking where values came from. */
 .notepane-state {
   flex: 1;
   min-width: 0;
@@ -757,17 +772,17 @@ details > *:not(summary) {
   color: var(--text);
 }
 
-/* Positioned so that a mark inside it measures its offset against the text
-   box rather than against the sticky pane, which would count the header. */
+/* Positioned so a mark inside measures its offset against the text box. */
 .notepane-text {
   position: relative;
+  flex: 1;
+  min-height: 0;
   margin: 0;
-  padding: 9px 11px;
-  max-height: 132px;
+  padding: 10px 16px;
   overflow-y: auto;
   font-family: var(--mono);
   font-size: 11px;
-  line-height: 1.65;
+  line-height: 1.75;
   white-space: pre-wrap;
   color: var(--muted);
 }
@@ -776,12 +791,48 @@ details > *:not(summary) {
   display: none;
 }
 
-.notepane-text mark {
+/* Every quotable sentence is a span from the first render and only a class
+   moves. Rebuilding the note to redraw the mark reset the pane's scroll on
+   every frame of a scroll, which is what made following it stutter. */
+.quote {
+  border-radius: 3px;
+  transition: background 0.22s ease, color 0.22s ease;
+}
+
+/* TWO marks, because there are two relationships between a value and the
+   sentence it cites.
+
+   QUOTED — the value is in this sentence, and the value itself is emphasised
+   inside it, so the match is shown rather than asserted.
+
+   REASONED — the value is NOT in this sentence; it was worked out from it.
+   "J03.90" appears nowhere in "Dx acute tonsillitis." Marking that the same
+   solid way makes the most dangerous row on the screen — an inference the
+   doctor is about to sign as their own clinical statement — read as a wrong
+   citation. It gets an outline instead of a fill. */
+.quote.on.quoted {
   background: var(--check-mark);
   color: var(--text);
-  border-radius: 3px;
-  padding: 0 2px;
-  box-shadow: inset 2px 0 0 var(--check);
+}
+
+.quote.on.reasoned {
+  color: var(--text);
+  text-decoration: underline dashed var(--check-line);
+  text-underline-offset: 4px;
+}
+
+.quote .hit {
+  font-weight: 400;
+}
+
+.quote.on.quoted .hit {
+  font-weight: 600;
+  background: var(--check-hit);
+  border-radius: 2px;
+}
+
+.quote.on.reasoned .hit {
+  font-weight: 600;
 }
 
 /* --------------------------------------------------------- review + rows  */
@@ -893,6 +944,17 @@ details > *:not(summary) {
 .review-row.pending textarea,
 .review-row.pending select {
   border-color: var(--check-line);
+}
+
+/* The model's own sentence saying why an inferred value follows from the
+   sentence marked in the note above. Said on the row, because the row is where
+   the doctor signs off — the pane can only mark what the value was worked out
+   FROM, and that sentence does not contain the answer. */
+.derived {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--check);
 }
 
 .date-hint {
