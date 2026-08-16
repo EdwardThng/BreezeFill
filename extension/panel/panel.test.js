@@ -962,10 +962,11 @@ describe("the check screen says what it knows about each value", () => {
 });
 
 describe("looking back at a finished step", () => {
-  // Expanding a done row used to BE reopening the step, so a doctor on the
-  // review screen who wanted to check what they had pasted got the paste box
-  // back with the review hidden behind it — they lost the thing they were
-  // reading in order to answer a question about it.
+  // A finished step used to be a card with a drawer: expand it to see what
+  // went in, then find the Edit link inside to go back. Two clicks to change a
+  // value, when going back to the step is the only reason the row exists — and
+  // the drawer's whole content was the value, so putting the value on the row
+  // deleted the drawer rather than restyling it.
 
   /** Drive the panel to the review screen, the way the doctor does. */
   async function toReview(panel) {
@@ -979,73 +980,76 @@ describe("looking back at a finished step", () => {
 
   const doneRow = (title) =>
     [...document.querySelectorAll(".done-row")].find((row) =>
-      row.querySelector(".done-title").textContent.includes(title)
+      row.querySelector(".done-name").textContent.includes(title)
     );
 
-  test("expanding one shows what went in, without leaving the review", async () => {
+  test("the row carries the value, so there is nothing to expand", async () => {
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
-    const row = doneRow("Consultation note");
-    row.querySelector(".done-head").click();
-
-    expect(row.querySelector(".done-body").hidden).toBe(false);
-    expect(row.textContent).toContain("Ward class B1");
-    // The whole point: the rows are still there, and the step was not reopened.
-    expect($("step-page").hidden).toBe(false);
-    expect($("mapped").hidden).toBe(false);
-    expect($("step-note").hidden).toBe(true);
-    expect($("step-counter").textContent).toContain("of");
+    expect(doneRow("Patient").querySelector(".done-value").textContent).toBe(
+      "Chua Beng Huat"
+    );
+    // The note's opening line, not a word count: a doctor checking they
+    // pasted the right consultation recognises how it starts.
+    expect(doneRow("Consultation note").querySelector(".done-value").textContent).toBe(
+      "Patient: Chua Beng Huat"
+    );
+    expect(document.querySelector(".done-body")).toBeNull();
   });
 
-  test("it collapses again", async () => {
+  test("one click goes back to the step", async () => {
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
-    const row = doneRow("Patient");
-    row.querySelector(".done-head").click();
-    row.querySelector(".done-head").click();
-
-    expect(row.querySelector(".done-body").hidden).toBe(true);
-    expect(row.dataset.open).toBe("false");
-  });
-
-  test("editing is still one click away, and still reopens the step", async () => {
-    // Kept deliberately: showing is now the default, but a doctor who spots a
-    // wrong name in the row needs somewhere to go from there.
-    const panel = loadPanel();
-    await settle();
-    await toReview(panel);
-
-    const row = doneRow("Patient");
-    row.querySelector(".done-head").click();
-    row.querySelector(".link").click();
+    doneRow("Patient").click();
 
     expect($("step-name").hidden).toBe(false);
     expect($("step-page").hidden).toBe(true);
   });
 
-  test("a collapsed row is a way back to a step, not a display of it", async () => {
-    // It used to summarise what went in — the patient's name, a word count, a
-    // sentence about confidentiality — on a second line under the step's name.
-    // All of it was something the doctor had typed a moment earlier, and it
-    // made every finished step two lines tall.
+  test("the finished steps sit UNDER the values once there are any", async () => {
+    // Arriving at the review used to mean arriving at a list of steps already
+    // finished, with the values the doctor came for below the fold.
+    routes["/map-live"] = () =>
+      respond({
+        form_id: "__live__",
+        fields: [
+          {
+            field_id: "ward",
+            label: "Ward class",
+            field_type: "text",
+            help: null,
+            value: "B1",
+            status: "extracted",
+            source: "Ward class B1.",
+            needs_review: false,
+            recheck: null,
+          },
+        ],
+      });
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
-    const row = doneRow("Verify");
-    expect(row.querySelector(".done-title").textContent).toBe("Verify");
-    expect(row.querySelector(".done-head").textContent).not.toContain("never sent");
+    const children = [...$("scroll").children];
+    expect(children.indexOf($("done-rows"))).toBeGreaterThan(
+      children.indexOf($("step-page"))
+    );
+    expect($("done-rows").classList.contains("below")).toBe(true);
+  });
 
-    // What happens to the identifiers is still said, in the body — which is
-    // where it can be a paragraph rather than a line that has to fit.
-    row.querySelector(".done-head").click();
-    expect(row.textContent).toContain("never these values");
-    expect(row.textContent).toContain("nowhere else");
-    expect(row.textContent).toContain("S7211043C");
+  test("and above the work before that", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("name-next").click();
+
+    const children = [...$("scroll").children];
+    expect(children.indexOf($("done-rows"))).toBe(0);
+    expect($("done-rows").classList.contains("below")).toBe(false);
   });
 });
 

@@ -1140,6 +1140,7 @@ function showStep(key) {
     })
   );
 
+  placeLedger();
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
@@ -1148,116 +1149,93 @@ function showStep(key) {
   if (scroll) scroll.scrollTop = 0;
 }
 
-/**
- * What a finished step holds, as read-only lines for its expanded row.
- *
- * Read-only on purpose. The row answers "what did I put in" — asked most often
- * from the review screen, with a mapped claim on it — and the answer must not
- * cost the doctor the screen they asked from. Editing is still one click away
- * on the row itself; it is just no longer the only thing the row can do.
- */
-function doneDetails(key) {
-  if (key === "name") return [["Full name", $("full-name").value.trim()]];
-  if (key === "note") return [[null, $("paste").value.trim()]];
-  if (key === "check") {
-    return [
-      [
-        null,
-        "Held in this panel for as long as it is open, and nowhere else. " +
-          "Used for two things: as the dictionary your note is scrubbed against, " +
-          "and copied onto the form directly. The AI is shown the scrubbed note " +
-          "and never these values. Closing the panel discards them; nothing is " +
-          "written to disk.",
-      ],
-      ...Object.keys(DEMOGRAPHIC_FIELDS)
-        .map((id) => [labelOf(id), $(id).value.trim()])
-        .filter(([, value]) => value),
-    ];
+/** A finished step in one line: what actually went into it. */
+function summaryOf(key) {
+  if (key === "name") return $("full-name").value.trim() || "\u2014";
+  if (key === "note") {
+    // The note's opening line, not a word count. A doctor checking they
+    // pasted the right consultation recognises how it starts; nobody has ever
+    // recognised a claim by its length.
+    const first = $("paste").value.split("\n").find((line) => line.trim());
+    return first ? first.trim() : "\u2014";
   }
-  return [];
+  if (key === "check") {
+    const ids = Object.keys(DEMOGRAPHIC_FIELDS);
+    const found = ids.filter((id) => $(id).value.trim()).length;
+    return `${found} of ${ids.length} found`;
+  }
+  if (key === "page") {
+    const n = state.rows.length;
+    return n ? `${n} question${n === 1 ? "" : "s"}` : "\u2014";
+  }
+  return "";
 }
 
-/** A finished step, as a row that shows what went into it. */
+/**
+ * A finished step, as one hairline row.
+ *
+ * It used to be a card: a bordered box with a filled green disc, a chevron,
+ * and a drawer holding the values under an uppercase mono caption. Three
+ * things were wrong with that, and the third is the one that mattered.
+ *
+ * It was the heaviest chrome on the screen standing in for the least important
+ * thing on it — a step already done, drawn with the same card, border and
+ * radius as the live one beneath it. Changing a value cost two clicks, expand
+ * then find the link, when going back to the step IS the only reason the row
+ * exists. And the drawer's whole content was the value, so putting the value
+ * on the row deletes the drawer rather than restyling it.
+ */
 function doneRow(step) {
-  const wrap = document.createElement("div");
-  wrap.className = "done-row";
-  wrap.dataset.open = "false";
-  wrap.dataset.key = step.key;
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "done-row";
+  row.dataset.key = step.key;
 
-  const head = document.createElement("button");
-  head.type = "button";
-  head.className = "done-head";
-  head.setAttribute("aria-expanded", "false");
+  const check = document.createElement("span");
+  check.className = "done-check";
+  check.textContent = "✓";
 
-  const tick = document.createElement("span");
-  tick.className = "done-tick";
-  tick.textContent = "✓";
+  const name = document.createElement("span");
+  name.className = "done-name";
+  name.textContent = step.title;
 
-  // The step's name, and nothing else on the line.
-  //
-  // It used to carry a summary of what went in — the patient's name, a word
-  // count, a sentence about confidentiality — stacked under a label in a
-  // second type size. Three problems, and the last is the one that matters:
-  // the row was two lines tall for information the doctor had just typed, the
-  // label and the value ran together with nothing between them, and a
-  // collapsed row is a way BACK to a step rather than a display of it. What
-  // went in is one click away, in the body this row already builds.
-  const label = document.createElement("span");
-  label.className = "done-label";
-  const title = document.createElement("span");
-  title.className = "done-title";
-  title.textContent = step.title;
-  label.append(title);
+  const value = document.createElement("span");
+  value.className = "done-value";
+  value.textContent = summaryOf(step.key);
 
-  const chevron = document.createElement("span");
-  chevron.className = "done-chevron";
-  chevron.textContent = "›";
+  const go = document.createElement("span");
+  go.className = "done-go";
+  go.textContent = "\u203a";
 
-  head.append(tick, label, chevron);
+  row.append(check, name, value, go);
+  row.addEventListener("click", () => showStep(step.key));
+  return row;
+}
 
-  // The body is built now and revealed on click rather than built on demand:
-  // it reads the inputs, and reading them once at render time is what makes
-  // the row a record of the step as it was finished.
-  const body = document.createElement("div");
-  body.className = "done-body";
-  body.hidden = true;
+/**
+ * Where the finished steps sit, which depends on what the doctor is doing.
+ *
+ * ABOVE while the history IS the work — the steps just completed, in the order
+ * they were completed. BELOW once there are mapped values on screen, because
+ * arriving at the review meant arriving at a list of steps already finished
+ * with the values themselves pushed under the fold. And NOWHERE once a fill
+ * has landed: a history of where you have been is the least useful thing to
+ * show at the moment you asked what just happened.
+ */
+function placeLedger() {
+  const rows = $("done-rows");
+  const scroll = $("scroll");
+  if (!rows || !scroll) return;
 
-  for (const [name, value] of doneDetails(step.key)) {
-    const line = document.createElement("p");
-    line.className = name ? "done-detail" : "done-detail done-note";
-    if (name) {
-      const key = document.createElement("span");
-      key.className = "done-detail-key";
-      key.textContent = name;
-      line.append(key, document.createTextNode(value));
-    } else {
-      line.textContent = value;
-    }
-    body.append(line);
+  if (state.filled) {
+    rows.hidden = true;
+    return;
   }
-
-  // The old behaviour, kept but no longer the only one. Expanding a row used
-  // to BE reopening the step, which sent a doctor asking "what did I paste"
-  // back to the paste box with the review they were reading hidden behind it.
-  const edit = document.createElement("button");
-  edit.type = "button";
-  edit.className = "link";
-  // A step whose title is a verb cannot be lowercased into a label — "Verify"
-  // gives "Edit verify". Such a step carries its own wording; the rest still
-  // read correctly off the title.
-  edit.textContent = step.edit || `Edit ${step.title.toLowerCase()}`;
-  edit.addEventListener("click", () => showStep(step.key));
-  body.append(edit);
-
-  head.addEventListener("click", () => {
-    const open = wrap.dataset.open !== "true";
-    wrap.dataset.open = String(open);
-    head.setAttribute("aria-expanded", String(open));
-    body.hidden = !open;
-  });
-
-  wrap.append(head, body);
-  return wrap;
+  rows.hidden = false;
+  const below = state.rows.length > 0;
+  rows.classList.toggle("below", below);
+  if (below) scroll.append(rows);
+  else scroll.prepend(rows);
 }
 
 function updateProgress() {
@@ -1483,6 +1461,8 @@ function renderRows() {
   const first = state.rows.find((r) => r.needs_review && hasValue(r)) || state.rows[0];
   state.reading = first ? first.field_id : null;
   markNote(first || null);
+  // Mapped values on screen move the finished steps under them.
+  placeLedger();
   updateReviewMeta();
 }
 
