@@ -50,7 +50,9 @@
         <h1>BreezeFill</h1>
         <p class="tagline">Fills the form in place. Never submits it.</p>
       </span>
-      <span class="step-counter" id="step-counter">Step 1 of 6</span>
+      <!-- Overwritten by showStep on the first render; this is what shows for
+           the instant before that, so it has to agree with STEPS. -->
+      <span class="step-counter" id="step-counter">Step 1 of 4</span>
     </header>
 
     <div class="scroll" id="scroll">
@@ -80,9 +82,23 @@
       <!-- Step 2 — the consultation -------------------------------------- -->
       <section class="step" id="step-note" aria-labelledby="h-note" hidden>
         <h2 id="h-note">Paste the consultation</h2>
+        <!--
+          One box, and the second paragraph is what replaced a second one.
+          Claim forms ask for things a consultation note does not hold — the
+          admitting hospital's own reference, a ward class, an operation code
+          from the billing system — and those used to have a step of their own.
+          They did not need one: everything pasted here is a single corpus,
+          parsed and redacted in one pass, so a doctor typing an admission
+          reference under their note gets exactly what a separate box gave them
+          and one less screen to walk through.
+        -->
         <p class="step-sub">
           Exactly as it sits in your CMS — demographics header and clinical
           note together. Messy is fine.
+        </p>
+        <p class="step-sub">
+          Add anything else the form asks for underneath: admission references,
+          ward class, billing codes. It is read the same way.
         </p>
 
         <!--
@@ -128,35 +144,7 @@
         </p>
       </section>
 
-      <!-- Step 3 — anything the note does not hold ------------------------ -->
-      <!--
-        A second box, not a second pipeline. Claim forms ask for things a
-        consultation note does not hold — the admitting hospital's own
-        reference, a ward class, an operation code from the billing system —
-        and a doctor keeps those somewhere else. They are appended to the note
-        and go through exactly the same redaction; nothing here takes a
-        shortcut past it.
-      -->
-      <section class="step" id="step-extra" aria-labelledby="h-extra" hidden>
-        <h2 id="h-extra">Anything else the form asks for?</h2>
-        <p class="step-sub">
-          Optional. Admission references, ward class, billing codes — whatever
-          the claim form wants that the consultation note does not hold.
-        </p>
-        <label class="field" id="other-notes-wrap">
-          <span class="visually-hidden">Other notes</span>
-          <textarea
-            id="other-notes"
-            rows="6"
-            spellcheck="false"
-            placeholder="Leave empty if there is nothing to add."
-          ></textarea>
-        </label>
-        <button id="extra-next" class="primary" type="button">Continue</button>
-        <p class="note">Redacted with the note, and read for identifiers the same way.</p>
-      </section>
-
-      <!-- Step 4 — check what was found ---------------------------------- -->
+      <!-- Step 3 — check what was found ---------------------------------- -->
       <!--
         Not a summary — a correction surface. These values are what redaction
         searches for in the note, so a value that arrived wrong here is a value

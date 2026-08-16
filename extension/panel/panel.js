@@ -510,18 +510,22 @@ function labelOf(id) {
 /**
  * Everything the doctor pasted, as one body of text.
  *
- * The second box exists because a claim form asks for things a consultation
- * note does not hold, but it must not become a second pipeline: identifiers
- * can appear in either box, and redaction works on one corpus with one
- * dictionary. So both the demographics parse and the mapping call see this,
- * never `#paste` alone. A path that redacted one box and not the other would
- * be a leak with a plausible-looking cause.
+ * One box now. There used to be a second, for the things a claim form asks
+ * about that a consultation note does not hold — an admission reference, a
+ * ward class, a billing code — and this function existed to join them, because
+ * identifiers can appear in either and redaction works on one corpus with one
+ * dictionary. Two boxes that were always concatenated before anything read
+ * them were one box with a step in between, so the step went and the doctor
+ * types those lines under their note.
+ *
+ * Kept as a function rather than inlined, because the invariant it names is
+ * the one that matters: the demographics parse and the mapping call read the
+ * same text. Anything that later adds a second source of pasted text adds it
+ * HERE, and a path that redacted one source and not the other would be a leak
+ * with a plausible-looking cause.
  */
 function pastedText() {
-  return [$("paste").value, $("other-notes").value]
-    .map((text) => text.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  return $("paste").value.trim();
 }
 
 function patientRecord() {
@@ -1000,7 +1004,6 @@ function renderRow(row) {
 const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
-  { key: "extra", section: "step-extra", title: "Other notes" },
   { key: "details", section: "step-details", title: "Patient details" },
   { key: "review", section: "step-review", title: "Review" },
 ];
@@ -1011,10 +1014,6 @@ function summaryOf(key) {
   if (key === "note") {
     const words = $("paste").value.trim().split(/\s+/).filter(Boolean).length;
     return `${words} word${words === 1 ? "" : "s"} pasted`;
-  }
-  if (key === "extra") {
-    const text = $("other-notes").value.trim();
-    return text ? `${text.split(/\s+/).filter(Boolean).length} words added` : "Nothing added";
   }
   if (key === "details") {
     const found = Object.keys(DEMOGRAPHIC_FIELDS).filter((id) => $(id).value.trim()).length;
@@ -1363,9 +1362,7 @@ async function onFill() {
 
 $("api-base").value = DEFAULT_API_BASE;
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
-// Both boxes feed one corpus, so either one changing re-reads the identifiers.
 $("paste").addEventListener("input", scheduleParse);
-$("other-notes").addEventListener("input", scheduleParse);
 for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   // A hand-typed value outranks the parser from here on: re-parsing on the
   // next keystroke in the paste box must not undo a correction.
@@ -1388,9 +1385,8 @@ $("note-next").addEventListener("click", () => {
     $("paste").focus();
     return;
   }
-  showStep("extra");
+  showStep("details");
 });
-$("extra-next").addEventListener("click", () => showStep("details"));
 
 // Fills the paste box only. The name is not written in: the doctor typed it
 // at step 1, and "BreezeFill never guesses this one" would be a strange thing

@@ -893,20 +893,25 @@ describe("the record posted to /map", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The second box
+// One box
 // ---------------------------------------------------------------------------
 
-describe("other notes", () => {
-  // A claim form asks for things a consultation note does not hold. The whole
-  // risk of a second box is that it becomes a second path — one that reaches
-  // the model without passing through redaction, or without contributing the
-  // identifiers redaction needs. These say it does not.
+describe("everything pasted is one corpus", () => {
+  // There used to be a second box, for the things a claim form asks about that
+  // a consultation note does not hold — a ward class, an admission reference.
+  // It was always concatenated with the first before anything read it, so it
+  // was one box with a step in between, and the doctor now types those lines
+  // under their note.
+  //
+  // What the second box's tests were really guarding survives it: the parse
+  // and the mapping call must read the same text. A line that reached the
+  // model without having been read for identifiers first is a line redaction
+  // had no dictionary for.
 
-  test("it is part of the text sent for mapping", async () => {
+  test("lines added under the note are sent for mapping", async () => {
     const panel = loadPanel();
     await settle();
-    $("paste").value = "Patient: Chua Beng Huat";
-    $("other-notes").value = "Ward class B1. Admission ref MEH-88213.";
+    $("paste").value = "Patient: Chua Beng Huat\n\nWard class B1. Admission ref MEH-88213.";
     await panel.parsePaste();
     $("insurer").value = "AIA";
     $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
@@ -916,12 +921,13 @@ describe("other notes", () => {
     expect(record.clinical_text).toContain("Ward class B1");
   });
 
-  test("identifiers in the second box are parsed too", async () => {
-    // Otherwise they would never enter the redaction dictionary, and a name
-    // typed only here would reach the model intact.
+  test("identifiers anywhere in the box are parsed", async () => {
+    // Including in whatever was typed underneath. Otherwise they never enter
+    // the redaction dictionary, and a name typed at the bottom of the box
+    // would reach the model intact.
     const panel = loadPanel();
     await settle();
-    $("other-notes").value = "Patient: Chua Beng Huat · S7211043C";
+    $("paste").value = "Admitted 14/03/2026, ward B1.\nPatient: Chua Beng Huat · S7211043C";
     await panel.parsePaste();
 
     const sent = JSON.parse(
@@ -930,21 +936,8 @@ describe("other notes", () => {
     expect(sent.text).toContain("S7211043C");
   });
 
-  test("typing in it re-reads the identifiers", async () => {
-    loadPanel();
-    await settle();
-    globalThis.fetch.mockClear();
-
-    $("other-notes").value = "Ward class B1";
-    $("other-notes").dispatchEvent(new Event("input", { bubbles: true }));
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(
-      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/parse")),
-    ).toHaveLength(1);
-  });
-
-  test("leaving it empty changes nothing", async () => {
+  test("the text sent is exactly what was pasted", async () => {
+    // No separator bolted on, now that there is nothing to join it to.
     const panel = loadPanel();
     await settle();
     $("paste").value = "Patient: Chua Beng Huat";
@@ -952,23 +945,7 @@ describe("other notes", () => {
     $("insurer").value = "AIA";
     $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
 
-    // No trailing separator, no blank lines bolted on: the common case is
-    // still one box and the text is exactly what was pasted.
     expect(panel.patientRecord().clinical_text).toBe("Patient: Chua Beng Huat");
-  });
-
-  test("it alone is enough — the consultation box is not separately required", async () => {
-    const panel = loadPanel();
-    await settle();
-    $("other-notes").value = "Admitted 14/03/2026, ward B1.";
-    $("full-name").value = "Chua Beng Huat";
-    $("nric").value = "S7211043C";
-    $("dob").value = "1972-11-04";
-    $("insurer").value = "AIA";
-    for (const id of ["full-name", "nric", "insurer"]) {
-      $(id).dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    expect(() => panel.patientRecord()).not.toThrow();
   });
 });
 
