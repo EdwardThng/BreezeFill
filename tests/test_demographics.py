@@ -452,6 +452,44 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         assert len(parsed.choices["address"]) == 2
         assert parsed.choices["address"][0] == "Blk 118 Bishan St 12 #07-21, S570118"
 
+    def test_one_number_written_two_ways_is_not_two_candidates(self) -> None:
+        # The doctor was being asked to choose between a number and itself,
+        # and the field stayed blank until they did.
+        text = "Contactable at +65 9123 4567 or 9123-4567.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone == "+65 9123 4567"
+        assert "phone" not in parsed.choices
+
+    def test_the_surviving_rendering_is_the_one_the_note_wrote_first(self) -> None:
+        # Not a canonical form: what goes onto the claim should be what the
+        # doctor typed, and a list they are choosing from should read like
+        # their own note.
+        text = "HP 91234567. Also reachable on 9123 4567.\n"
+        assert parse_demographics(text).phone == "91234567"
+
+    def test_a_landline_starting_65_is_not_mistaken_for_a_country_code(self) -> None:
+        # `6512 3456` opens with the country code's own digits. Stripping them
+        # would leave six digits, which would collide with any other number in
+        # the note that happens to start 65.
+        text = "Reviewed today. Home 6512 3456. Clinic 6534 5678.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["6512 3456", "6534 5678"]
+
+    def test_two_different_numbers_are_still_two_candidates(self) -> None:
+        # The dedupe must not become a merge: these are genuinely two numbers
+        # and the refusal to choose between them is the point.
+        text = "Contactable on 91112233. Clinic tel 62551234.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["91112233", "62551234"]
+
+    def test_one_nric_written_two_ways_is_not_two_candidates(self) -> None:
+        text = "IC s8012345d on the card, S 8012345 D in the system.\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S8012345D"
+        assert "nric" not in parsed.choices
+
     def test_a_field_that_resolved_is_never_also_a_question(self) -> None:
         parsed = parse_demographics("HP 9123 4567\n")
         assert parsed.phone == "9123 4567"

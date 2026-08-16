@@ -454,20 +454,58 @@ def _normalised(field: str, raw: str) -> str | None:
     return raw
 
 
+def _dedupe_key(field: str, value: str) -> str:
+    """What makes two candidates the same identifier rather than two of them.
+
+    Only phone needs one. Every other shaped field arrives from `_normalised`
+    in a single canonical form already — an NRIC uppercased and stripped of
+    spaces, a date as ISO — so equal values are equal strings. A phone number
+    is deliberately kept as the note wrote it, because that is what the doctor
+    reads back and what goes onto the form, and the renderings of one number
+    are exactly the ones a note mixes: `+65 9123 4567`, `9123-4567`, `91234567`.
+
+    Without this the two-candidate rule fired on a single number written twice
+    — the doctor was asked to choose between one number and itself, and the
+    field stayed blank until they did. The refusal to guess is unchanged; what
+    changes is that one number is no longer mistaken for two.
+    """
+    if field != "phone":
+        return value
+    digits = re.sub(r"\D", "", value)
+    # +65 is a country code, not part of the number — but only when what
+    # remains is a whole Singapore one. `6512 3456` is a landline whose own
+    # first two digits are 65, and stripping those would leave six digits and
+    # collide with any other 65-prefixed number in the note.
+    if len(digits) == 10 and digits.startswith("65"):
+        digits = digits[2:]
+    return digits
+
+
 def _shaped_candidates(
     field: str, pattern: re.Pattern[str], text: str
 ) -> list[str]:
     """Every distinct value of `field`'s shape in `text`, ready to use.
 
     Deduplicated AFTER normalising, so `S8012345D` written once in each case
-    is one candidate rather than two. One candidate is the value; more than
+    is one candidate rather than two, and one phone number written two ways is
+    one candidate rather than a question. One candidate is the value; more than
     one is a question for the doctor; none is a genuine blank.
+
+    The FIRST rendering survives, not a canonical one: the list reads the way
+    the note reads, and the value written onto the form is the one the doctor
+    typed.
     """
     out: list[str] = []
+    seen: set[str] = set()
     for raw in _all_matches(pattern, text):
         value = _normalised(field, raw)
-        if value and value not in out:
-            out.append(value)
+        if not value:
+            continue
+        key = _dedupe_key(field, value)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
     return out
 
 
