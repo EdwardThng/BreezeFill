@@ -212,7 +212,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-12
+## Status as of 2026-08-16
 
 **560 tests pass**: 243 backend (1 skipped), 252 extension, 65 website.
 
@@ -225,6 +225,22 @@ Two threads now run in parallel, and they are independent: **the store
 submission** (below) and **charging for it** (see "Pricing, and the gate that
 does not exist yet"). Neither blocks the other — the listing can be submitted
 free, and it should be, because the review takes weeks.
+
+**2026-08-15/16: the test form and the demo-video form became one file.**
+`tests/fixtures/wizard_like.html` was reworked from two steps to three — a
+demographic step, the step the panel's own sample note answers, and a step it
+deliberately cannot — and `wizard_test_v1` was rewritten to match. It is now
+what the website's demo video is shot against as well as what exercises steps,
+entries and option questions. See "Wizard support" under Next steps for what it
+covers and why the third step is meant to come back blank.
+
+Building it turned up two things worth acting on, both recorded below in Traps:
+**a grid-layout question row is indistinguishable from a repeating-entry
+opener**, which on a print-derived insurer form would refuse every demographic
+control; and **the demographic alias table is narrower than the wordings real
+forms use** (`Contact No.` resolves, `Contact Number` does not). Neither was
+fixed — both want deciding deliberately, and the second wants the ClaimEZ dump
+before anyone guesses at what to widen it to.
 
 ### The store submission (the current thread of work)
 
