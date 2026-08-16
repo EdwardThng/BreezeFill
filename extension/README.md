@@ -17,7 +17,7 @@ from one pasted block to values in the page. No insurer portal yet, and
 RoboForm is plain HTML, so nothing there says anything about a
 framework-rendered field.
 
-242 tests pass against jsdom and a synthetic fixture. Running it in a browser
+252 tests pass against jsdom and synthetic fixtures. Running it in a browser
 has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
@@ -151,8 +151,14 @@ Singapore. Widen it by hand if you want the whole domain.
 
 ### Wizards: one step in the DOM at a time
 
-Built 2026-08-04, and **never yet run on a wizard** — no schema declares a step,
-so every form in the bank takes the single-step path below unchanged.
+Built 2026-08-04, and **never yet run on a real wizard.** One schema declares
+steps — `wizard_test_v1`, which is `internal: true` and describes
+`tests/fixtures/wizard_like.html` — so every *insurer* form in the bank still
+takes the single-step path below unchanged.
+
+Measured against that fixture on 2026-08-15, with one step rendered: whole-plan
+`locate` matches 8 of 20 and refuses; `locateSteps` matches 8 and fills. That is
+the failure the per-step guard exists for, reproduced on demand.
 
 A schema field can carry a `step`. When one does, three things change:
 
@@ -327,6 +333,19 @@ way `tests/test_redaction_corpus.py` guards clinical text. **If you add an
 identifier to the fixture, add it to `PLANTED_IDENTIFIERS` too** — the test is
 only as good as that list.
 
+`tests/fixtures/wizard_like.html` is the other one, and **no test imports it**
+— it is a browser fixture, driven by hand. Reworked 2026-08-15 into three
+steps, and it is now the form the website's demo video is shot against as well
+as the manual test page; `?demo=1` drops the dev strip. Serve it over http
+(`python3 -m http.server 8080 --directory tests/fixtures`), because an
+extension cannot touch `file://` without a permission most installs lack.
+
+It is the only thing exercising steps, repeating entries, option questions, a
+**native `<input type="date">`**, a checkbox group with an explicit
+none-of-the-above, and grid-layout labels. The header comment says what each
+part is for, which wordings resolve as demographics and which silently do not,
+and what is deliberately left out. Read it before changing a label there.
+
 ---
 
 ## Not built yet
@@ -336,8 +355,8 @@ only as good as that list.
   usually different questions, so a value under the wrong heading is obvious
   in a render and invisible in a report.
 - **An AIA ClaimEZ schema**, blocked on a learn-mode dump from a live page.
-  This is also what would switch wizard support on: `step` and `options` are
-  schema fields, and no schema sets either today.
+  This is also what would switch wizard support on for a real form: `step` and
+  `options` are schema fields, and only `wizard_test_v1` sets either.
 - **A run against a real unknown page.** The undescribed-control path is
   tested, but RoboForm is in the bank, so it exercises the described branch.
   Watch two things a test cannot see: how many of a real page's controls come
@@ -345,9 +364,11 @@ only as good as that list.
   now that *every* control is mapped rather than only the unclaimed ones.
 - **A store listing.** Distribution is the live blocker: a zip plus Developer
   Mode is not something a GP will do, and Chrome blocks self-hosted `.crx`
-  outside enterprise policy. Icons are done; a privacy policy, listing assets,
-  and dropping the never-requested `optional_host_permissions` are not. See
-  next steps in `../CLAUDE.md`.
+  outside enterprise policy. **Everything the store asks for now exists** —
+  icons, privacy policy, screenshots, promo tile, the package at `0.2.1`, and
+  `optional_host_permissions` dropped on 2026-08-09 — and what is left is the
+  listing form itself. Every string to paste is in
+  `../docs/chrome-web-store-submission.md`; the state is in `../CLAUDE.md`.
 
 ## Assumptions that jsdom cannot test
 
@@ -358,6 +379,17 @@ Every one of these fails silently or misleadingly on a real portal:
   scores 0 against every schema field, so the page could not have been filled
   by any schema. The fixture used `<label for>` and tables throughout and could
   not see it. Fixed by rule 6; the fixture now carries a grid row too.
+
+  **Rule 6 collides with entry detection, and that is unfixed (2026-08-15).**
+  A grid row's first child is a bare element holding text, which is exactly
+  what `instanceIndexOf` reads as an entry delimiter — so a grid-layout
+  question row is qualified as a repeating entry. `wizard_like.html`
+  reproduces it on two dates. It matters because `_live_sources` refuses to
+  treat a control with an `instance` as demographic, so on a page laid out
+  wholly in grid rows — RoboForm's shape, and print-derived insurer forms
+  generally — the entire demographic block is qualified and **none of it
+  fills**. Probed and confirmed on a four-control grid block. See the trap in
+  `../CLAUDE.md`; do not widen `hasDelimiter` in passing.
 
 - ~~Does opening the side panel via the action click grant `activeTab`?~~
   **Answered on Chrome 150: no.** With
