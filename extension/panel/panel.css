@@ -191,114 +191,86 @@ body {
 
 /* --------------------------------------------------------- collapsed step */
 
-.done-row {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  animation: pf-rise 0.26s var(--ease-out) both;
+/* A finished step is one hairline row on the panel's own ground.
+
+   It used to be a card — bordered box, filled green disc, chevron, and a
+   drawer holding the values under an uppercase mono caption. That made the
+   heaviest chrome on the screen stand in for the least important thing on it,
+   and it cost two clicks to change a value when going back to the step is the
+   only reason the row exists. Putting the value on the row deletes the drawer
+   rather than restyling it, and leaves the live step as the only object on
+   screen with an edge. */
+.done-rows {
+  display: flex;
+  flex-direction: column;
+  flex: none;
 }
 
-.done-head {
+.done-rows[hidden] {
+  display: none;
+}
+
+/* Under the work once there are mapped values, not above it. */
+.done-rows.below {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 2px;
+}
+
+.done-row {
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 9px;
-  padding: 10px 12px;
   background: none;
   border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 7px 2px;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   color: inherit;
-  transition: background 0.18s ease;
+  cursor: pointer;
+  transition: background 0.16s ease;
 }
 
-.done-head:hover {
-  background: #f7f7f6;
+.done-row:last-child {
+  border-bottom: 0;
 }
 
-.done-tick {
+.done-row:hover {
+  background: rgba(29, 29, 31, 0.024);
+  border-color: var(--line);
+}
+
+/* A glyph rather than a 15px filled disc: the loudest mark in the panel was
+   being spent on the least urgent fact on the screen. */
+.done-check {
   flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--confident);
-  color: #fff;
-  font-size: 9px;
-  display: grid;
-  place-items: center;
+  color: var(--confident);
+  font-size: 11px;
 }
 
-.done-label {
+.done-name {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 84px;
+}
+
+.done-value {
   flex: 1;
   min-width: 0;
-}
-
-/* The row's only text, so it reads at body size rather than as the caption of
-   a value that is no longer there. */
-.done-title {
   font-size: 13px;
-  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Not --disabled-ink: this row is expandable, so the glyph saying so is an
-   affordance rather than a disabled state, and 2.4:1 hid it. */
-.done-chevron {
+.done-go {
   flex: none;
-  font-size: 17px;
   color: var(--muted);
-  transition: transform 0.22s ease;
-}
-
-.done-row[data-open="true"] .done-chevron {
-  transform: rotate(90deg);
-}
-
-.done-body {
-  padding: 0 12px 11px 36px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  animation: pf-rise 0.22s var(--ease-out) both;
-}
-
-.done-body[hidden] {
-  display: none;
-}
-
-.done-detail {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-.done-detail-key {
-  display: block;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  /* Content, not a disabled control: this is the field's name in a finished
-     step. --disabled-ink measured 2.4:1 on it. */
-  color: var(--muted);
-}
-
-/* The pasted note, shown as it was typed. Capped rather than allowed to push
-   the review off screen — the row is a reminder of what went in, not a second
-   place to read the consultation. */
-.done-note {
-  white-space: pre-wrap;
-  max-height: 168px;
-  overflow-y: auto;
-}
-
-.done-body .link {
-  align-self: flex-start;
+  font-size: 14px;
 }
 
 /* ------------------------------------------------------------ active step */
