@@ -57,8 +57,6 @@ CASES = [
         "Tan Wei Ling S8012345D 14/03/1978 91234567\n",
         {"full_name": "Tan Wei Ling", "nric": "S8012345D",
          "dob": "1978-03-14", "phone": "91234567"},
-        xfail="a single space is not a separator, so the line is one piece and "
-              "never reads as a header",
     ),
     case(
         "space-run-address",
@@ -67,8 +65,6 @@ CASES = [
         "Blk 118 Bishan St 12 #07-21 S570118\n",
         {"full_name": "Tan Wei Ling", "nric": "S8012345D", "dob": "1978-03-14",
          "phone": "91234567", "address": "Blk 118 Bishan St 12 #07-21 S570118"},
-        xfail="same cause, and the visible symptom is the old one: the whole "
-              "line lands in the address box",
     ),
     case(
         "tabs",
@@ -76,7 +72,6 @@ CASES = [
         "Tan Wei Ling\tS8012345D\t14/03/1978\t91234567\n",
         {"full_name": "Tan Wei Ling", "nric": "S8012345D",
          "dob": "1978-03-14", "phone": "91234567"},
-        xfail="a tab is not in the separator set",
     ),
     case(
         "one-per-line",
@@ -84,8 +79,6 @@ CASES = [
         "Tan Wei Ling\nS8012345D\n14/03/1978\n91234567\n",
         {"full_name": "Tan Wei Ling", "nric": "S8012345D",
          "dob": "1978-03-14", "phone": "91234567"},
-        xfail="each line carries one field, so no line clears the two-field "
-              "header test — the block is a header, the lines are not",
     ),
     case(
         "double-space",
@@ -119,8 +112,6 @@ CASES = [
         "surname first, separated by a comma",
         "Chua, Beng Huat  S7211043C  04/11/1972\n",
         {"full_name": "Chua, Beng Huat", "nric": "S7211043C", "dob": "1972-11-04"},
-        xfail="the comma splits the name into two pieces, so there are two "
-              "name candidates and the module refuses both",
     ),
     case(
         "malay-name",
@@ -222,16 +213,12 @@ CASES = [
         "Chua Beng Huat - S7211043C - 04/11/1972 - 91112233\n",
         {"full_name": "Chua Beng Huat", "nric": "S7211043C",
          "dob": "1972-11-04", "phone": "91112233"},
-        xfail="an em dash is a separator and a hyphen is not, which is a "
-              "distinction nobody types",
     ),
     case(
         "slashes",
         "slashes as separators",
         "Chua Beng Huat / S7211043C / 04/11/1972\n",
         {"full_name": "Chua Beng Huat", "nric": "S7211043C", "dob": "1972-11-04"},
-        xfail="a slash is not a separator, and it is also what a date is "
-              "written with",
     ),
     case(
         "wrapped-without-a-separator",
@@ -266,8 +253,6 @@ CASES = [
         {"nric": "T1512345E", "dob": "2015-09-08"},
         # The number belongs to the mother, and the line says so.
         blank=("phone",),
-        xfail="the header pass does not read ownership, so the mother's phone "
-              "number is written into the patient's box",
     ),
     case(
         "insurer-unlabelled",

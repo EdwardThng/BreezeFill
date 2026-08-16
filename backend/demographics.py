@@ -28,15 +28,20 @@ number gets written onto a claim and signed. So:
   is full of dates — consultation, admission, discharge, MC — and every one of
   them is date-shaped.
 - A name is never guessed from prose. It comes from a labelled line, or from
-  the one piece of a patient header that no other field claimed — and only
-  when that header has already proved what it is by yielding two other fields,
-  and only when the words are capitalised the way a name is. Two candidate
-  names means neither.
-- One piece, one field. A header block is cut into pieces and each piece is
-  claimed once, so a value read as an NRIC cannot also be part of the address.
-  This is not tidiness: the address rule used to take the whole line, which
-  put the patient's NRIC, birth date, phone and policy number into the address
-  box on any block nobody had labelled.
+  the one gap of a patient header that no other field claimed — and only when
+  that header has already proved what it is by yielding two other fields, and
+  only when the words are capitalised the way a name is. Two candidate names
+  means neither. When the doctor has already typed the name, which in the
+  panel is always, this stops being a guess: it is a search for that name.
+- A value belongs to one field. The shapes are found first and the gaps
+  between them are what is left over, so a value read as an NRIC cannot also
+  be part of the address. This is not tidiness: the address rule used to take
+  the whole line, which put the patient's NRIC, birth date, phone and policy
+  number into the address box on any block nobody had labelled.
+- A value the note says is somebody else's is dropped before any of the above.
+  `Clinic tel`, `Next of kin contact`, `her husband S6234567C` — uniqueness is
+  what the unlabelled rule believes, and a unique value can still be the
+  clinic's.
 
 Everything found is shown back to the doctor as an editable field. Nothing
 here is a final answer; it is a first draft of one.
@@ -415,20 +420,14 @@ def _classify_segment(segment: str) -> tuple[str, str] | None:
     return None
 
 
-# The separators inside a header block, in two strengths.
+# What a doctor only ever types BETWEEN things: a middot, a pipe, a semicolon,
+# an em dash, or the two-space gap they leave when lining a block up.
 #
-# A HARD separator is one a doctor only ever types between fields: a middot, a
-# pipe, a semicolon, an em dash, or the two-space gap they leave when lining a
-# block up. Splitting on these is always safe.
-#
-# A SOFT separator is a comma or a full stop, and both appear INSIDE values as
-# freely as they appear between them — "Lorong 4, Singapore 310018" is one
-# address written with a comma in it, and every sentence of the clinical note
-# ends in a full stop. They are used only inside a line already proved to be a
-# header (see `_header_pieces`), and the address rule below puts back what they
-# cut in half.
+# This is no longer how a header is cut — the shapes locate themselves, see
+# `_shaped_spans` — and all that is left of the old separator table is this:
+# telling two names apart inside one gap. A comma is deliberately absent even
+# from that, because "Chua, Beng Huat" is one name written surname-first.
 _HARD_SEP = re.compile(r"\s*[·|;]\s*|\s{2,}|\s+—\s+")
-_SOFT_SEP = re.compile(r"\s*,\s*|\.\s+")
 
 # A name is at most this many words. A longer run of words with no digits in it
 # is a sentence, not somebody's name. Six rather than four because a Malay name
@@ -504,30 +503,133 @@ def _looks_like_a_name(text: str) -> bool:
 MIN_HEADER_FIELDS = 2
 
 
-def _split_spans(text: str, start: int, end: int, sep: re.Pattern[str]) -> list[tuple[int, int]]:
-    """`text[start:end]` cut at every separator, as spans into `text`.
+# THE ORDER IS THE OVERLAP RULE. Every finder runs over the whole line, and a
+# match that overlaps one already taken is dropped — so the most specific shape
+# has to look first. An NRIC before a policy number, a date before anything
+# that counts digits, a postal code before an insurer whose name contains one.
+_SHAPE_FINDERS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("nric", NRIC_PATTERN),
+    ("dob", DATE_IN_TEXT),
+    ("phone", PHONE_IN_TEXT),
+    ("policy_number", POLICY_PATTERN),
+    # The postal code is evidence rather than the value: the address is the
+    # words in front of it, rebuilt below.
+    ("address", POSTAL_PATTERN),
+    ("insurer", INSURER_PATTERN),
+)
 
-    Spans rather than strings, because the address rule joins neighbouring
-    pieces back together and has to give back what the note actually wrote —
-    including the comma the split removed.
+# A guessed name is at least this many words. One capitalised word is how a
+# clinical sentence starts — "Discharged", "Admitted", "Referred" — and on a
+# line that has already cleared the header test, that word sits in exactly the
+# position a name would. Two words is what a name has and a sentence opener
+# does not. Does NOT apply when the doctor's own name is being checked for:
+# they typed it, so whatever they typed is what is looked for.
+MIN_NAME_WORDS = 2
+
+# "Child: Tan Jia Hui", "Pt Rahmat bin Osman". A word and a colon in front of a
+# name introduce it and are not part of it. Only a SHORT word, so a sentence
+# ending in a colon does not get treated as a label.
+_NAME_LABEL_PREFIX = re.compile(r"^[A-Za-z]{1,12}\s*[:.\-]\s+")
+
+
+def _shaped_spans(line: str) -> list[tuple[int, int, str, str]]:
+    """Every shaped value in the line, as (start, end, field, value).
+
+    FINDING THE SHAPES FIRST IS THE WHOLE DESIGN, and it replaces splitting the
+    line on punctuation. Splitting needed a table of separators, and that table
+    was assembled from the notes this repo happened to have: it knew a middot,
+    a pipe and a two-space gap, and did not know a single space, a tab, a
+    newline or a hyphen — which is four of the commonest ways anybody types a
+    header. Worse, no table can be complete, because a single space cannot be a
+    separator (it is also what "Tan Wei Ling" is made of) while still being how
+    half of real headers are written.
+
+    An NRIC, a date, a phone number, a policy number and a postal code all
+    locate themselves. So they are found wherever they are, whatever sits
+    between them, and what is left over in the gaps is the name and the
+    address. The separator question disappears rather than being answered.
+
+    Ownership is read here so it applies to every route into this module: a
+    value with `Mother` or `Clinic` in front of it on the line is not the
+    patient's, and it was previously dropped only by the unlabelled pass.
     """
-    spans: list[tuple[int, int]] = []
-    cursor = start
-    for match in sep.finditer(text, start, end):
-        if match.start() > cursor:
-            spans.append((cursor, match.start()))
-        cursor = match.end()
-    if cursor < end:
-        spans.append((cursor, end))
-    return spans
+    taken: list[tuple[int, int, str, str]] = []
+    for field, pattern in _SHAPE_FINDERS:
+        for match in pattern.finditer(line):
+            if _owned_by_someone_else(line, match.start()):
+                continue
+            if any(s < match.end() and match.start() < e for s, e, _, _ in taken):
+                continue
+            value = _normalised(field, match.group(0).strip())
+            if not value:
+                continue
+            taken.append((match.start(), match.end(), field, value))
+    return sorted(taken)
 
 
-def _piece_spans(line: str) -> list[tuple[int, int]]:
-    """One line cut into the pieces a header block is made of."""
-    pieces: list[tuple[int, int]] = []
-    for start, end in _split_spans(line, 0, len(line), _HARD_SEP):
-        pieces.extend(_split_spans(line, start, end, _SOFT_SEP))
-    return [(s, e) for s, e in pieces if line[s:e].strip()]
+def _name_candidate(text: str) -> str:
+    """A gap between two shaped values, tidied into a possible name."""
+    return _NAME_LABEL_PREFIX.sub("", text.strip(" \t,.;:·|/-")).strip()
+
+
+def _prose_words(text: str) -> bool:
+    """Does this run of leftover text read as a sentence rather than a header?
+
+    THE GUARD THAT FINDING SHAPES FIRST MADE NECESSARY. Splitting a line on
+    punctuation could not see a value inside prose at all — `_classify_segment`
+    only ever matched a whole piece — so a clinical sentence produced no fields
+    and the header test was never reached. Finding shapes wherever they are
+    removes that accident, and "Seen 02/08/2026, sore throat. Covered by AIA."
+    then reads as a date plus an insurer: two fields, a header, and the
+    consultation date written into the box for the date of BIRTH.
+
+    A header's leftovers are names, titles, particles and the odd label. A
+    sentence's leftovers are ordinary lower-case words. So one lower-case word
+    that is not a name particle disqualifies the line — "sore", "by",
+    "attended", "with" — while "Mr Chua Beng Huat", "Sivakumar s/o Raju",
+    "Rahmat bin Osman" and a stray "Policy" all survive.
+    """
+    for word in text.split():
+        stripped = word.strip(".,;:()[]#/-")
+        if not stripped or not stripped[0].isalpha():
+            continue
+        if stripped.lower() in _NAME_PARTICLES:
+            continue
+        if stripped[0].islower():
+            return True
+    return False
+
+
+def _name_runs(gap: str) -> list[str]:
+    """A gap between two shaped values, cut where a doctor separated things.
+
+    Only on the HARD separators, and the omission is the point: a comma is not
+    one here, because "Chua, Beng Huat" is one name written surname-first and
+    cutting it produces two candidates and therefore no name. A middot between
+    two names really is two people.
+    """
+    return [
+        candidate
+        for run in _HARD_SEP.split(gap)
+        if (candidate := _name_candidate(run or ""))
+    ]
+
+
+def _known_name_in(gap: str, known: str) -> str | None:
+    """The known name, found anywhere inside a gap, as the gap wrote it.
+
+    A window over the words rather than a comparison of the whole gap: the two
+    names of "Chua Beng Huat · Tan Wei Ling" arrive as ONE gap now that the
+    line is not split before the shapes are found, and only one of them is the
+    patient.
+    """
+    words = gap.split()
+    for start in range(len(words)):
+        for end in range(min(start + MAX_NAME_WORDS, len(words)), start, -1):
+            run = " ".join(words[start:end])
+            if _same_name(run, known):
+                return _name_candidate(run)
+    return None
 
 
 def _header_pieces(
@@ -535,7 +637,7 @@ def _header_pieces(
 ) -> tuple[dict[str, str], list[str]] | None:
     """One line -> the fields it carries, or None if it is not a header line.
 
-    THE RULE THIS EXISTS FOR: a piece belongs to one field. An NRIC that has
+    THE RULE THIS EXISTS FOR: a value belongs to one field. An NRIC that has
     been recognised as an NRIC is not also part of the address, and neither is
     the date of birth, the phone number or the policy number. Before this, the
     address was "the line that has a postal code in it", so a header block
@@ -550,69 +652,144 @@ def _header_pieces(
     - The name is not guessed when it does not have to be. The doctor types it
       at step 1, BEFORE pasting anything — it is the one value the panel
       insists on, because redaction cannot find a name by shape — so when
-      `known_name` is given this only CHECKS which piece is that name. No
-      match, no name, whatever the piece looks like. Only a caller that has no
-      name to check against falls back to reading one out of the block, and
-      then only from capitalised words on a line that has proved what it is.
+      `known_name` is given this only CHECKS which gap is that name. No match,
+      no name, whatever the gap looks like. Only a caller that has no name to
+      check against falls back to reading one, and then only from two or more
+      capitalised words on a line that has proved what it is.
 
     Returns the fields found and the name candidates, or None for prose.
     """
-    spans = _piece_spans(line)
-    classified: list[tuple[int, int, str, str] | None] = []
+    spans = _shaped_spans(line)
     found: dict[str, str] = {}
-
-    for start, end in spans:
-        piece = line[start:end]
-        result = _classify_segment(piece)
-        if result is None or result[0] == "full_name":
-            # Kept as a hole rather than dropped: the address rule walks back
-            # over these, and the name is chosen from among them.
-            classified.append(None)
-            continue
-        field, value = result
-        classified.append((start, end, field, value))
+    for _, _, field, value in spans:
         found.setdefault(field, value)
 
     if len(found) < MIN_HEADER_FIELDS:
         return None
 
-    # The address is the run ENDING at the piece that carries the postal code,
-    # extended back over neighbouring pieces that no field claimed and that
-    # carry a digit. That is what puts "18 Toa Payoh Lorong 4" back together
-    # with "Singapore 310018" after the comma split — and what stops the walk
-    # at the name, which has no digits in it.
-    for index, item in enumerate(classified):
-        if item is None or item[2] != "address":
+    # The gaps: everything the shapes did not claim, in order.
+    gaps: list[tuple[int, int]] = []
+    cursor = 0
+    for start, end, _, _ in spans:
+        if start > cursor:
+            gaps.append((cursor, start))
+        cursor = end
+    if cursor < len(line):
+        gaps.append((cursor, len(line)))
+
+    # The address is the postal code plus the words leading up to it, which is
+    # the one field whose value is bigger than the shape that found it. The gap
+    # in front is taken whole when it carries a digit — a street number, a unit
+    # number — and left alone when it does not, because a gap of plain words
+    # before a postal code is a name standing next to an address rather than
+    # part of one.
+    for index, (start, end, field, _) in enumerate(spans):
+        if field != "address":
             continue
-        start, end = item[0], item[1]
-        back = index - 1
-        while back >= 0 and classified[back] is None:
-            piece_start, piece_end = spans[back]
-            if not re.search(r"\d", line[piece_start:piece_end]):
-                break
-            start = piece_start
-            back -= 1
-        found["address"] = line[start:end].strip(" ,.;·|")
+        previous_end = spans[index - 1][1] if index else 0
+        gap = line[previous_end:start]
+        if re.search(r"\d", gap):
+            address_start = previous_end + (len(gap) - len(gap.lstrip(" \t,.;·|")))
+            # A gap that opens with the name the doctor typed is a name and an
+            # address run together, so the address begins after the name.
+            trimmed = line[address_start:start].strip()
+            for length in range(len(trimmed.split()), 0, -1):
+                head = " ".join(trimmed.split()[:length])
+                if known_name and _same_name(head, known_name):
+                    address_start += len(head)
+                    break
+            found["address"] = line[address_start:end].strip(" \t,.;·|")
+            gaps = [g for g in gaps if not (g[0] <= previous_end and g[1] >= start)]
         break
 
-    # Whatever is left, once every other field has taken its own piece.
+    # A line whose leftovers read as a sentence is a sentence, whatever shapes
+    # it happens to contain.
     #
+    # The text before the FIRST value is exempt, and only that. It is the name
+    # slot — a header opens with the patient — and a doctor who types the whole
+    # header in lower case has still typed a header. Everything after the first
+    # value is where a sentence gives itself away: "Seen 02/08/2026, sore
+    # throat. Covered by AIA." puts a date and an insurer on one line, and the
+    # words between them are what say it is not a header.
+    if any(_prose_words(line[s:e]) for s, e in gaps if s > 0):
+        return None
+
     # With a name to check against this is a lookup and cannot be wrong. The
-    # other piece of "Chua Beng Huat · Tan Wei Ling · S7211043C" is somebody
+    # second name in "Chua Beng Huat · Tan Wei Ling · S7211043C" is somebody
     # else — a next of kin, a referring doctor — and stays unclaimed, which is
     # exactly what could not be told apart without the name in hand.
-    leftovers = [
-        piece
-        for (s, e), item in zip(spans, classified)
-        if item is None and not re.search(r"\d", (piece := line[s:e].strip(" ,.;·|")))
-    ]
     if known_name:
-        return found, [p for p in leftovers if _same_name(p, known_name)]
+        hits = [found_ for s, e in gaps if (found_ := _known_name_in(line[s:e], known_name))]
+        return found, hits[:1]
 
-    # No name to check against: read one, under every fence in
-    # `_looks_like_a_name`. Exactly one candidate is a name; two is a question
-    # this cannot answer, so it answers neither.
-    return found, [p for p in leftovers if _looks_like_a_name(p)]
+    return found, [
+        candidate
+        for s, e in gaps
+        for candidate in _name_runs(line[s:e])
+        if not re.search(r"\d", candidate)
+        and _looks_like_a_name(candidate)
+        and len(candidate.split()) >= MIN_NAME_WORDS
+    ]
+
+
+def _header_block(
+    lines: list[str], known_name: str = ""
+) -> tuple[dict[str, str], list[str]] | None:
+    """A header written one value per line, which no single line can prove.
+
+    `_header_pieces` asks each line for two different fields before it believes
+    any of them, and that test is what keeps a sentence of clinical text from
+    being read as a block. A header laid out down the page rather than across
+    it fails that test on every line while being the least ambiguous layout
+    there is — the block says everything the line cannot.
+
+    So the count is taken over the block, and the price of reading a line that
+    proves nothing on its own is that EVERY line in the block must be either a
+    value and nothing else, or a name and nothing else. One line of prose
+    disqualifies the whole block. A note's own paragraphs are then never
+    blocks: "Seen 02/08/2026. 3 days sore throat." carries a date, but it also
+    carries words, and a header does not.
+    """
+    per_line: list[tuple[list[tuple[int, int, str, str]], str]] = []
+    found: dict[str, str] = {}
+
+    for line in lines:
+        spans = _shaped_spans(line)
+        leftover = line
+        for start, end, _, _ in reversed(spans):
+            leftover = leftover[:start] + leftover[end:]
+        leftover = _name_candidate(leftover)
+        if spans and leftover:
+            return None  # a value with words around it: prose, or a label
+        if not spans and not _looks_like_a_name(leftover):
+            return None
+        per_line.append((spans, leftover))
+        for _, _, field, value in spans:
+            found.setdefault(field, value)
+
+    if len(found) < MIN_HEADER_FIELDS:
+        return None
+
+    names = [leftover for spans, leftover in per_line if not spans and leftover]
+    if known_name:
+        return found, [n for n in names if _same_name(n, known_name)]
+    return found, [n for n in names if len(n.split()) >= MIN_NAME_WORDS]
+
+
+def _blocks(text: str) -> list[list[str]]:
+    """Runs of consecutive non-empty lines. A blank line ends a block, which is
+    what separates a header from the note underneath it."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in _logical_lines(text):
+        if line.strip():
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
 
 
 def _parse_patient_line(value: str, known_name: str = "") -> dict[str, tuple[str, str]]:
@@ -1129,6 +1306,20 @@ def parse_demographics(text: str, known_name: str = "") -> ParsedDemographics:
             record(field, value, "header-line")
         if len(names) == 1:
             record("full_name", names[0], "header-line")
+
+    # ...and the same header laid out down the page instead of across it, which
+    # no single line of can prove.
+    for block in _blocks(text):
+        if len(block) < 2:
+            continue
+        header = _header_block(block, known_name)
+        if header is None:
+            continue
+        fields, names = header
+        for field, value in fields.items():
+            record(field, value, "header-block")
+        if len(names) == 1:
+            record("full_name", names[0], "header-block")
 
     # Labels sitting mid-line, which the line-anchored rule above cannot see.
     # Runs after so an explicitly labelled line always wins, and only ever
