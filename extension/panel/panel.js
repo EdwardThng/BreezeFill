@@ -944,6 +944,9 @@ function renderRow(row) {
 
   const wrap = document.createElement("div");
   wrap.className = "review-row" + (pending ? " pending" : "") + (confirmed ? " confirmed" : "");
+  // What renderRows matches against to tell a row that has just appeared from
+  // one that was already on screen.
+  wrap.dataset.fieldId = row.field_id;
 
   const badge = document.createElement("div");
   badge.className = `badge ${row.status}`;
@@ -1013,10 +1016,14 @@ function renderRow(row) {
   input.addEventListener("input", () => {
     state.edited.set(row.field_id, input.type === "checkbox" ? input.checked : input.value);
     state.confirmed.add(row.field_id);
-    updateFillButton();
     wrap.classList.remove("pending");
     wrap.classList.add("confirmed");
+    updateReviewMeta();
   });
+  // These rows carry no <label> at all — the question is a plain <div> above
+  // the control — so a screen reader reaching the input announces the value
+  // and nothing about what it is being asked. The question is the name.
+  input.setAttribute("aria-label", row.label);
   wrap.append(input);
 
   // The value in words, kept in step with the box above it. A doctor
@@ -1042,8 +1049,16 @@ function renderRow(row) {
     button.textContent = "Confirm";
     button.addEventListener("click", () => {
       state.confirmed.add(row.field_id);
-      renderRows();
-      updateFillButton();
+      // Mutated rather than re-rendered. Rebuilding the list replayed every
+      // row's entrance animation and destroyed the button holding focus — one
+      // click, and the doctor's place in a twenty-field claim was gone. The
+      // row's own state is the only thing that changed, so it is the only
+      // thing touched; the count, bar and Fill button follow underneath.
+      wrap.classList.remove("pending");
+      wrap.classList.add("confirmed");
+      button.remove();
+      updateReviewMeta();
+      focusAfterConfirm(wrap);
     });
     wrap.append(button);
   }
@@ -1096,7 +1111,18 @@ function showStep(key) {
   }
 
   const done = $("done-rows");
-  done.replaceChildren(...STEPS.slice(0, index).map((s) => doneRow(s)));
+  // Rebuilt every time, deliberately — a done row reads the inputs at render
+  // time, which is what makes it a record of the step as it was finished. But
+  // a row that was already standing there has not entered, so advancing to the
+  // last step must not replay the entrance of the three rows behind it.
+  const standing = new Set([...done.children].map((el) => el.dataset.key));
+  done.replaceChildren(
+    ...STEPS.slice(0, index).map((s) => {
+      const el = doneRow(s);
+      if (standing.has(s.key)) el.classList.add("no-enter");
+      return el;
+    })
+  );
 
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
@@ -1140,6 +1166,7 @@ function doneRow(step) {
   const wrap = document.createElement("div");
   wrap.className = "done-row";
   wrap.dataset.open = "false";
+  wrap.dataset.key = step.key;
 
   const head = document.createElement("button");
   head.type = "button";
@@ -1216,27 +1243,74 @@ function updateProgress() {
   if (index >= 0) $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
 }
 
-function renderRows() {
-  const container = $("rows");
-  container.replaceChildren(...state.rows.map(renderRow));
-
+/**
+ * The readiness line, the bar and the Fill button — everything about the
+ * review except the rows themselves.
+ *
+ * Split out of renderRows so that confirming one value can move all three
+ * WITHOUT rebuilding the list. It is also called from the input handler, which
+ * is what the markup beside the bar has always claimed ("only a confirm click
+ * or an edit moves it") and what it did not actually do: editing a value
+ * updated the Fill button and left the bar and the count behind.
+ */
+function updateReviewMeta() {
   const pending = state.rows.filter(
     (r) => r.needs_review && hasValue(r) && !state.confirmed.has(r.field_id)
   ).length;
-  const summary = pending
+  $("review-summary").textContent = pending
     ? `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`
     : `${readyRows().length} of ${state.rows.length} fields ready to write. The rest are for you to complete by hand.`;
-  $("review-summary").textContent = summary;
 
   // Readiness as a bar as well as a count. It only ever moves on a confirm
   // click or an edit — nothing advances it on its own, which is the point.
+  //
+  // Scaled, not resized. `width` is a layout property, so every frame of this
+  // transition re-laid-out and repainted the review list underneath it.
   const needing = state.rows.filter((r) => r.needs_review && hasValue(r)).length;
   const done = needing - pending;
   const bar = $("review-progress");
-  if (bar) bar.style.width = `${needing === 0 ? 100 : Math.round((done / needing) * 100)}%`;
+  if (bar) bar.style.transform = `scaleX(${needing === 0 ? 1 : done / needing})`;
 
   updateFillButton();
   updateProgress();
+}
+
+function renderRows() {
+  const container = $("rows");
+  // Which rows were already on screen before this render. A row that was here
+  // has not entered, so it must not play an entrance: without this, every row
+  // in the list re-ran pf-rise whenever any one of them changed, and on a
+  // twenty-field claim confirming a single value made the whole screen move.
+  const seen = new Set([...container.children].map((el) => el.dataset.fieldId));
+  container.replaceChildren(
+    ...state.rows.map((row) => {
+      const el = renderRow(row);
+      if (seen.has(row.field_id)) el.classList.add("no-enter");
+      return el;
+    })
+  );
+  updateReviewMeta();
+}
+
+/**
+ * Where the keyboard goes when a Confirm button removes itself.
+ *
+ * Nowhere, unless it is put somewhere: the focused element has just left the
+ * document, so the browser drops focus to <body> and the next Tab starts again
+ * from the top of the panel — which on a long claim means the doctor loses
+ * their place on every single confirm. The next value waiting to be confirmed
+ * is what they were going to press anyway, and Fill is where they end up once
+ * this was the last one.
+ */
+function focusAfterConfirm(wrap) {
+  const remaining = [...$("rows").querySelectorAll("button.confirm")];
+  const next =
+    remaining.find(
+      (b) => wrap.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+    ) || remaining[0];
+  const fill = $("fill-btn");
+  if (next) next.focus();
+  else if (!fill.disabled) fill.focus();
 }
 
 function updateFillButton() {
