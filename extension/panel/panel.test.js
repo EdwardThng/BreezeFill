@@ -1647,3 +1647,74 @@ describe("choosing between candidates", () => {
     expect($("found-summary").textContent).not.toContain("to choose");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Confirming a value, without rebuilding the screen it is on
+// ---------------------------------------------------------------------------
+//
+// Confirming used to call renderRows, which replaced every row in the list.
+// Nothing about `state` changed shape, so nothing that reads state could see
+// it — and both consequences were invisible to the suite that existed. Every
+// row re-ran its entrance animation, so confirming one value made the whole
+// screen move; and the Confirm button holding focus was destroyed, so focus
+// fell to <body> and the next Tab started again at the top of the panel. On a
+// twenty-field claim that is once per value.
+
+describe("confirming a value", () => {
+  const TWO_DATES = [
+    ADMISSION_DATE,
+    { ...ADMISSION_DATE, field_id: "date_of_discharge", label: "Date of discharge" },
+  ];
+
+  test("leaves every other row exactly where it was", async () => {
+    await mapWith(TWO_DATES);
+    const before = [...$("rows").children];
+
+    before[0].querySelector("button.confirm").click();
+
+    // Node identity, not markup equality. A rebuilt row is a NEW node, and a
+    // new node re-runs pf-rise however identical its HTML.
+    expect([...$("rows").children]).toEqual(before);
+  });
+
+  test("still moves the count and the bar", async () => {
+    // The rows are mutated rather than re-rendered now, so the readiness
+    // meta has to be moved deliberately. It used to ride along on the rebuild.
+    await mapWith(TWO_DATES);
+
+    $("rows").children[0].querySelector("button.confirm").click();
+
+    expect($("review-summary").textContent).toContain("1 value still to confirm");
+    expect($("review-progress").style.transform).toBe("scaleX(0.5)");
+  });
+
+  test("an edit moves the bar too, which is what the panel has always claimed", async () => {
+    // The markup beside the bar says only a confirm click or an edit advances
+    // it. Editing used to update the Fill button and nothing else.
+    await mapWith(TWO_DATES);
+
+    const input = $("rows").children[0].querySelector("textarea");
+    input.value = "07/03/2026";
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect($("review-progress").style.transform).toBe("scaleX(0.5)");
+  });
+
+  test("hands the keyboard to the next value waiting", async () => {
+    await mapWith(TWO_DATES);
+    const rows = [...$("rows").children];
+
+    rows[0].querySelector("button.confirm").click();
+
+    expect(document.activeElement).toBe(rows[1].querySelector("button.confirm"));
+  });
+
+  test("hands it to Fill once there is no next", async () => {
+    await mapWith([ADMISSION_DATE]);
+
+    $("rows").querySelector("button.confirm").click();
+
+    expect(document.activeElement).toBe($("fill-btn"));
+    expect($("fill-btn").disabled).toBe(false);
+  });
+});
