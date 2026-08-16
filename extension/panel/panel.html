@@ -267,7 +267,10 @@
             its own — only a confirm click or an edit moves it.
           -->
           <div class="progress" aria-hidden="true">
-            <i id="review-progress" style="width: 0%"></i>
+            <!-- Empty at rest, and the stylesheet says so: the bar is scaled
+                 rather than resized, so an inline width here would pin it to
+                 nothing and the scale would never show. -->
+            <i id="review-progress"></i>
           </div>
           <div id="rows"></div>
 
