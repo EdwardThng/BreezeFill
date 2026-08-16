@@ -59,6 +59,41 @@
       <span class="step-counter" id="step-counter">Step 1 of 4</span>
     </header>
 
+    <!--
+      The consultation, kept beside the values that came out of it.
+
+      Checking a mapped value is a comparison between two things — what the
+      model proposed and what the note actually said — and the panel showed one
+      at a time, so the doctor either held the other in their head or scrolled
+      back for it.
+
+      A SIBLING of the scroller, not sticky inside it. Sticky pinned the pane
+      at the scroll container's padding edge, so rows kept sliding through the
+      strip above it — a seam that read as a rendering fault. A sibling cannot
+      have one. It is also a third of the panel by flex rather than a fixed
+      height, so it stays a third whatever size the doctor drags the panel to.
+
+      The mark follows the row being read. `MappedField.source` has carried the
+      sentence each value came from since the first version of mapping.py — the
+      model is told to quote it verbatim — and the panel discarded it until now.
+    -->
+    <div class="notepane" id="notepane" hidden>
+      <div class="notepane-head">
+        <span class="notepane-title">Consultation</span>
+        <span class="notepane-state" id="note-following"></span>
+        <button
+          class="notepane-toggle"
+          id="note-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="note-text"
+        >
+          Hide
+        </button>
+      </div>
+      <pre class="notepane-text" id="note-text"></pre>
+    </div>
+
     <div class="scroll" id="scroll">
       <!-- Finished steps collapse into one-line rows here, newest last. -->
       <div id="done-rows"></div>
@@ -280,38 +315,6 @@
                  rather than resized, so an inline width here would pin it to
                  nothing and the scale would never show. -->
             <i id="review-progress"></i>
-          </div>
-
-          <!--
-            The consultation, kept beside the values that came out of it.
-
-            Checking a mapped value is a comparison between two things — what
-            the model proposed and what the note actually said — and the panel
-            showed one at a time, so the doctor either held the other in their
-            head or scrolled back for it. It is STICKY rather than merely
-            present: a twenty-field claim is taller than the panel, and a
-            reference that scrolls away is the same trip by another route.
-
-            The highlight follows the row being read. `MappedField.source` has
-            carried the sentence each value came from since the first version
-            of mapping.py — the model is told to quote it verbatim — and the
-            panel has been discarding it.
-          -->
-          <div class="notepane" id="notepane">
-            <div class="notepane-head">
-              <span class="notepane-title">Consultation</span>
-              <span class="notepane-state" id="note-following"></span>
-              <button
-                class="notepane-toggle"
-                id="note-toggle"
-                type="button"
-                aria-expanded="true"
-                aria-controls="note-text"
-              >
-                Hide
-              </button>
-            </div>
-            <pre class="notepane-text" id="note-text"></pre>
           </div>
 
           <div id="rows"></div>
