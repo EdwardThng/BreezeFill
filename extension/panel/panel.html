@@ -281,6 +281,39 @@
                  nothing and the scale would never show. -->
             <i id="review-progress"></i>
           </div>
+
+          <!--
+            The consultation, kept beside the values that came out of it.
+
+            Checking a mapped value is a comparison between two things — what
+            the model proposed and what the note actually said — and the panel
+            showed one at a time, so the doctor either held the other in their
+            head or scrolled back for it. It is STICKY rather than merely
+            present: a twenty-field claim is taller than the panel, and a
+            reference that scrolls away is the same trip by another route.
+
+            The highlight follows the row being read. `MappedField.source` has
+            carried the sentence each value came from since the first version
+            of mapping.py — the model is told to quote it verbatim — and the
+            panel has been discarding it.
+          -->
+          <div class="notepane" id="notepane">
+            <div class="notepane-head">
+              <span class="notepane-title">Consultation</span>
+              <span class="notepane-state" id="note-following"></span>
+              <button
+                class="notepane-toggle"
+                id="note-toggle"
+                type="button"
+                aria-expanded="true"
+                aria-controls="note-text"
+              >
+                Hide
+              </button>
+            </div>
+            <pre class="notepane-text" id="note-text"></pre>
+          </div>
+
           <div id="rows"></div>
 
           <!--
