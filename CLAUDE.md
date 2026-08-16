@@ -2242,9 +2242,18 @@ port of `calibrate_overlay.py --proof`. Same reasoning as the overlay forms:
 adjacent controls are usually different questions, and a misplaced value is
 obvious in a render and invisible in a report.
 
-**8. SG-region inference, before any real patient note.** Both calls run
-`claude-opus-5` on the first-party API, which is not SG-region. Needs Bedrock
-`ap-southeast-1`. Until then: synthetic notes only.
+**8. SG-region inference.** Both calls run `claude-opus-5` on the first-party
+API, which is not SG-region, and workspace geo — where data sits at rest — is
+US-only and fixed at workspace creation. Needs Bedrock `ap-southeast-1`, where
+the region comes from the endpoint rather than a parameter.
+
+This item used to read "before any real patient note", and **that is no longer
+the rule** — the owner put real notes in scope on 2026-08-06 and the privacy
+policy discloses the out-of-region transfer instead of forbidding the data. See
+the guardrail. What is still true is that the disclosure names a PDPA
+comparable-protection agreement that **is not in place**, so this remains the
+item that would let that paragraph be rewritten rather than merely honest. Repo
+fixtures stay synthetic regardless.
 
 **9. Smaller, worth doing once the pilot has pasted real CMS exports.** The
 label synonyms in `demographics.py` are a guess at what ClinicAssist emits.
