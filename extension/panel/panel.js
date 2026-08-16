@@ -127,8 +127,16 @@ O/E tonsils enlarged with exudate, tender cervical nodes.
 Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
 First consult for this episode 31/07/2026. MC 2 days.`;
 
+// Whether to animate a scroll. Read once: the panel is not open long enough
+// for the setting to change under it, and asking per frame is wasteful.
+const REDUCED_MOTION = globalThis.matchMedia
+  ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
+  : { matches: false };
+
 const state = {
   forms: [],
+  /** field_id of the row the note pane is currently marking. */
+  reading: null,
   /** Whether the last /forms call failed, as opposed to returning nothing. */
   formsFailed: false,
   /** Review rows from POST /map. */
@@ -952,8 +960,12 @@ function renderRow(row) {
   // value came from. Both events, because both are how a doctor arrives at a
   // row: the mouse, and the Tab key — and after a confirm click, focus lands
   // on the next row's button, so the highlight follows the work by itself.
-  wrap.addEventListener("click", () => paintNote(row));
-  wrap.addEventListener("focusin", () => paintNote(row));
+  const read = () => {
+    state.reading = row.field_id;
+    markNote(row);
+  };
+  wrap.addEventListener("click", read);
+  wrap.addEventListener("focusin", read);
 
   const badge = document.createElement("div");
   badge.className = `badge ${row.status}`;
@@ -1032,6 +1044,20 @@ function renderRow(row) {
   // and nothing about what it is being asked. The question is the name.
   input.setAttribute("aria-label", row.label);
   wrap.append(input);
+
+  // The inference, in words, where it is being signed off.
+  //
+  // The pane above marks the sentence this was worked out FROM, and that
+  // sentence does not contain the answer — so without this the doctor is shown
+  // a citation that does not match the value and left to reconstruct the step
+  // themselves. Only inferred rows carry it; assemble_claim drops it for every
+  // other status rather than trusting the prompt.
+  if (row.reasoning) {
+    const why = document.createElement("p");
+    why.className = "derived";
+    why.textContent = row.reasoning;
+    wrap.append(why);
+  }
 
   // The value in words, kept in step with the box above it. A doctor
   // correcting a swapped date is the whole point of this row, and they must be
@@ -1272,62 +1298,131 @@ function updateReviewMeta() {
 }
 
 /**
- * Put the consultation in the docked pane, with one sentence marked.
+ * Build the consultation once, with every cited sentence already a span.
  *
  * `row.source` is the snippet the model is told to quote VERBATIM out of the
- * notes, and it has been on every mapped row since the first version of
- * mapping.py — the panel simply never rendered it. So locating it here is an
- * exact substring search and nothing else.
+ * notes, so locating it is an exact substring search and nothing else. A fuzzy
+ * match would draw a mark around a sentence the value did not come from, on
+ * the one screen whose whole job is showing the doctor where a value came
+ * from — a wrong citation rendered exactly like a right one.
  *
- * That refusal is the point rather than a shortcut. A fuzzy match would draw a
- * highlight around a sentence the value did not come from, on the one screen
- * whose entire job is showing the doctor where a value came from — a wrong
- * citation, presented with the same confidence as a right one, which is the
- * failure this product is built to avoid everywhere else. When the quote is
- * not found the pane marks nothing and says which case it is.
- *
- * Called with null to show the note whole, which is what a fresh mapping and
- * a row nobody has touched yet both want.
+ * Built once rather than on every mark. Rebuilding the pane to move the mark
+ * reset its scrollTop on every frame of a scroll, which is what made following
+ * the rows stutter; now only a class moves.
  */
-function paintNote(row) {
+function buildNote() {
   const pre = $("note-text");
-  const state = $("note-following");
   if (!pre) return;
-
   const text = $("paste").value;
-  const source = row && typeof row.source === "string" ? row.source.trim() : "";
-  const at = source ? text.indexOf(source) : -1;
 
+  const spans = [];
+  const seen = new Set();
+  for (const row of state.rows) {
+    const src = typeof row.source === "string" ? row.source.trim() : "";
+    if (!src || seen.has(src)) continue;
+    const at = text.indexOf(src);
+    if (at < 0) continue;
+    seen.add(src);
+    spans.push({ at, end: at + src.length, src });
+  }
+  spans.sort((a, b) => a.at - b.at);
+
+  const parts = [];
+  let cursor = 0;
+  for (const span of spans) {
+    // Two citations claiming overlapping text: the earlier one keeps it. A
+    // nested span would mark a fragment of somebody else's sentence.
+    if (span.at < cursor) continue;
+    if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
+    const el = document.createElement("span");
+    el.className = "quote";
+    el.dataset.src = span.src;
+    el.textContent = text.slice(span.at, span.end);
+    parts.push(el);
+    cursor = span.end;
+  }
+  if (cursor < text.length) parts.push(document.createTextNode(text.slice(cursor)));
+  pre.replaceChildren(...parts);
+}
+
+/**
+ * Emphasise the value inside the sentence that carries it.
+ *
+ * Only for a quoted value, because only a quoted value is in there. Rewrites
+ * one span's children and never the pane, so the scroll position is untouched.
+ */
+function setHit(el, hit) {
+  const text = el.dataset.src;
+  const at = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
   if (at < 0) {
-    pre.replaceChildren(document.createTextNode(text));
-    // Three cases, and they are not the same. Nothing is being read; the model
-    // answered from something it did not quote; or the value never came from
-    // the note at all — a demographic copied across, or a blank.
-    state.textContent = !row
-      ? ""
-      : source
-        ? "quote not found in the note"
-        : "not taken from the note";
+    el.textContent = text;
     return;
   }
-
-  const mark = document.createElement("mark");
-  mark.textContent = text.slice(at, at + source.length);
-  pre.replaceChildren(
+  const strong = document.createElement("b");
+  strong.className = "hit";
+  strong.textContent = text.slice(at, at + hit.length);
+  el.replaceChildren(
     document.createTextNode(text.slice(0, at)),
-    mark,
-    document.createTextNode(text.slice(at + source.length))
+    strong,
+    document.createTextNode(text.slice(at + hit.length))
   );
-  state.textContent = row.label;
+}
 
-  // Not scrollIntoView: it scrolls every scrollable ancestor, and this pane is
-  // sticky inside a panel that is itself scrolling — so the panel would jump
-  // while the doctor is reading it. Moving the pane's own scrollTop moves
-  // exactly the one thing that should move.
-  pre.scrollTop = Math.max(
-    0,
-    mark.offsetTop - pre.clientHeight / 2 + mark.offsetHeight / 2
-  );
+/**
+ * Mark the sentence the row being read came from.
+ *
+ * Two marks, because there are two relationships. An EXTRACTED value is in its
+ * sentence, so the sentence is filled and the value emphasised inside it — the
+ * match is shown rather than asserted. An INFERRED one is not: "J03.90"
+ * appears nowhere in "Dx acute tonsillitis." Filling that sentence identically
+ * makes the most dangerous row on the screen read as a wrong citation, so it
+ * gets an outline, the header says the value was worked out from it, and the
+ * row itself carries the model's own sentence explaining the step.
+ *
+ * Called with null to leave the note unmarked.
+ */
+function markNote(row) {
+  const pre = $("note-text");
+  const state_line = $("note-following");
+  if (!pre) return;
+
+  const source = row && typeof row.source === "string" ? row.source.trim() : "";
+  const reasoned = Boolean(row) && row.status === "inferred";
+  const value = row && typeof row.value === "string" ? row.value.trim() : "";
+  let target = null;
+
+  for (const el of pre.querySelectorAll(".quote")) {
+    const on = Boolean(source) && el.dataset.src === source;
+    el.classList.toggle("on", on);
+    el.classList.toggle("quoted", on && !reasoned);
+    el.classList.toggle("reasoned", on && reasoned);
+    // No hit for an inference: the value is not in there to emphasise, and
+    // guessing which words produced it is the fuzzy match this refuses.
+    setHit(el, on && !reasoned ? value : null);
+    if (on) target = el;
+  }
+
+  // Three silent cases and they are not the same thing. Nothing is being read;
+  // the model answered from something it did not quote; or the value never
+  // came from the note at all — a demographic copied across, or a blank.
+  state_line.textContent = !row
+    ? ""
+    : !target
+      ? source
+        ? "quote not found in the note"
+        : "not taken from the note"
+      : reasoned
+        ? `${row.label} — worked out from this`
+        : row.label;
+
+  if (!target) return;
+  // Only when there is somewhere to go. A note that fits needs no moving, and
+  // nudging it clipped the first line for nothing.
+  if (pre.scrollHeight <= pre.clientHeight) return;
+  pre.scrollTo({
+    top: Math.max(0, target.offsetTop - pre.clientHeight / 2 + target.offsetHeight / 2),
+    behavior: REDUCED_MOTION.matches ? "auto" : "smooth",
+  });
 }
 
 /** Fold the note away without losing it. Session-only, like everything here. */
@@ -1336,8 +1431,33 @@ function toggleNote() {
   const button = $("note-toggle");
   const showing = pre.hidden;
   pre.hidden = !showing;
+  $("notepane").dataset.folded = String(!showing);
   button.textContent = showing ? "Hide" : "Show";
   button.setAttribute("aria-expanded", String(showing));
+}
+
+/**
+ * Follow the rows as the doctor scrolls them.
+ *
+ * The LAST row to have crossed the reading line, not the nearest one to it.
+ * Nearest was wrong in a way that felt like a bug: the moment the doctor was
+ * halfway down a row, the next row's top became the closer edge and took over,
+ * so the mark ran a row ahead of the eye the whole way down the list.
+ */
+function followScroll() {
+  const container = $("scroll");
+  const rows = $("rows");
+  if (!container || !rows || !rows.children.length) return;
+
+  const line = container.getBoundingClientRect().top + 28;
+  let best = rows.children[0];
+  for (const el of rows.children) {
+    if (el.getBoundingClientRect().top <= line) best = el;
+  }
+  const id = best.dataset.fieldId;
+  if (id === state.reading) return;
+  state.reading = id;
+  markNote(state.rows.find((r) => r.field_id === id) || null);
 }
 
 function renderRows() {
@@ -1354,9 +1474,15 @@ function renderRows() {
       return el;
     })
   );
-  // The note whole, unmarked, until the doctor reads a row. Marking one before
-  // they have looked at anything would claim they are checking it.
-  paintNote(null);
+  // The pane exists once there are values to check against it.
+  const pane = $("notepane");
+  if (pane) pane.hidden = state.rows.length === 0;
+  buildNote();
+  // Already marked, on the first value that needs checking. Marking nothing
+  // until the doctor happened to click a row made the whole thing invisible.
+  const first = state.rows.find((r) => r.needs_review && hasValue(r)) || state.rows[0];
+  state.reading = first ? first.field_id : null;
+  markNote(first || null);
   updateReviewMeta();
 }
 
@@ -1752,6 +1878,8 @@ $("check-next").addEventListener("click", () => {
   scanPage();
 });
 $("note-toggle").addEventListener("click", toggleNote);
+// Passive: this only reads geometry and never cancels the scroll.
+$("scroll").addEventListener("scroll", followScroll, { passive: true });
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen

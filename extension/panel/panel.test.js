@@ -1760,7 +1760,7 @@ async function mapWithNote(fields, note = NOTE) {
   return panel;
 }
 
-const marked = () => $("note-text").querySelector("mark");
+const marked = () => $("note-text").querySelector(".quote.on");
 
 describe("the note pane", () => {
   test("shows the consultation as it was pasted", async () => {
@@ -1769,13 +1769,18 @@ describe("the note pane", () => {
     expect($("note-text").textContent).toBe(NOTE);
   });
 
-  test("marks nothing until a row is read", async () => {
-    // Marking one before the doctor has looked at anything would claim they
-    // are checking it.
-    await mapWithNote([QUOTED]);
+  test("opens already marked, on the first value that needs checking", async () => {
+    // It used to mark nothing until the doctor happened to click a row, which
+    // made the whole pane look like it was not working. A mark is a pointer,
+    // not a claim that anything has been checked.
+    await mapWithNote([
+      { ...QUOTED, field_id: "settled", needs_review: false },
+      { ...QUOTED, field_id: "icd", label: "ICD-10 code", value: "J03.90",
+        status: "inferred", needs_review: true },
+    ]);
 
-    expect(marked()).toBeNull();
-    expect($("note-following").textContent).toBe("");
+    expect(marked().textContent).toBe("Dx acute tonsillitis.");
+    expect($("note-following").textContent).toBe("ICD-10 code — worked out from this");
   });
 
   test("marks the sentence a value came from, and names the row", async () => {
@@ -1786,6 +1791,54 @@ describe("the note pane", () => {
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
     expect($("note-text").textContent).toBe(NOTE);
     expect($("note-following").textContent).toBe(QUOTED.label);
+  });
+
+  test("an extracted value is filled, and shown inside its own sentence", async () => {
+    await mapWithNote([QUOTED]);
+
+    $("rows").children[0].click();
+    const mark = marked();
+
+    expect(mark.classList.contains("quoted")).toBe(true);
+    expect(mark.classList.contains("reasoned")).toBe(false);
+    // The value emphasised where it sits, so the match is shown not asserted.
+    expect(mark.querySelector(".hit").textContent).toBe("acute tonsillitis");
+  });
+
+  test("an inferred value is outlined instead, and never claims to be in there", async () => {
+    // "J03.90" appears nowhere in "Dx acute tonsillitis." Filling that
+    // sentence the same way makes the most dangerous row on the screen read
+    // as a wrong citation.
+    await mapWithNote([
+      { ...QUOTED, label: "ICD-10 code", value: "J03.90", status: "inferred",
+        needs_review: true, reasoning: "J03.90 is the ICD-10 code for acute tonsillitis." },
+    ]);
+
+    $("rows").children[0].click();
+    const mark = marked();
+
+    expect(mark.classList.contains("reasoned")).toBe(true);
+    expect(mark.classList.contains("quoted")).toBe(false);
+    // No guess at which words produced it — that is the fuzzy match this refuses.
+    expect(mark.querySelector(".hit")).toBeNull();
+    expect($("note-following").textContent).toBe("ICD-10 code — worked out from this");
+  });
+
+  test("the inference is spelled out on the row, where it is signed off", async () => {
+    await mapWithNote([
+      { ...QUOTED, value: "J03.90", status: "inferred", needs_review: true,
+        reasoning: "J03.90 is the ICD-10 code for acute tonsillitis." },
+    ]);
+
+    expect($("rows").querySelector(".derived").textContent).toBe(
+      "J03.90 is the ICD-10 code for acute tonsillitis."
+    );
+  });
+
+  test("a row with no reasoning grows no explanation", async () => {
+    await mapWithNote([QUOTED]);
+
+    expect($("rows").querySelector(".derived")).toBeNull();
   });
 
   test("follows the keyboard as well as the mouse", async () => {
