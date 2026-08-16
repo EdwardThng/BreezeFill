@@ -174,6 +174,15 @@ const state = {
    * answered and still filled.
    */
   schema: null,
+  /**
+   * The host of the page being filled, as the injected script reported it.
+   *
+   * Kept so the "reading the questions on this page" line can name it again
+   * after the doctor changes the picker, without another survey. The panel has
+   * no `tabs` permission and cannot ask Chrome what site it is on — this is
+   * the only place that answer exists.
+   */
+  host: "",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -344,26 +353,36 @@ function bestCandidate(scores) {
  * state: it means the page's own wording is the best instruction available.
  * Either way the panel is ready to map — nothing here disables anything.
  */
-function selectForm(form, host) {
-  state.schema = form || null;
+function describeSelection(form) {
   const detected = $("form-detected");
+  // The picker is kept in step with the state rather than assumed to already
+  // agree with it. It disagrees in both directions otherwise: a select with
+  // nothing chosen shows its first option, and a doctor who picks one by hand
+  // leaves the sentence above it describing the previous answer.
+  $("form-id").value = form ? form.form_id : "";
 
   if (form) {
-    $("form-id").value = form.form_id;
     detected.textContent = form.insurer
       ? `${form.insurer} — ${form.display_name}`
       : form.display_name;
     detected.classList.remove("unknown");
-  } else {
-    // Deliberately not phrased as a problem. Nothing is broken and there is
-    // nothing for the doctor to do: BreezeFill reads the questions on the page
-    // and answers those. Naming the host is the one useful detail, because it
-    // is how they would tell us which form to describe properly later.
-    detected.textContent = host
-      ? `Reading the questions on this page (${host})`
-      : "Reading the questions on this page";
-    detected.classList.add("unknown");
+    return;
   }
+
+  // Deliberately not phrased as a problem. Nothing is broken and there is
+  // nothing for the doctor to do: BreezeFill reads the questions on the page
+  // and answers those. Naming the host is the one useful detail, because it
+  // is how they would tell us which form to describe properly later.
+  detected.textContent = state.host
+    ? `Reading the questions on this page (${state.host})`
+    : "Reading the questions on this page";
+  detected.classList.add("unknown");
+}
+
+function selectForm(form, host) {
+  state.schema = form || null;
+  if (host) state.host = host;
+  describeSelection(state.schema);
 
   // The picker stays reachable, never required. A doctor who knows the bank
   // has a better description for this form than the page does can say so.
@@ -463,6 +482,16 @@ async function loadForms() {
   }
 
   select.replaceChildren();
+  // No form is a choice, not the absence of one, and it needs an entry to be
+  // choosable at all. A <select> has no empty state: without this its first
+  // option stands selected whether or not anyone picked it, so a doctor who
+  // opened the picker could name a form and never take one back — and the
+  // control claimed a schema was in use while `state.schema` was still null.
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No form — use this page's own wording";
+  select.append(none);
+
   for (const form of state.forms) {
     const option = document.createElement("option");
     option.value = form.form_id;
@@ -1372,9 +1401,14 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
 // this page's questions. It does not change *what* is filled — the page's own
 // questions, either way — only how well each one is put to the model.
+// Choosing "No form" is as deliberate as choosing one, and sets the same flag:
+// a doctor who took a schema back did so because it was the wrong one, and
+// re-detection putting it straight back on the next wizard step is the change
+// nobody would be told about.
 $("form-id").addEventListener("change", () => {
   state.formChosenByHand = true;
   state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
+  describeSelection(state.schema);
 });
 $("form-override").addEventListener("click", () => {
   $("form-id").hidden = false;

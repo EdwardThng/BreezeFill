@@ -245,7 +245,8 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    expect($("form-id").options).toHaveLength(FORMS.length);
+    // The bank, plus the standing "No form" entry.
+    expect($("form-id").options).toHaveLength(FORMS.length + 1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/map-live"),
       expect.anything()
@@ -592,6 +593,50 @@ describe("mapping the page in front of the doctor", () => {
     expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
     // ...and detection stops overruling it from here on.
     expect(panel.state.formChosenByHand).toBe(true);
+  });
+
+  test("a schema picked by hand can be taken back again", async () => {
+    // There was no way out of the picker: a <select> has no empty state, so
+    // once a doctor named a form the panel kept using its instructions for a
+    // page they had decided it did not describe. Answering from the page's own
+    // wording is a worse-informed fill, not a broken one, and it has to be
+    // reachable.
+    const panel = await readyPanel();
+
+    $("form-id").value = "aia_ghs_claim";
+    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
+
+    $("form-id").value = "";
+    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(panel.state.schema).toBeNull();
+    expect($("form-detected").textContent).toMatch(/reading the questions/i);
+    // Still a human decision, so re-detection on the next wizard step must not
+    // put the schema back.
+    expect(panel.state.formChosenByHand).toBe(true);
+  });
+
+  test("the sentence above the picker follows what was picked", async () => {
+    // It used to describe whatever detection last decided, so a doctor who
+    // overrode it read "Reading the questions on this page" above a select
+    // naming an insurer's form — two answers to one question.
+    const panel = await readyPanel();
+
+    $("form-id").value = "aia_ghs_claim";
+    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect($("form-detected").textContent).toContain("Group H&S claim");
+  });
+
+  test("no schema means the picker shows no schema", async () => {
+    // The control and the state have to agree. With the first form standing
+    // selected by default, the panel said a form was in use and mapped without
+    // one, and the disagreement is invisible until the answers come back thin.
+    const panel = await readyPanel();
+
+    expect(panel.state.schema).toBeNull();
+    expect($("form-id").value).toBe("");
   });
 });
 
