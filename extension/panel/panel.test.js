@@ -896,6 +896,71 @@ describe("the record posted to /map", () => {
 // One box
 // ---------------------------------------------------------------------------
 
+describe("the check screen says what it knows about each value", () => {
+  // The legend this replaced was a key in three colours at the top of the
+  // screen, read once and skipped forever after. The badge says the same
+  // thing on the field it is about, which is where the doctor is looking.
+
+  test("a value found by pattern says so", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat · S7211043C";
+    await panel.parsePaste();
+
+    expect($("badge-nric").textContent).toBe("Found in the note");
+    expect($("row-nric").className).toContain("confirmed");
+  });
+
+  test("a value the doctor typed is not claimed as a find", async () => {
+    // It matters on this screen specifically: these values are the redaction
+    // dictionary, and "the note said this" and "you said this" are different
+    // claims about whether it can be trusted.
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect($("badge-insurer").textContent).toBe("You typed this");
+  });
+
+  test("a field being asked about is marked as needing a check", async () => {
+    const panel = loadPanel();
+    await settle();
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    expect($("badge-phone").textContent).toBe("Needs checking");
+    expect($("row-phone").className).toContain("pending");
+  });
+
+  test("picking a candidate settles the badge with it", async () => {
+    const panel = loadPanel();
+    await settle();
+    routes["/parse"] = () => respond(TWO_OF_EACH);
+    $("paste").value = "HP 9123 4567 / 6123 4567";
+    await panel.parsePaste();
+
+    $("choices-phone").querySelector("button").click();
+
+    expect($("badge-phone").textContent).toBe("You typed this");
+    expect($("row-phone").className).not.toContain("pending");
+  });
+
+  test("a field nothing answered says nothing was found", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("badge-insurer").textContent).toContain("Nothing found");
+    expect($("row-insurer").className).toBe("review-row");
+  });
+});
+
 describe("looking back at a finished step", () => {
   // Expanding a done row used to BE reopening the step, so a doctor on the
   // review screen who wanted to check what they had pasted got the paste box

@@ -504,7 +504,11 @@ async function loadForms() {
 /** The visible wording of a field, so a message can name it the way the
  *  doctor sees it rather than by its id. */
 function labelOf(id) {
-  const span = $(id).closest(".field").querySelector("span");
+  // Two shapes carry a demographic input: the name's plain `.field` at step 1
+  // and the badged `.review-row` cards on the check screen. Asking for either
+  // keeps this working wherever a field is moved to next.
+  const row = $(id).closest(".review-row, .field");
+  const span = row && (row.querySelector(".label") || row.querySelector("span"));
   return (span ? span.textContent : id).toLowerCase();
 }
 
@@ -682,10 +686,45 @@ function pendingChoices() {
  * per paste — re-opening it on every keystroke would fight the doctor who
  * just closed it.
  */
+/**
+ * The badge above one demographic field, in the review row's own vocabulary.
+ *
+ * The three states are what the legend used to spell out in a key nobody
+ * reads twice: a value is here, a value is being asked about, or there is
+ * nothing. Saying it on the field itself is what let the legend go.
+ *
+ * "You typed this" is not decoration. A value the doctor entered and a value
+ * a pattern found carry different weight when they are checking whether the
+ * redaction dictionary is right, and the panel is the only thing that knows
+ * which is which.
+ */
+function badgeFor(id) {
+  if ($(`choices-${id}`) && $(`choices-${id}`).querySelector("button")) {
+    return ["inferred", "Needs checking"];
+  }
+  if (!$(id).value.trim()) return ["missing", "Nothing found — fill by hand"];
+  return state.touched.has(id)
+    ? ["demographic", "You typed this"]
+    : ["extracted", "Found in the note"];
+}
+
 function updateFound() {
   const ids = Object.keys(DEMOGRAPHIC_FIELDS);
   const found = ids.filter((id) => $(id).value.trim()).length;
   const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+
+  for (const id of ids) {
+    // `full-name` is asked for at step 1 and has no card here, which is the
+    // one place this list and the markup deliberately disagree.
+    const badge = $(`badge-${id}`);
+    if (!badge) continue;
+    const [status, text] = badgeFor(id);
+    badge.className = `badge ${status}`;
+    badge.textContent = text;
+    $(`row-${id}`).className =
+      "review-row" +
+      (status === "inferred" ? " pending" : status === "missing" ? "" : " confirmed");
+  }
   // Said on the summary line, not only inside the drawer: the drawer can be
   // shut, and a question nobody sees is the blank box this replaced.
   const pending = pendingChoices();

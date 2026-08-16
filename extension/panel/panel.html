@@ -160,53 +160,65 @@
         form never asks about is not worth stopping a doctor over.
       -->
       <section class="step" id="step-details" aria-labelledby="h-details" hidden>
-        <h2 id="h-details">Check what was found</h2>
+        <h2 id="h-details">Check these</h2>
         <p class="step-sub">
           Found by pattern in what you pasted. Correct anything that is wrong —
-          this is the dictionary the note is redacted against.
+          this is the dictionary the note is redacted against, so it has to be
+          right before anything is sent.
         </p>
 
-        <div class="legend">
-          <span class="is-confident"><i></i>Found</span>
-          <span class="is-check"><i></i>Needs checking</span>
-          <span class="is-missing"><i></i>Nothing found</span>
-        </div>
+        <!--
+          The same card as a review row, deliberately. A doctor checking values
+          before the note is sent and a doctor checking values before they are
+          written onto a form are doing the same job, and the panel used to
+          teach them two different layouts for it — a legend and a two-column
+          grid here, badged cards there. The badge carries what the legend used
+          to explain, which is why the legend is gone rather than restyled.
 
+          What does NOT move is where this sits. These values are the
+          dictionary redaction scrubs the note against, so they have to be
+          right BEFORE Map fields is pressed; a wrong name here is a name left
+          in the text that reaches the model. Merging this into the review
+          screen would put the correction after the send.
+        -->
         <details class="found" id="found" open>
           <summary id="found-summary">Patient details</summary>
 
-          <div class="grid">
-            <label class="field">
-              <span>NRIC</span>
-              <input id="nric" type="text" autocomplete="off" />
-              <div class="choices" id="choices-nric"></div>
-            </label>
-            <label class="field">
-              <span>Date of birth</span>
-              <input id="dob" type="date" />
-              <div class="choices" id="choices-dob"></div>
-            </label>
-            <label class="field">
-              <span>Phone</span>
-              <input id="phone" type="text" autocomplete="off" />
-              <div class="choices" id="choices-phone"></div>
-            </label>
-            <label class="field">
-              <span>Policy number</span>
-              <input id="policy-number" type="text" autocomplete="off" />
-              <div class="choices" id="choices-policy-number"></div>
-            </label>
-            <label class="field">
-              <span>Insurer</span>
-              <input id="insurer" type="text" autocomplete="off" />
-              <div class="choices" id="choices-insurer"></div>
-            </label>
-          </div>
-
-          <label class="field">
-            <span>Address</span>
+          <label class="review-row" id="row-nric">
+            <div class="badge" id="badge-nric"></div>
+            <span class="label">NRIC</span>
+            <input id="nric" type="text" autocomplete="off" />
+            <div class="choices" id="choices-nric"></div>
+          </label>
+          <label class="review-row" id="row-dob">
+            <div class="badge" id="badge-dob"></div>
+            <span class="label">Date of birth</span>
+            <input id="dob" type="date" />
+            <div class="choices" id="choices-dob"></div>
+          </label>
+          <label class="review-row" id="row-phone">
+            <div class="badge" id="badge-phone"></div>
+            <span class="label">Phone</span>
+            <input id="phone" type="text" autocomplete="off" />
+            <div class="choices" id="choices-phone"></div>
+          </label>
+          <label class="review-row" id="row-policy-number">
+            <div class="badge" id="badge-policy-number"></div>
+            <span class="label">Policy number</span>
+            <input id="policy-number" type="text" autocomplete="off" />
+            <div class="choices" id="choices-policy-number"></div>
+          </label>
+          <label class="review-row" id="row-insurer">
+            <div class="badge" id="badge-insurer"></div>
+            <span class="label">Insurer</span>
+            <input id="insurer" type="text" autocomplete="off" />
+            <div class="choices" id="choices-insurer"></div>
+          </label>
+          <label class="review-row" id="row-address">
+            <div class="badge" id="badge-address"></div>
+            <span class="label">Address</span>
             <input id="address" type="text" autocomplete="off" />
-              <div class="choices" id="choices-address"></div>
+            <div class="choices" id="choices-address"></div>
           </label>
         </details>
 
