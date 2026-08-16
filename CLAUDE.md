@@ -1392,6 +1392,15 @@ should be fillable (`isFillable` checks `disabled` and `readOnly`, not
 visibility) — see "All three are still gated on the same thing". Same shape of
 question, same thing unblocks it.
 
+**How to tell a grid-layout question row from a repeating-entry opener
+(2026-08-15).** Both open with a bare element holding text, so `hasDelimiter`
+calls both an entry — see the trap of that name for what it costs, which on a
+wholly grid-laid-out form is every demographic control refusing to fill. This
+is listed here rather than fixed because every candidate discriminator trades
+one false-positive class for another, and choosing between them from a verbal
+description of ClaimEZ is how the wrong one gets locked in. **Three open
+questions now wait on the same dump**; this is the third.
+
 ---
 
 ## Traps
