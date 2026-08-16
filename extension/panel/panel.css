@@ -230,12 +230,9 @@ body {
   min-width: 0;
 }
 
+/* The row's only text, so it reads at body size rather than as the caption of
+   a value that is no longer there. */
 .done-title {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.done-summary {
   font-size: 13px;
   font-weight: 500;
   overflow: hidden;

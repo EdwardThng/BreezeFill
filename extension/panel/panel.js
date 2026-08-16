@@ -1082,23 +1082,6 @@ const STEPS = [
   { key: "page", section: "step-page", title: "This page" },
 ];
 
-/** A one-line summary of a finished step, for its collapsed row. */
-function summaryOf(key) {
-  if (key === "name") return $("full-name").value.trim() || "—";
-  if (key === "note") {
-    const words = $("paste").value.trim().split(/\s+/).filter(Boolean).length;
-    return `${words} word${words === 1 ? "" : "s"} pasted`;
-  }
-  if (key === "check") {
-    // Not a count. Once the doctor has passed this step the interesting fact
-    // about these values is not how many were found — it is what happens to
-    // them, and that is the one thing they cannot check for themselves.
-    return "Kept confidential — never sent to the AI";
-  }
-  if (key === "page") return `${state.rows.length} questions read`;
-  return "";
-}
-
 /** Show one step, collapse everything behind it, hide everything ahead. */
 function showStep(key) {
   state.step = key;
@@ -1177,15 +1160,21 @@ function doneRow(step) {
   tick.className = "done-tick";
   tick.textContent = "✓";
 
+  // The step's name, and nothing else on the line.
+  //
+  // It used to carry a summary of what went in — the patient's name, a word
+  // count, a sentence about confidentiality — stacked under a label in a
+  // second type size. Three problems, and the last is the one that matters:
+  // the row was two lines tall for information the doctor had just typed, the
+  // label and the value ran together with nothing between them, and a
+  // collapsed row is a way BACK to a step rather than a display of it. What
+  // went in is one click away, in the body this row already builds.
   const label = document.createElement("span");
   label.className = "done-label";
   const title = document.createElement("span");
   title.className = "done-title";
   title.textContent = step.title;
-  const summary = document.createElement("span");
-  summary.className = "done-summary";
-  summary.textContent = summaryOf(step.key);
-  label.append(title, summary);
+  label.append(title);
 
   const chevron = document.createElement("span");
   chevron.className = "done-chevron";

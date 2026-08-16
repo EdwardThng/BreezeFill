@@ -1027,18 +1027,23 @@ describe("looking back at a finished step", () => {
     expect($("step-page").hidden).toBe(true);
   });
 
-  test("the sealed row says what happens to the identifiers, not how many", async () => {
-    // Once the doctor has passed this step, the interesting fact about these
-    // values is not that six were found. It is what they are used for, which
-    // is the one thing the doctor cannot check for themselves.
+  test("a collapsed row is a way back to a step, not a display of it", async () => {
+    // It used to summarise what went in — the patient's name, a word count, a
+    // sentence about confidentiality — on a second line under the step's name.
+    // All of it was something the doctor had typed a moment earlier, and it
+    // made every finished step two lines tall.
     const panel = loadPanel();
     await settle();
     await toReview(panel);
 
     const row = doneRow("Verify");
-    expect(row.textContent).toContain("never sent to the AI");
+    expect(row.querySelector(".done-title").textContent).toBe("Verify");
+    expect(row.querySelector(".done-head").textContent).not.toContain("never sent");
 
+    // What happens to the identifiers is still said, in the body — which is
+    // where it can be a paragraph rather than a line that has to fit.
     row.querySelector(".done-head").click();
+    expect(row.textContent).toContain("never these values");
     expect(row.textContent).toContain("nowhere else");
     expect(row.textContent).toContain("S7211043C");
   });
