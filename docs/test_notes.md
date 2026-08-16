@@ -1,10 +1,12 @@
 # Test notes for the pilot
 
-Six synthetic cases for trying BreezeFill at
-**https://breezefill-livid.vercel.app** — moving to **https://breezefill.com**
-once the DNS is added. Both serve the same deployment; the second is the one
-worth learning, since the first is Vercel's name for the project rather than
-ours and can change out from under us.
+Six synthetic cases for trying BreezeFill at **https://breezefill.com**. The
+DNS landed on 2026-08-08, so that is the address to use and to learn.
+
+`https://breezefill-livid.vercel.app` still resolves to the same deployment and
+still works, but do not hand it to anyone: `livid` is a name **Vercel**
+generated, it lives in their namespace rather than ours, and it is theirs to
+change.
 
 **Install the extension from that URL, and delete any copy you downloaded
 earlier.** There used to be a second address serving an older build, and an
@@ -18,8 +20,18 @@ enough: Chrome persists the side-panel behaviour flag per extension, and an
 install that ever set it keeps swallowing the toolbar click.
 
 **Every patient here is invented.** The names, NRICs, phone numbers, addresses
-and dates are all made up, and no case is drawn from a real consultation. Use
-these — not real notes — until inference runs in-region.
+and dates are all made up, and no case is drawn from a real consultation. They
+are synthetic because anything committed to this repository has to be — not
+because real notes are off limits.
+
+**Real consultation notes are in scope** (the owner's call, 2026-08-06). There
+is no test mode and no expectation that you anonymise a note before pasting it.
+What you should know while doing it: the note is de-identified on our server
+before any of it reaches the model, but that model call currently runs outside
+Singapore, and the PDPA expects a comparable-protection agreement for an
+overseas transfer which is not yet in place. `https://breezefill.com/privacy`
+says so plainly and is the document to read. These six cases are still the
+better place to *start*, because you know what the right answer is.
 
 ## How to use them
 
