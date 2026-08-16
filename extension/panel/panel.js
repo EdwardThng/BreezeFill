@@ -948,6 +948,13 @@ function renderRow(row) {
   // one that was already on screen.
   wrap.dataset.fieldId = row.field_id;
 
+  // Reading a row moves the note pane's highlight to the sentence that row's
+  // value came from. Both events, because both are how a doctor arrives at a
+  // row: the mouse, and the Tab key — and after a confirm click, focus lands
+  // on the next row's button, so the highlight follows the work by itself.
+  wrap.addEventListener("click", () => paintNote(row));
+  wrap.addEventListener("focusin", () => paintNote(row));
+
   const badge = document.createElement("div");
   badge.className = `badge ${row.status}`;
   badge.textContent = STATUS_TEXT[row.status] || row.status;
@@ -1264,6 +1271,75 @@ function updateReviewMeta() {
   updateProgress();
 }
 
+/**
+ * Put the consultation in the docked pane, with one sentence marked.
+ *
+ * `row.source` is the snippet the model is told to quote VERBATIM out of the
+ * notes, and it has been on every mapped row since the first version of
+ * mapping.py — the panel simply never rendered it. So locating it here is an
+ * exact substring search and nothing else.
+ *
+ * That refusal is the point rather than a shortcut. A fuzzy match would draw a
+ * highlight around a sentence the value did not come from, on the one screen
+ * whose entire job is showing the doctor where a value came from — a wrong
+ * citation, presented with the same confidence as a right one, which is the
+ * failure this product is built to avoid everywhere else. When the quote is
+ * not found the pane marks nothing and says which case it is.
+ *
+ * Called with null to show the note whole, which is what a fresh mapping and
+ * a row nobody has touched yet both want.
+ */
+function paintNote(row) {
+  const pre = $("note-text");
+  const state = $("note-following");
+  if (!pre) return;
+
+  const text = $("paste").value;
+  const source = row && typeof row.source === "string" ? row.source.trim() : "";
+  const at = source ? text.indexOf(source) : -1;
+
+  if (at < 0) {
+    pre.replaceChildren(document.createTextNode(text));
+    // Three cases, and they are not the same. Nothing is being read; the model
+    // answered from something it did not quote; or the value never came from
+    // the note at all — a demographic copied across, or a blank.
+    state.textContent = !row
+      ? ""
+      : source
+        ? "quote not found in the note"
+        : "not taken from the note";
+    return;
+  }
+
+  const mark = document.createElement("mark");
+  mark.textContent = text.slice(at, at + source.length);
+  pre.replaceChildren(
+    document.createTextNode(text.slice(0, at)),
+    mark,
+    document.createTextNode(text.slice(at + source.length))
+  );
+  state.textContent = row.label;
+
+  // Not scrollIntoView: it scrolls every scrollable ancestor, and this pane is
+  // sticky inside a panel that is itself scrolling — so the panel would jump
+  // while the doctor is reading it. Moving the pane's own scrollTop moves
+  // exactly the one thing that should move.
+  pre.scrollTop = Math.max(
+    0,
+    mark.offsetTop - pre.clientHeight / 2 + mark.offsetHeight / 2
+  );
+}
+
+/** Fold the note away without losing it. Session-only, like everything here. */
+function toggleNote() {
+  const pre = $("note-text");
+  const button = $("note-toggle");
+  const showing = pre.hidden;
+  pre.hidden = !showing;
+  button.textContent = showing ? "Hide" : "Show";
+  button.setAttribute("aria-expanded", String(showing));
+}
+
 function renderRows() {
   const container = $("rows");
   // Which rows were already on screen before this render. A row that was here
@@ -1278,6 +1354,9 @@ function renderRows() {
       return el;
     })
   );
+  // The note whole, unmarked, until the doctor reads a row. Marking one before
+  // they have looked at anything would claim they are checking it.
+  paintNote(null);
   updateReviewMeta();
 }
 
@@ -1672,6 +1751,7 @@ $("check-next").addEventListener("click", () => {
   showStep("page");
   scanPage();
 });
+$("note-toggle").addEventListener("click", toggleNote);
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
