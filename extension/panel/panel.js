@@ -1257,9 +1257,15 @@ function updateReviewMeta() {
   const pending = state.rows.filter(
     (r) => r.needs_review && hasValue(r) && !state.confirmed.has(r.field_id)
   ).length;
-  $("review-summary").textContent = pending
-    ? `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`
-    : `${readyRows().length} of ${state.rows.length} fields ready to write. The rest are for you to complete by hand.`;
+  // Nothing left to confirm is not news. The sentence that stood here — "4 of
+  // 5 fields ready to write. The rest are for you to complete by hand." —
+  // appeared exactly when the doctor had stopped needing a sentence, directly
+  // above the one button they were reaching for. It and the bar both leave,
+  // and Fill is the only thing still talking.
+  $("review-summary").hidden = pending === 0;
+  $("review-progress-box").hidden = pending === 0;
+  $("review-summary").textContent =
+    `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`;
 
   // Readiness as a bar as well as a count. It only ever moves on a confirm
   // click or an edit — nothing advances it on its own, which is the point.
@@ -1588,28 +1594,12 @@ function renderReport(response) {
     container.append(later);
   }
 
-  // Live controls no schema field claimed. Surfaced rather than hidden: this
-  // is how a portal that grew a question becomes visible, and it is the input
-  // to extending the schema. The doctor fills these by hand today.
-  if (response.report.unknownControls.length) {
-    const block = document.createElement("div");
-    block.className = "report-block is-manual";
-    const heading = document.createElement("h3");
-    heading.textContent = "Fill these yourself";
-    const body = document.createElement("p");
-    body.className = "note";
-    body.textContent = "Questions on this page BreezeFill has no answer for.";
-
-    const unknown = document.createElement("ul");
-    unknown.className = "unknown";
-    for (const control of response.report.unknownControls) {
-      const item = document.createElement("li");
-      item.textContent = control.label || `(unlabelled ${control.type})`;
-      unknown.append(item);
-    }
-    block.append(heading, body, unknown);
-    container.append(block);
-  }
+  // The list of live controls nothing claimed used to be a block here, and it
+  // reported at the end what every field already says about itself — after the
+  // fill, which is the one moment the doctor can no longer act on it while
+  // reading the rows. A question the note could not answer says so on its own
+  // row, where they are already looking. On the live path this was always
+  // empty anyway: every fillable control on the page becomes a question.
 }
 
 /**
@@ -1625,7 +1615,6 @@ function renderReport(response) {
  * a different page.
  */
 async function scanPage() {
-  setWatch("Reading this page…", false);
   $("map-prompt").hidden = true;
   setStatus($("map-status"), "");
 
@@ -1633,37 +1622,39 @@ async function scanPage() {
   try {
     fields = await liveFields();
   } catch (error) {
-    setWatch("Cannot read this page.", false);
     setStatus($("map-status"), messageFor(error), "error");
     return;
   }
 
   state.pageFields = fields;
-  const where = state.host ? `Watching ${state.host}.` : "Watching this page.";
 
   if (!fields.length) {
     // Not an error. A wizard opens on a verification or a landing section as
-    // often as not, and saying "none here, I am still watching" is the honest
-    // report — the old panel called this a failure and stopped.
-    setWatch(`${where} No questions on it that BreezeFill can answer yet.`, true);
+    // often as not, and saying "none here yet" is the honest report — the old
+    // panel called this a failure and stopped.
+    $("prompt-title").textContent = "No questions on this page yet.";
+    $("prompt-why").textContent =
+      "Move to the section of the form that asks about the consultation.";
+    $("map-btn").hidden = true;
+    $("map-prompt").hidden = false;
     return;
   }
 
-  setWatch(`${where} ${fields.length} question${fields.length === 1 ? "" : "s"} on it.`, true);
+  // The count sits on the card it is a count of. It used to be on a strip
+  // above this one reading "Watching localhost:8080. 7 questions on it." —
+  // which named the host the extension had noticed, a fact about the extension
+  // rather than about the claim, in a box that cost a doctor a line of screen
+  // on every wizard step.
   $("prompt-title").textContent =
-    `${fields.length} question${fields.length === 1 ? "" : "s"} found on this page.`;
+    `${fields.length} question${fields.length === 1 ? "" : "s"} on this page.`;
   $("prompt-why").textContent =
     "Nothing has been sent yet. Mapping asks the model to answer these from your scrubbed note.";
   $("map-btn").textContent =
     `Map ${fields.length === 1 ? "this question" : `these ${fields.length} questions`}`;
+  $("map-btn").hidden = false;
   $("map-prompt").hidden = false;
 }
 
-/** The line that says what the panel is looking at, and whether it is live. */
-function setWatch(text, live) {
-  $("watch-text").textContent = text;
-  $("watch").classList.toggle("live", Boolean(live));
-}
 
 /**
  * A wizard step rendered on the tab the doctor granted us.

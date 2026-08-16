@@ -1224,9 +1224,28 @@ describe("when a wizard step renders", () => {
 
     await panel.onPageChanged();
 
-    expect($("map-prompt").hidden).toBe(true);
-    expect($("watch-text").textContent).toMatch(/no questions on it/i);
-    expect($("watch").className).toContain("live");
+    // Not an error, and not silence either. A wizard opens on a verification
+    // or a landing section as often as not, so the panel says there is nothing
+    // here YET and offers no button to press.
+    expect($("map-prompt").hidden).toBe(false);
+    expect($("prompt-title").textContent).toMatch(/no questions on this page/i);
+    expect($("map-btn").hidden).toBe(true);
+  });
+
+  test("the strip naming the host it is watching is gone", async () => {
+    // "Watching localhost:8080. 7 questions on it." named the host the
+    // extension had noticed — a fact about the extension rather than about the
+    // claim — in a box that cost a line of screen on every wizard step. The
+    // count it carried moved onto the card it is a count of.
+    const panel = loadPanel();
+    await settle();
+    panel.state.step = "page";
+
+    await panel.onPageChanged();
+
+    expect(document.getElementById("watch")).toBeNull();
+    expect($("prompt-title").textContent).toMatch(/questions on this page/i);
+    expect(document.body.textContent).not.toContain("Watching");
   });
 
   test("the message arrives through chrome.runtime, not a direct call", async () => {
@@ -1894,5 +1913,40 @@ describe("the note pane", () => {
 
     expect($("note-text").hidden).toBe(false);
     expect($("note-toggle").textContent).toBe("Hide");
+  });
+});
+
+describe("the readiness line", () => {
+  test("says how many are left while any are", async () => {
+    await mapWithNote([
+      { ...QUOTED, status: "inferred", needs_review: true,
+        reasoning: "J03.90 is the ICD-10 code for acute tonsillitis." },
+    ]);
+
+    expect($("review-summary").hidden).toBe(false);
+    expect($("review-summary").textContent).toContain("1 value still to confirm");
+    expect($("review-progress-box").hidden).toBe(false);
+  });
+
+  test("goes quiet once there are none", async () => {
+    // "4 of 5 fields ready to write. The rest are for you to complete by
+    // hand." appeared exactly when the doctor had stopped needing a sentence,
+    // directly above the one button they were reaching for.
+    await mapWithNote([QUOTED]);
+
+    expect($("review-summary").hidden).toBe(true);
+    expect($("review-progress-box").hidden).toBe(true);
+    expect($("fill-btn").disabled).toBe(false);
+  });
+});
+
+describe("the fill report", () => {
+  test("is the first thing on the screen, above the values just checked", async () => {
+    // Pressing Fill used to land the doctor at the top of the list they had
+    // just finished checking, with the outcome below the fold.
+    const mapped = [...$("mapped").children].map((el) => el.id);
+
+    expect(mapped.indexOf("fill-report")).toBeLessThan(mapped.indexOf("rows"));
+    expect(mapped.indexOf("fill-report")).toBeLessThan(mapped.indexOf("fill-btn"));
   });
 });
