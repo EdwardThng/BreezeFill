@@ -957,7 +957,70 @@ describe("the check screen says what it knows about each value", () => {
     await panel.parsePaste();
 
     expect($("badge-insurer").textContent).toContain("Nothing found");
-    expect($("row-insurer").className).toBe("review-row");
+    expect($("row-insurer").className).toContain("missing");
+    expect($("row-insurer").className).not.toContain("confirmed");
+  });
+
+  // The card stopped saying "Found in the note" and started showing a tick.
+  // These pin the two halves of that trade, because only one of them is
+  // visible and the invisible half is the one that carries the meaning.
+
+  test("a confirmed value is marked, and the mark is not the only record", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat · S7211043C";
+    await panel.parsePaste();
+
+    // The tick is what the eye gets. It is in every row's markup, so its
+    // presence proves nothing — the row's state is what turns it on.
+    expect($("row-nric").querySelector(".tick")).not.toBeNull();
+    expect($("row-nric").className).toContain("confirmed");
+
+    // ...and the sentence is still there, unshortened. A screen reader has no
+    // tick to look at, and "the note said this" and "you said this" are
+    // different claims about a value that is about to become the dictionary
+    // redaction scrubs the note with.
+    expect($("badge-nric").textContent).toBe("Found in the note");
+  });
+
+  test("a field nothing answered offers a way in without standing one open", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    const row = $("row-insurer");
+    // Not open by itself: six standing boxes are what made a checking screen
+    // read as a form to fill.
+    expect(row.className).not.toContain("adding");
+
+    row.querySelector(".add").click();
+
+    // But never a dead end — `dob` is required and an unlabelled date is
+    // never read as a birth date, so this row is the ordinary case.
+    expect(row.className).toContain("adding");
+    expect(document.activeElement).toBe($("insurer"));
+  });
+
+  test("a box opened by hand stays open when the value is cleared again", async () => {
+    // updateFound runs on every keystroke, and it used to rewrite the row's
+    // whole class list. Typing one character and deleting it would then shut
+    // the box under the doctor mid-correction.
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    const row = $("row-insurer");
+    row.querySelector(".add").click();
+
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+    $("insurer").value = "";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(row.className).toContain("missing");
+    expect(row.className).toContain("adding");
   });
 });
 
@@ -1798,18 +1861,21 @@ describe("the note pane", () => {
     expect($("note-text").textContent).toBe(NOTE);
   });
 
-  test("opens already marked, on the first value that needs checking", async () => {
-    // It used to mark nothing until the doctor happened to click a row, which
-    // made the whole pane look like it was not working. A mark is a pointer,
-    // not a claim that anything has been checked.
+  test("opens already marked, on the row at the top of the list", async () => {
+    // Two things at once. It used to mark nothing until the doctor happened to
+    // click a row, which made the pane look broken — and then it marked the
+    // first value NEEDING a check, which put the mark on a row further down
+    // while the top of the screen showed a different question. A citation that
+    // does not match the visible row reads as a wrong citation. The arrival
+    // mark now uses the same rule scrolling does.
     await mapWithNote([
-      { ...QUOTED, field_id: "settled", needs_review: false },
+      { ...QUOTED, field_id: "settled", label: "Diagnosis", needs_review: false },
       { ...QUOTED, field_id: "icd", label: "ICD-10 code", value: "J03.90",
         status: "inferred", needs_review: true },
     ]);
 
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
-    expect($("note-following").textContent).toBe("ICD-10 code — worked out from this");
+    expect($("note-following").textContent).toBe("Diagnosis");
   });
 
   test("marks the sentence a value came from, and names the row", async () => {

@@ -718,7 +718,10 @@ function badgeFor(id) {
   if ($(`choices-${id}`) && $(`choices-${id}`).querySelector("button")) {
     return ["inferred", "Needs checking"];
   }
-  if (!$(id).value.trim()) return ["missing", "Nothing found — fill by hand"];
+  // "— fill by hand" went when Add arrived: the row now carries the way in,
+  // so the badge saying it too was an instruction next to the button that
+  // carries it out.
+  if (!$(id).value.trim()) return ["missing", "Nothing found"];
   return state.touched.has(id)
     ? ["demographic", "You typed this"]
     : ["extracted", "Found in the note"];
@@ -737,9 +740,14 @@ function updateFound() {
     const [status, text] = badgeFor(id);
     badge.className = `badge ${status}`;
     badge.textContent = text;
-    $(`row-${id}`).className =
-      "review-row" +
-      (status === "inferred" ? " pending" : status === "missing" ? "" : " confirmed");
+    // Toggled rather than assigned. `adding` is the doctor's decision to open
+    // a box on a row that had none, and rewriting the class list would shut
+    // it again on the next keystroke — which is every keystroke, since typing
+    // into that box is what this runs on.
+    const row = $(`row-${id}`);
+    row.classList.toggle("pending", status === "inferred");
+    row.classList.toggle("missing", status === "missing");
+    row.classList.toggle("confirmed", status !== "inferred" && status !== "missing");
   }
   // Said on the summary line, not only inside the drawer: the drawer can be
   // shut, and a question nobody sees is the blank box this replaced.
@@ -1814,6 +1822,22 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   $(id).addEventListener("input", () => {
     state.touched.add(id);
     updateFound();
+  });
+
+  // The way in to a field nothing answered. The box is not on screen because
+  // six empty ones made a checking screen read as a form to fill — but `dob`
+  // is required and a note that never states a birth date is the ordinary
+  // case, so the row cannot be a dead end either.
+  //
+  // Opening it is sticky: `adding` stays until the panel is reloaded, so a
+  // doctor who types a value and then clears it is not left mid-word with the
+  // box shut under them. `full-name` is asked for at step 1 and has no row.
+  const row = $(`row-${id}`);
+  const add = row && row.querySelector(".add");
+  if (!add) continue;
+  add.addEventListener("click", () => {
+    row.classList.add("adding");
+    $(id).focus();
   });
 }
 // Advance only on an explicit click — never on typing, and never because the
