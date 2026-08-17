@@ -77,6 +77,14 @@ Rules:
 detail, or a value you would have to reason towards are all "missing".
 - Use "extracted" only when the notes state the answer directly, and quote \
 that statement verbatim in source.
+- source is a QUOTE, for "inferred" exactly as much as for "extracted". Copy \
+it out of the notes character for character — never paraphrase it, never \
+describe it, never leave it empty because the value is not written in there. \
+An inferred value was worked out FROM a sentence, and that sentence is what \
+goes in source; what you worked out goes in reasoning. The doctor is shown \
+the note with your quote marked in it, so a quote that is not in the notes \
+word for word cannot be marked at all, and the value arrives looking as \
+though it came from nowhere.
 - Use "inferred" sparingly: only where a clinician reading these notes would \
 reach the same conclusion without hesitation (for example an ICD code for an \
 explicitly named diagnosis). If two reasonable clinicians might answer \

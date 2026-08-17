@@ -164,19 +164,14 @@
         </h2>
 
         <!--
-          What is being read, not a choice to make. BreezeFill answers the
-          questions on the page in front of the doctor either way; naming a
-          form here only means the bank has better instructions for some of
-          those questions than the page's own wording provides.
+          There is no form picker here any more, and identification did not go
+          with it. Which schema fits this page still decides how sharply each
+          of its questions is put to the model — a described control travels
+          under the schema's wording instead of the page's — but that is a
+          thing BreezeFill works out, not a thing to ask a doctor. It named a
+          form they had not chosen to fill, above a box for a note that had not
+          been pasted, and the answer changed nothing they could act on.
         -->
-        <div class="field">
-          <span>Insurer form</span>
-          <p class="detected" id="form-detected">Checking this page…</p>
-          <button class="link" id="form-override" type="button" hidden>
-            Choose a different form
-          </button>
-          <select id="form-id" hidden aria-label="Insurer form"></select>
-        </div>
 
         <label class="field">
           <span class="visually-hidden">Consultation note</span>
@@ -188,11 +183,12 @@
           ></textarea>
         </label>
         <!--
-          Synthetic throughout, and deliberately awkward: two phone numbers so
-          the sole-match rule has to refuse both, one policy number written two
-          ways so the dedupe has to recognise it as one, and a first-consult
-          date that is not the consultation date. A sample that parsed cleanly
-          would demonstrate the wrong thing.
+          Synthetic throughout, and a whole claim rather than a tidy fragment.
+          It carries an unlabelled header, a hospital whose name is somebody's
+          surname, two doctors named in passing that only the server's sweep
+          can catch, and the billing codes a claim form asks for. A sample that
+          parsed cleanly out of four neat lines would demonstrate the wrong
+          thing.
         -->
         <button id="sample-note" class="sample" type="button">
           Use a sample note
@@ -353,7 +349,15 @@
         BreezeFill for anything.
       -->
       <section class="step" id="step-page" aria-labelledby="h-page" hidden>
-        <h2 id="h-page">This page</h2>
+        <!--
+          Named for what the doctor does here, not for what the screen used
+          to report. It began as a survey of the insurer's form — "7 questions
+          on this page", and a button to map them — and "This page" fitted
+          that. Then the review moved onto the same screen: press Map and the
+          survey box disappears, leaving the consultation, every mapped answer
+          and the Fill button under a heading still naming the form.
+        -->
+        <h2 id="h-page">Check the answers</h2>
 
         <!-- What was found, and the button that sends it. Hidden once mapped. -->
         <div class="prompt" id="map-prompt" hidden>

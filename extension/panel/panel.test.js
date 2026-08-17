@@ -276,7 +276,7 @@ describe("when the backend is not running", () => {
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
-    expect($("form-id").options).toHaveLength(0);
+    expect(panel.state.forms).toHaveLength(0);
 
     routes["/forms"] = () => respond(FORMS);
     $("paste").value = "Patient: Chua Beng Huat";
@@ -286,8 +286,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    // The bank, plus the standing "No form" entry.
-    expect($("form-id").options).toHaveLength(FORMS.length + 1);
+    expect(panel.state.forms).toHaveLength(FORMS.length);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/map-redacted"),
       expect.anything()
@@ -437,17 +436,18 @@ describe("identifying the form", () => {
     page.survey = { ...page.survey, candidates: scores };
   };
 
-  test("the best-fitting schema is chosen and the picker stays out of the way", async () => {
+  test("the best-fitting schema is chosen, and nothing is shown for it", async () => {
+    // Identification survived the picker's removal, and stayed invisible: it
+    // decides how sharply each question is put, never which questions are
+    // asked or whether they are.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
       { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
     ]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-    expect($("form-id").hidden).toBe(true);
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("two schemas fitting equally well is not a winner", async () => {
@@ -463,9 +463,6 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    // ...and it is not reported as a failure, because nothing failed: the
-    // page's questions are still what gets answered.
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("a thin match still counts, because a wizard shows one step at a time", async () => {
@@ -473,10 +470,10 @@ describe("identifying the form", () => {
     // only find a third of its fields on the step in front of us. Whatever is
     // picked still has to clear the fill guards before anything is written.
     scored([{ formId: "aia_ghs_claim", matched: 3, intended: 7, matchRate: 0.43 }]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("a match too thin to mean anything does not count", async () => {
@@ -485,15 +482,14 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("the host registered for a form wins when nothing scores", async () => {
     page.survey = { ...page.survey, host: "roboform.com", candidates: [] };
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
   });
 
   test("schemas are scored by their own field labels", async () => {
@@ -624,60 +620,17 @@ describe("mapping the page in front of the doctor", () => {
     }
   });
 
-  test("picking a schema by hand names the instructions to use", async () => {
-    const panel = await readyPanel();
-    expect(panel.state.schema).toBeNull();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-    // ...and detection stops overruling it from here on.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("a schema picked by hand can be taken back again", async () => {
-    // There was no way out of the picker: a <select> has no empty state, so
-    // once a doctor named a form the panel kept using its instructions for a
-    // page they had decided it did not describe. Answering from the page's own
-    // wording is a worse-informed fill, not a broken one, and it has to be
-    // reachable.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-
-    $("form-id").value = "";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
-    // Still a human decision, so re-detection on the next wizard step must not
-    // put the schema back.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("the sentence above the picker follows what was picked", async () => {
-    // It used to describe whatever detection last decided, so a doctor who
-    // overrode it read "Reading the questions on this page" above a select
-    // naming an insurer's form — two answers to one question.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-  });
-
-  test("no schema means the picker shows no schema", async () => {
-    // The control and the state have to agree. With the first form standing
-    // selected by default, the panel said a form was in use and mapped without
-    // one, and the disagreement is invisible until the answers come back thin.
+  test("no schema is an ordinary outcome, not a state to get out of", async () => {
+    // There used to be a picker here, and four tests about getting into and
+    // out of it. What it controlled was never whether the page gets filled —
+    // only how sharply each of its questions is put — so the panel works it
+    // out and says nothing. A doctor was being asked to name a form they had
+    // not chosen to fill, above a box for a note they had not pasted.
     const panel = await readyPanel();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-id").value).toBe("");
+    // Nothing is disabled by it, and Map is still the next thing to press.
+    expect($("map-status").textContent).not.toMatch(/pick|choose|select/i);
   });
 });
 
@@ -813,7 +766,6 @@ describe("a form the bank does not have, end to end", () => {
     // 1. The bank was consulted and had nothing that fits — which is not a
     //    stopping point, only the absence of sharper instructions.
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
 
     // 2. The details go in as one paste.
     $("paste").value = "Patient: Chua Beng Huat · S7211043C · 04/11/1972\n14/03/2026. RIF pain, appendicitis.";
@@ -873,7 +825,6 @@ describe("a form the bank does not have, end to end", () => {
     const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
     expect(panel.state.schema.form_id).toBe("roboform_test_v1");
 
     $("paste").value = "Patient: Chua Beng Huat";
@@ -1318,6 +1269,63 @@ describe("a build the backend has disowned", () => {
   });
 });
 
+
+describe("a mapping that answered nothing", () => {
+  // "Mapped answers still showing when nothing is filled." Two shapes of the
+  // same thing: a review block revealed over an empty list, and a review block
+  // revealed over rows that every one of them came back unanswered. Both read
+  // as a mapped claim until you get far enough down to notice.
+
+  async function mapReturning(panel, fields) {
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Chua Beng Huat · S7211043C · 04/11/1972\n\nSeen 12/03/2026.";
+    await panel.onMap();
+  }
+
+  const unanswered = (id, label) => ({
+    field_id: id, pdf_field_name: "", field_type: "text", label, help: null,
+    value: null, status: "missing", source: null, needs_review: true,
+    fill_from: null, options: [], step: null,
+  });
+
+  test("every question unanswered leaves the review down, and says why", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, [unanswered("a", "Diagnosis"), unanswered("b", "Ward")]);
+
+    expect($("mapped").hidden).toBe(true);
+    expect($("map-status").textContent).toMatch(/nothing in your note answers/i);
+  });
+
+  test("no rows at all does not draw an empty box", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, []);
+
+    expect($("mapped").hidden).toBe(true);
+    expect($("map-status").textContent).toMatch(/no answers/i);
+  });
+
+  test("one answer among many unanswered is still a review", async () => {
+    // The guard is "nothing came back", not "not everything came back". A
+    // single value is worth reading, and the rest are what the doctor was
+    // always going to write by hand.
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, [
+      unanswered("a", "Ward"),
+      { ...unanswered("b", "Diagnosis"), value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ]);
+
+    expect($("mapped").hidden).toBe(false);
+    expect($("map-status").textContent).toBe("");
+  });
+});
+
 describe("what actually goes on the wire", () => {
   // The claim the product makes, asserted against the requests themselves
   // rather than against the code that builds them. Every test here reads what
@@ -1649,27 +1657,27 @@ describe("when a wizard step renders", () => {
     const panel = loadPanel();
     return settle()
       .then(() => {
-        expect($("form-id").value).not.toBe("aia_ghs_claim");
+        expect(panel.state.schema).toBeNull();
         page.survey = fits("aia_ghs_claim");
         return panel.onPageChanged();
       })
       .then(() => {
-        expect($("form-id").value).toBe("aia_ghs_claim");
+        expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
       });
   });
 
-  test("a form the doctor picked by hand is left alone", async () => {
+  test("re-detection follows the page, having nothing else to follow", async () => {
+    // This used to defer to a form the doctor had picked by hand, because
+    // overturning their choice between wizard steps would change which form
+    // was being filled without anyone being told. With the picker gone there
+    // is no choice to overturn, and the page is the only evidence there is.
     const panel = loadPanel();
     await settle();
-
-    // Reaching for the picker is saying the automatic answer was wrong.
-    $("form-id").value = "roboform_test_v1";
-    $("form-id").dispatchEvent(new Event("change"));
 
     page.survey = fits("aia_ghs_claim");
     await panel.onPageChanged();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("nothing is filled — the doctor still clicks", async () => {
@@ -1996,7 +2004,7 @@ describe("the sample note", () => {
     await settle();
 
     $("sample-note").click();
-    expect($("paste").value).toContain("acute tonsillitis");
+    expect($("paste").value).toContain("acute appendicitis");
     // A programmatic assignment fires no input event of its own, so the
     // button has to dispatch one or the debounce never runs.
     await vi.advanceTimersByTimeAsync(600);
@@ -2015,13 +2023,32 @@ describe("the sample note", () => {
     expect($("full-name").value).toBe("");
   });
 
-  test("every identifier in it is synthetic", () => {
-    // It ships inside the extension, so it is held to the repo's rule that
-    // fixtures are synthetic only.
-    const panel = loadPanel();
+  test("every identifier in it is one the repo invented", () => {
+    // It ships inside the extension, so it is held to the rule that fixtures
+    // are synthetic only. Pinned by value rather than by shape: a real
+    // identifier arriving here would look exactly like these to any pattern,
+    // and would show up as a diff on this line instead.
+    loadPanel();
     $("sample-note").click();
-    expect($("paste").value).toContain("S8012345D");
-    expect($("paste").value).not.toContain("S7211043C"); // the test fixture's own
+    const note = $("paste").value;
+    for (const invented of [
+      "Chua Beng Huat", "S7211043C", "04/11/1972", "91112233", "GHS-4471902",
+    ]) {
+      expect(note, invented).toContain(invented);
+    }
+  });
+
+  test("it carries the things the redactor has to get right", () => {
+    // A sample that parsed cleanly out of four neat lines would demonstrate
+    // the wrong thing. These are the three that are easy to get wrong: an
+    // institution whose name is a surname, a labelled line that must resolve
+    // to no field at all, and a third party no dictionary can know about.
+    loadPanel();
+    $("sample-note").click();
+    const note = $("paste").value;
+    expect(note).toContain("Tan Tock Seng Hospital");
+    expect(note).toContain("Employer: Sunrise Logistics Pte Ltd");
+    expect(note).toContain("Dr Ong Wei Sheng");
   });
 });
 
@@ -2382,6 +2409,116 @@ describe("the note pane", () => {
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
   });
 
+  test("finds a quote the model rewrapped, and shows the note's own wrapping", async () => {
+    // A clinical note is wrapped, and a model quoting a sentence that spans a
+    // line break hands it back with a space. Every character in it is still
+    // the doctor's own — only the wrapping is the model's — so refusing it
+    // loses a correct citation, and a correct citation refused reads exactly
+    // like "this value came from nowhere". The rule below this one is
+    // unchanged for any difference that is not whitespace.
+    const wrapped = "Seen 02/08/2026. Dx acute\ntonsillitis. MC 2 days.";
+    await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis." }], wrapped);
+
+    $("rows").children[0].click();
+
+    // Marked as the doctor wrote it, not as the model requoted it.
+    expect(marked().textContent).toBe("Dx acute\ntonsillitis.");
+    expect($("note-text").textContent).toBe(wrapped);
+  });
+
+  test("marks every sentence a citation draws on, not just the first", async () => {
+    // "What was done at this consultation" is answered from several lines at
+    // once, and the model cites all of them in one string joined with a
+    // semicolon. That string is nowhere in the note as one run, so the pane
+    // used to mark nothing at all on exactly the rows carrying the most.
+    const note =
+      "Seen 02/08/2026. Amoxicillin 500mg tds for 7 days. " +
+      "Dx acute tonsillitis. MC 2 days.";
+    await mapWithNote(
+      [
+        {
+          ...QUOTED,
+          label: "Treatment prescribed",
+          value: "Amoxicillin 500mg tds for 7 days; MC 2 days",
+          source: "Amoxicillin 500mg tds for 7 days. MC 2 days.",
+        },
+      ],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    expect(marks.map((m) => m.textContent)).toEqual([
+      "Amoxicillin 500mg tds for 7 days.",
+      "MC 2 days.",
+    ]);
+    // Still the doctor's own note, unchanged around the marks.
+    expect($("note-text").textContent).toBe(note);
+  });
+
+  test("a lone token is not a citation, however verbatim it is", async () => {
+    // "02/08/2026." is in the note, word for word. It is also in four places
+    // in a real admission note, and lighting the first because a quote
+    // happened to end with it is the wrong-citation failure by a shorter
+    // route. The other fragment here is a real attempt and is simply not in
+    // the note — the words are reordered — so nothing is marked at all.
+    await mapWithNote([{ ...QUOTED, source: "Dx tonsillitis, acute. 02/08/2026." }]);
+
+    $("rows").children[0].click();
+
+    expect(marked()).toBeNull();
+    expect($("note-following").textContent).toBe("quote not found in the note");
+  });
+
+  test("a fragment the note says twice marks neither", async () => {
+    // The same refusal the demographics parser makes over two phone numbers.
+    // Nothing here can say which of the two the model meant, and marking the
+    // first is a coin toss shown to the doctor as a fact.
+    const note = "MC 2 days. Dx acute tonsillitis. Reviewed 09/08/2026. MC 2 days.";
+    await mapWithNote(
+      [{ ...QUOTED, source: "Dx acute tonsillitis. MC 2 days." }],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    // The unambiguous half still lights; the repeated half does not.
+    expect(marks.map((m) => m.textContent)).toEqual(["Dx acute tonsillitis."]);
+  });
+
+  test("scrolls a mark that is off the bottom into view, with room to spare", async () => {
+    // The one test in this file that reaches the scroll at all.
+    //
+    // jsdom has no layout: every element reports scrollHeight and clientHeight
+    // of 0, so markNote's "a note that fits needs no moving" guard fires in
+    // every other test here and everything after it is dead code to the suite.
+    // A ReferenceError lived on the last line of that branch through two
+    // commits and 147 green tests, with the pane doing nothing at all in a
+    // real browser. Faking the four measurements is enough to run it.
+    const panel = await mapWithNote([QUOTED]);
+    const pre = $("note-text");
+    const mark = $("note-text").querySelector(".quote");
+
+    Object.defineProperty(pre, "scrollHeight", { value: 600, configurable: true });
+    Object.defineProperty(pre, "clientHeight", { value: 200, configurable: true });
+    pre.scrollTo = vi.fn();
+    pre.getBoundingClientRect = () => ({ top: 0, bottom: 200, height: 200 });
+    // Off the bottom of the pane by 320px.
+    mark.getBoundingClientRect = () => ({ top: 500, bottom: 520, height: 20 });
+
+    $("rows").children[0].click();
+
+    expect(pre.scrollTo).toHaveBeenCalled();
+    const { top } = pre.scrollTo.mock.calls[0][0];
+    // Past the mark, not level with it. 320 is the distance that puts the
+    // sentence exactly on the pane's edge — where the old 8px margin left it,
+    // descenders against the border. A line and a half clears it.
+    expect(top).toBeGreaterThan(320 + 8);
+    expect(panel).toBeTruthy();
+  });
+
   test("marks NOTHING when the quote is not in the note verbatim", async () => {
     // The rule this whole pane rests on. A fuzzy match would draw a highlight
     // around a sentence the value did not come from, on the one screen whose
@@ -2474,6 +2611,42 @@ describe("an inferred value's sentence", () => {
     expect(mark).not.toBeNull();
     expect(mark.textContent).toBe("Dx acute tonsillitis.");
     expect(mark.classList.contains("reasoned")).toBe(true);
+  });
+});
+
+describe("the field's own instruction", () => {
+  const HELP =
+    "The date the patient FIRST consulted this doctor for this condition, " +
+    "not the latest visit.";
+
+  test("is shown on a row that is being judged", async () => {
+    await mapWithNote([
+      { ...QUOTED, help: HELP, status: "inferred", needs_review: true,
+        value: "31/07/2026", label: "Date first consulted" },
+    ]);
+
+    expect($("rows").querySelector(".help").textContent).toBe(HELP);
+  });
+
+  test("is not repeated on a row the note answered outright", async () => {
+    // It is written for whoever is deciding whether an answer is right, and
+    // that is a question a settled row does not ask. Three lines of it per
+    // row down a list of twenty is how the text that CANNOT be skipped gets
+    // skipped too.
+    await mapWithNote([{ ...QUOTED, help: HELP, needs_review: false }]);
+
+    expect($("rows").querySelector(".help")).toBeNull();
+  });
+
+  test("is not shown on a blank row either", async () => {
+    // The one that looks wrong, and is the owner's call: it is the doctor's
+    // own form and their own patient, and the label already names the field.
+    await mapWithNote([
+      { ...QUOTED, help: HELP, value: null, status: "missing",
+        needs_review: false, label: "Date of consultation" },
+    ]);
+
+    expect($("rows").querySelector(".help")).toBeNull();
   });
 });
 
@@ -2663,5 +2836,20 @@ describe("a failure a doctor can report", () => {
 
     expect($("map-status").textContent).not.toContain("ANTHROPIC_API_KEY");
     expect($("map-status").textContent).not.toContain("terminal");
+  });
+});
+
+describe("the screen where answers are checked", () => {
+  test("is named for the checking, not for the survey it used to be", async () => {
+    // It began as a report on the insurer's form — "7 questions on this
+    // page" — and "This page" fitted. Then the review moved onto the same
+    // screen: pressing Map hides the survey box and leaves the consultation,
+    // every mapped answer and Fill under a heading still naming the form.
+    const panel = await mapWith([ADMISSION_DATE]);
+
+    expect($("h-page").textContent).toBe("Check the answers");
+    expect($("step-page").hidden).toBe(false);
+    expect($("mapped").hidden).toBe(false);
+    expect(panel.state.rows).toHaveLength(1);
   });
 });

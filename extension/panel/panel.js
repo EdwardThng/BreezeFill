@@ -109,26 +109,58 @@ const REQUIRED_FIELDS = ["full-name", "dob"];
 // demonstrating it. Every identifier in it is invented — repo fixtures are
 // synthetic only, and this ships inside the extension.
 //
-// It is deliberately awkward rather than tidy, because a sample that parsed
-// cleanly would demonstrate the wrong thing. It carries two phone numbers, so
-// the sole-match rule in demographics.py has to refuse both rather than guess;
-// a policy number written two ways, which resolves rather than refusing,
-// because both renderings name one policy; and a first-consult date that is
-// not the consultation date, which is exactly the distinction a schema
-// description exists to draw.
-const SAMPLE_NOTE = `Tan Wei Ling, F, 47
-NRIC S8012345D  DOB 14/03/1978
-HP 9123 4567 / 6123 4567
-Policy GHS-88213004 or GH-88213004 (AIA Singapore)
-Blk 118 Bishan St 12 #07-21, S570118
+// It is a whole claim rather than a tidy fragment, because the things worth
+// showing are the ones a tidy fragment does not contain:
+//
+//   - A header with NO label on it. Nothing says "Patient:"; the block is
+//     recognised because six shapes sit in it, and the one gap between them
+//     is checked against the name the doctor typed rather than guessed at.
+//   - `Employer: Sunrise Logistics Pte Ltd`, which is a labelled line that
+//     must not become anything. "Employer name" is not a patient qualifier,
+//     so the label resolves to no field and the company is left where it is.
+//   - `Tan Tock Seng Hospital`, whose first word is somebody's surname. It
+//     survives redaction because institutions are held aside — and the claim
+//     needs it, since one of the questions is which hospital.
+//   - Two doctors, named in passing. Nobody typed them, so no dictionary
+//     entry exists and no shape finds them: they are the known hole, and
+//     what the server's sweep is for. The sample shows the limit rather than
+//     hiding it.
+//   - An operation code, a Medisave table and an Alvarado score — the things
+//     a claim form asks for that look enough like identifiers to be worth
+//     proving are not treated as any.
+//   - Eleven dates, exactly one of which is a birth date, and it is the only
+//     one in the header.
+const SAMPLE_NOTE = `Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
+18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902
+Insurance: AIA Singapore
+Employer: Sunrise Logistics Pte Ltd
 
-Seen 02/08/2026. 3 days sore throat, fever 38.4, odynophagia.
-O/E tonsils enlarged with exudate, tender cervical nodes.
-Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
-First consult for this episode 31/07/2026. MC 2 days.`;
+First seen 12/03/2026 with 2 days of periumbilical pain migrating to the right
+iliac fossa, anorexia and one episode of vomiting. Symptoms began 10/03/2026.
+No prior episodes of the same complaint.
+
+O/E T 38.1, tender RIF with rebound, Alvarado 8. CT abdomen 12/03/2026 showed
+acute appendicitis with no perforation.
+
+Admitted to Tan Tock Seng Hospital 12/03/2026, discharged 15/03/2026.
+Laparoscopic appendicectomy 13/03/2026 by Dr Ong Wei Sheng. Operation code
+SF849A, Medisave table 4B. Recovery uneventful, no complications.
+
+MC 14 days from 13/03/2026 to 26/03/2026. Reviewed 20/03/2026, wound clean.
+Care ended 20/03/2026, no onward referral.
+
+Dr Tan Mei Ling, MCR M08842B, Family Physician.
+Braddell Family Clinic, 22 Braddell Road, Singapore 359915. Tel 62551234.`;
 
 // Whether to animate a scroll. Read once: the panel is not open long enough
 // for the setting to change under it, and asking per frame is wasteful.
+//
+// markNote is the only reader and it is the LAST expression in that function,
+// after the guard that returns early when the note fits its pane. jsdom gives
+// every element a scrollHeight and clientHeight of 0, so that guard always
+// fires in the tests and this line is never evaluated there — which is how
+// this constant went missing for two commits with 147 tests green and the
+// pane dead in the browser. If it is moved again, move the reader with it.
 const REDUCED_MOTION = globalThis.matchMedia
   ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
   : { matches: false };
@@ -182,7 +214,6 @@ const state = {
    * choice was wrong, and silently changing it back on the next step is the
    * kind of thing that gets noticed after the form is submitted.
    */
-  formChosenByHand: false,
   /**
    * The schema whose instructions sharpen this page's questions, or null.
    *
@@ -292,21 +323,6 @@ function hostMatches(host, patterns) {
   });
 }
 
-/**
- * Say what is going on, and open the picker.
- *
- * Only for the cases where something is genuinely wrong and a human choice
- * might help — not for "the bank does not describe this page", which is an
- * ordinary outcome handled by selectForm(null).
- */
-function showPicker(message) {
-  const detected = $("form-detected");
-  detected.textContent = message;
-  detected.classList.add("unknown");
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-}
-
 // Thresholds for *identifying* a form, which are deliberately looser than the
 // ones for filling it. A wizard shows one step at a time, so the right schema
 // may only find a third of its fields on the page in front of us — demanding
@@ -364,47 +380,17 @@ function bestCandidate(scores) {
 }
 
 /**
- * Record what will be used to sharpen this page's questions, and say so.
+ * Record which schema will sharpen this page's questions.
  *
- * `form` may be null, and that is a normal outcome rather than a failure
- * state: it means the page's own wording is the best instruction available.
- * Either way the panel is ready to map — nothing here disables anything.
+ * `form` may be null, and that is an ordinary outcome rather than a failure:
+ * it means the page's own wording is the best instruction available. Either
+ * way the panel maps. Nothing is shown for it, because nothing about it is a
+ * decision the doctor makes — it only ever changed how well each question was
+ * put, never which questions were asked or whether they were.
  */
-function describeSelection(form) {
-  const detected = $("form-detected");
-  // The picker is kept in step with the state rather than assumed to already
-  // agree with it. It disagrees in both directions otherwise: a select with
-  // nothing chosen shows its first option, and a doctor who picks one by hand
-  // leaves the sentence above it describing the previous answer.
-  $("form-id").value = form ? form.form_id : "";
-
-  if (form) {
-    detected.textContent = form.insurer
-      ? `${form.insurer} — ${form.display_name}`
-      : form.display_name;
-    detected.classList.remove("unknown");
-    return;
-  }
-
-  // Deliberately not phrased as a problem. Nothing is broken and there is
-  // nothing for the doctor to do: BreezeFill reads the questions on the page
-  // and answers those. Naming the host is the one useful detail, because it
-  // is how they would tell us which form to describe properly later.
-  detected.textContent = state.host
-    ? `Reading the questions on this page (${state.host})`
-    : "Reading the questions on this page";
-  detected.classList.add("unknown");
-}
-
 function selectForm(form, host) {
   state.schema = form || null;
   if (host) state.host = host;
-  describeSelection(state.schema);
-
-  // The picker stays reachable, never required. A doctor who knows the bank
-  // has a better description for this form than the page does can say so.
-  $("form-id").hidden = true;
-  $("form-override").hidden = false;
 }
 
 /**
@@ -442,11 +428,6 @@ function selectForm(form, host) {
  */
 async function detectForm() {
   if (!state.forms.length) return;
-  // A human already answered this question. Detection re-runs on every wizard
-  // step, and quietly overturning a doctor's choice between steps would change
-  // which form is being filled without anyone being told.
-  if (state.formChosenByHand) return;
-
   let response;
   try {
     response = await ask({
@@ -455,7 +436,9 @@ async function detectForm() {
       candidates: candidatesFor(state.forms),
     });
   } catch {
-    showPicker("Could not read this page — pick the form yourself, or click the BreezeFill icon on the tab you want to fill.");
+    // Nothing to say and nothing to ask. The doctor has not reached the page
+    // step yet, and when they do, scanPage reports what it can see there — one
+    // message about the page, in the place the page is discussed.
     return;
   }
 
@@ -478,7 +461,6 @@ async function detectForm() {
 }
 
 async function loadForms() {
-  const select = $("form-id");
   try {
     const response = await fetch(`${apiBase()}/forms`);
     if (!response.ok) throw new Error(String(response.status));
@@ -495,25 +477,6 @@ async function loadForms() {
     // the sharper instruction behind each one, not the fill. The mapping call
     // itself will report the backend properly if it is really unreachable.
     setStatus($("map-status"), UNREACHABLE, "error");
-    return;
-  }
-
-  select.replaceChildren();
-  // No form is a choice, not the absence of one, and it needs an entry to be
-  // choosable at all. A <select> has no empty state: without this its first
-  // option stands selected whether or not anyone picked it, so a doctor who
-  // opened the picker could name a form and never take one back — and the
-  // control claimed a schema was in use while `state.schema` was still null.
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "No form — use this page's own wording";
-  select.append(none);
-
-  for (const form of state.forms) {
-    const option = document.createElement("option");
-    option.value = form.form_id;
-    option.textContent = form.insurer ? `${form.insurer} — ${form.display_name}` : form.display_name;
-    select.append(option);
   }
 }
 
@@ -1063,8 +1026,29 @@ async function onMap() {
     // The offer is spent: these questions have been mapped, and the button
     // that offered them would now re-ask the model the same thing.
     $("map-prompt").hidden = true;
-    $("mapped").hidden = false;
-    setStatus(status, "");
+    // ...but only reveal the review when there is a review to read. An answer
+    // list with nothing in it is a promise the panel has not kept, and it was
+    // being shown in two different ways:
+    //
+    //   - no rows at all, which drew an empty box under the prompt;
+    //   - rows that every one of them came back unanswered, which read as a
+    //     mapped claim until the doctor got far enough down to notice that
+    //     every badge said "Not found".
+    //
+    // Both now say so in the status line and leave the block down. Nothing is
+    // lost by it: a row with no value is a question the doctor was always
+    // going to answer by hand, and the form on screen already asks it.
+    const answered = state.rows.filter(hasValue).length;
+    $("mapped").hidden = answered === 0;
+    setStatus(
+      status,
+      answered
+        ? ""
+        : state.rows.length
+          ? "Nothing in your note answers the questions on this page. They are yours to fill in."
+          : "The model returned no answers for this page.",
+      answered ? null : "error"
+    );
   } catch (error) {
     setStatus(status, messageFor(error), "error");
   } finally {
@@ -1149,7 +1133,22 @@ function renderRow(row) {
   label.textContent = row.label;
   wrap.append(label);
 
-  if (row.help) {
+  // The field's own instruction, on the rows that are being judged and no
+  // others.
+  //
+  // It is written for whoever is deciding whether an answer is the right one
+  // — "the date the patient FIRST consulted this doctor for this condition,
+  // not the latest visit" — and that is a question only a held row asks. On a
+  // row the note answered outright it restates a label the doctor has already
+  // read, three lines at a time, down a list of twenty; and a screen where
+  // most of the text can be skipped is a screen where the text that cannot be
+  // skipped gets skipped too.
+  //
+  // A blank row loses it as well, which is the one that looks wrong. It is
+  // the doctor's own form and their own patient: they know what belongs in
+  // "Date of consultation", and if they do not, the instruction is one click
+  // away in the schema rather than in front of them on every claim.
+  if (row.help && row.needs_review) {
     const help = document.createElement("p");
     help.className = "help";
     help.textContent = row.help;
@@ -1296,7 +1295,7 @@ const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
   { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
-  { key: "page", section: "step-page", title: "This page" },
+  { key: "page", section: "step-page", title: "Check the answers" },
 ];
 
 /** Show one step, collapse everything behind it, hide everything ahead. */
@@ -1525,6 +1524,105 @@ function updateReviewMeta() {
  * reset its scrollTop on every frame of a scroll, which is what made following
  * the rows stutter; now only a class moves.
  */
+/**
+ * Where a quote sits in the note, allowing only the WHITESPACE to differ.
+ *
+ * The pane rests on the model quoting verbatim, and a quote that is not in
+ * the note is refused rather than approximated — a fuzzy match would draw a
+ * highlight round a sentence the value did not come from, on the one screen
+ * whose job is showing where a value came from. That rule is unchanged here.
+ *
+ * What changes is that a line break is not a difference in the text. Notes
+ * wrap; a model quoting a sentence that spans a break hands it back with a
+ * space, and every character in it is still the doctor's own. Refusing that
+ * loses a correct citation, and a correct citation refused reads exactly like
+ * "this value came from nowhere" — which is the thing the doctor is checking.
+ *
+ * Whitespace runs match whitespace runs. They are not allowed to match
+ * NOTHING, so "acutetonsillitis" still fails against "acute tonsillitis"; the
+ * words themselves are compared character for character, punctuation
+ * included. Returns the span in the NOTE's coordinates, so what is marked is
+ * always what the note says rather than what the model returned.
+ */
+/** Every place this run appears, by the whitespace rule above. */
+function runsOf(text, src) {
+  const runs = [];
+  for (let from = 0; ; ) {
+    const at = text.indexOf(src, from);
+    if (at < 0) break;
+    runs.push({ at, end: at + src.length });
+    from = at + 1;
+  }
+  if (runs.length) return runs;
+
+  const words = src.split(/\s+/).filter(Boolean);
+  if (!words.length) return runs;
+  const pattern = words
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const wrapped = new RegExp(pattern, "g");
+  for (let match; (match = wrapped.exec(text)); ) {
+    runs.push({ at: match.index, end: match.index + match[0].length });
+    if (match.index === wrapped.lastIndex) wrapped.lastIndex++;
+  }
+  return runs;
+}
+
+function locateRun(text, src) {
+  const runs = runsOf(text, src);
+  return runs.length ? runs[0] : null;
+}
+
+// A single token is not a citation. "13/03/2026." is in four places in an
+// admission note, and lighting the first one because a quote happened to end
+// with it is the wrong-citation failure by a shorter route. Two words is
+// enough — clinical shorthand is short, and "MC 2 days." is a whole sentence
+// a doctor wrote.
+const QUOTE_MIN_WORDS = 2;
+
+/**
+ * Every place in the note this citation draws on. Zero, one, or several.
+ *
+ * One sentence is the ordinary case and is tried whole first. But a question
+ * like "what was done at this consultation" is answered from several lines at
+ * once, and the model cites all of them — joined with a semicolon, often
+ * reordered, sometimes across a paragraph. That string is nowhere in the note
+ * as one run, so the pane marked nothing at all on exactly the rows carrying
+ * the most.
+ *
+ * Split and locate each piece. Nothing is loosened by this: every piece still
+ * has to appear word for word, so what gets marked is text the doctor wrote,
+ * and a piece the model paraphrased is simply left unmarked rather than
+ * approximated onto a neighbour. What changes is that a citation is allowed
+ * to point at three sentences, because sometimes it does.
+ */
+function locateQuote(text, src) {
+  const whole = locateRun(text, src);
+  if (whole) return [whole];
+
+  const found = [];
+  // A full stop or a semicolon, and NOT a colon. Splitting on a colon turns
+  // "Diagnosis: acute tonsillitis" — a paraphrase of "Dx acute tonsillitis."
+  // — into a fragment that IS in the note, and the pane draws a highlight
+  // round two words of somebody else's sentence. That is the wrong citation
+  // this whole pane exists to avoid, reached by the back door; the test named
+  // "marks NOTHING when the quote is not in the note verbatim" caught it on
+  // the first run.
+  for (const piece of src.split(/(?<=[.;])\s+/)) {
+    const trimmed = piece.trim();
+    if (trimmed.split(/\s+/).filter(Boolean).length < QUOTE_MIN_WORDS) continue;
+    const runs = runsOf(text, trimmed);
+    // Exactly one, or none. A fragment appearing twice cannot say which of
+    // the two the model meant, and marking the first is a coin toss shown to
+    // the doctor as a fact — the same refusal the parser makes when a note
+    // offers two phone numbers. The whole-quote path above is left alone: a
+    // complete citation repeated word for word in one note is not a case
+    // anyone has met, and refusing it would lose a mark that works today.
+    if (runs.length === 1) found.push(runs[0]);
+  }
+  return found;
+}
+
 function buildNote() {
   const pre = $("note-text");
   if (!pre) return;
@@ -1535,10 +1633,13 @@ function buildNote() {
   for (const row of state.rows) {
     const src = typeof row.source === "string" ? row.source.trim() : "";
     if (!src || seen.has(src)) continue;
-    const at = text.indexOf(src);
-    if (at < 0) continue;
+    const found = locateQuote(text, src);
+    if (!found.length) continue;
     seen.add(src);
-    spans.push({ at, end: at + src.length, src });
+    // All of them carry the same key, so one row lights all of its own
+    // sentences at once — which is what a citation drawn from three lines
+    // actually is.
+    for (const at of found) spans.push({ ...at, src });
   }
   spans.sort((a, b) => a.at - b.at);
 
@@ -1551,8 +1652,14 @@ function buildNote() {
     if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
     const el = document.createElement("span");
     el.className = "quote";
+    // Two strings, and they are not always the same one. `src` is the model's
+    // quote and is the key markNote matches a row against; `shown` is what the
+    // note itself says at that position, which is what the doctor reads and
+    // what setHit must rebuild from. Rendering the model's copy would let a
+    // requoted line rewrite the consultation on screen.
     el.dataset.src = span.src;
-    el.textContent = text.slice(span.at, span.end);
+    el.dataset.shown = text.slice(span.at, span.end);
+    el.textContent = el.dataset.shown;
     parts.push(el);
     cursor = span.end;
   }
@@ -1567,7 +1674,7 @@ function buildNote() {
  * one span's children and never the pane, so the scroll position is untouched.
  */
 function setHit(el, hit) {
-  const text = el.dataset.src;
+  const text = el.dataset.shown;
   const at = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
   if (at < 0) {
     el.textContent = text;
@@ -1614,7 +1721,10 @@ function markNote(row) {
     // No hit for an inference: the value is not in there to emphasise, and
     // guessing which words produced it is the fuzzy match this refuses.
     setHit(el, on && !reasoned ? value : null);
-    if (on) target = el;
+    // The FIRST of them when a citation spans several sentences. Scrolling to
+    // the last would put the earlier ones off the top of the pane, which is
+    // the opposite of showing the doctor what the value came from.
+    if (on && !target) target = el;
   }
 
   // Three silent cases and they are not the same thing. Nothing is being read;
@@ -1638,9 +1748,16 @@ function markNote(row) {
   // scrolled the pane on arrival even though the sentence was visible, which
   // hid the note's first line — the patient header — behind the top edge for
   // no reason. Nearest, not centred: move the least that puts it on screen.
+  // A line and a half of the note left showing past the mark, rather than the
+  // 8px this used to leave. Eight pixels is under half a line: it satisfies
+  // "on screen" and produces a sentence pinned against the pane's edge with
+  // its descenders touching the border, which is both hard to read and hard
+  // to believe is deliberate. Derived from the line height so it stays a line
+  // and a half if the note pane's type ever changes.
   const box = pre.getBoundingClientRect();
   const mark = target.getBoundingClientRect();
-  const MARGIN = 8;
+  const line = parseFloat(getComputedStyle(pre).lineHeight) || 18;
+  const MARGIN = Math.round(line * 1.5);
   if (mark.top >= box.top + MARGIN && mark.bottom <= box.bottom - MARGIN) return;
   const delta =
     mark.top < box.top + MARGIN
@@ -2214,18 +2331,6 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // review is never rebuilt from here — it was never taken down, only hidden.
 $("back-to-review").addEventListener("click", () => showStep("page"));
 
-$("form-id").addEventListener("change", () => {
-  state.formChosenByHand = true;
-  state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
-  describeSelection(state.schema);
-});
-$("form-override").addEventListener("click", () => {
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-  // Reaching for the override is saying the automatic answer was wrong. From
-  // here on detection stops re-deciding, including on the next wizard step.
-  state.formChosenByHand = true;
-});
 
 // The injected script reports that the page changed shape — a wizard step
 // rendered. Registered unconditionally: a panel with no granted tab simply
