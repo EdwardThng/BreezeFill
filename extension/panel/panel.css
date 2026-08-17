@@ -892,6 +892,219 @@ details > *:not(summary) {
   border-color: var(--check-line);
 }
 
+/* ------------------------------------------------- the check screen's card */
+
+/* The same card as a review row, still — same fill, same 10px radius, same
+   3px state rule. What comes out is the two things that made it 121px tall:
+   a badge line that four times out of six said what the doctor had already
+   assumed, and a permanent input box around a value that was already
+   readable.
+
+   What is left is the card's own rhythm, caption over content, at a third of
+   the height:
+
+       label          <- 11.5px, muted: the caption, not the content
+       badge          <- only on a row that has something to say
+       value          <- text at rest, an input the moment it is clicked
+                         and a green tick in the gutter beside it
+
+   The grid is named rather than ordered because the badge moves: on a
+   confirmed row it leaves the layout entirely and the two remaining rows
+   close up. */
+.review-row.detail {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  grid-template-areas:
+    "label   mark"
+    "note    mark"
+    "value   mark"
+    "choices choices";
+  gap: 2px 10px;
+  align-items: center;
+  padding: 7px 11px 8px 12px;
+  margin-bottom: 6px;
+}
+
+.review-row.detail.confirmed:hover {
+  background: var(--field);
+}
+
+.review-row.detail .label {
+  grid-area: label;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.review-row.detail .note {
+  grid-area: note;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.review-row.detail .badge {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* NOT display:none. The sentence is the only thing that separates a value the
+   note produced from one the doctor typed — which is evidence about whether
+   it can be trusted, on the screen where these values become the dictionary
+   redaction scrubs the note with. A screen reader has no tick to look at, so
+   the line leaves the layout and stays in the accessibility tree. */
+.review-row.detail.confirmed .note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The value. An input at all times — every control in this panel stays in the
+   DOM so nothing is ever lost by moving between steps — but at rest it is
+   drawn as the text it holds. The 1.5px rule is present and transparent
+   rather than absent, so colouring it on hover and focus never moves the
+   value by half a pixel. */
+.review-row.detail > input {
+  grid-area: value;
+  width: 100%;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-bottom: 1.5px solid transparent;
+  border-radius: 0;
+  padding: 0;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+/* A value read back against a note is read character by character, and a
+   proportional face hides the transposed digit that a fixed grid shows. */
+.review-row.detail > input.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.review-row.detail:hover > input {
+  border-bottom-color: var(--line);
+}
+
+.review-row.detail > input:focus {
+  border-bottom-color: var(--focus-line);
+}
+
+/* The picker is a permanent 20px glyph on a row whose whole point is that it
+   is quiet. It comes back on hover and on focus, which is when it is wanted. */
+.review-row.detail > input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  transition: opacity 0.15s ease;
+}
+
+.review-row.detail:hover > input[type="date"]::-webkit-calendar-picker-indicator,
+.review-row.detail > input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+}
+
+/* The confirmed mark, and deliberately not a new one: this is `.done-tick`'s
+   circle one size down. The panel already uses it to say a step is settled,
+   so a settled value says it the same way. */
+.review-row.detail .tick {
+  grid-area: mark;
+  justify-self: end;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--confident);
+  color: #fff;
+  font-size: 8.5px;
+  line-height: 1;
+  display: none;
+  place-items: center;
+}
+
+.review-row.detail.confirmed .tick {
+  display: grid;
+}
+
+.review-row.detail .choices {
+  grid-area: choices;
+}
+
+.review-row.detail.pending {
+  background: var(--check-bg);
+  border-color: var(--check-line);
+}
+
+/* A field nothing answered is red and has no box.
+
+   Six empty inputs made a screen whose job is CHECKING read as a form to
+   fill, and the blank was the panel's answer to two different situations —
+   "the note does not say" and "you have not got here yet" — which look
+   identical. What it must not become is a dead end: `dob` is required and a
+   clinical note is nothing but dates, so an unlabelled one is never read as a
+   birth date and this row is the common case, not the corner. Hence Add,
+   which costs one word while the field is unwanted and is there the moment it
+   is not. */
+.review-row.detail.missing {
+  background: var(--danger-bg);
+  border-color: var(--danger-line);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.review-row.detail.missing .badge {
+  color: var(--danger);
+}
+
+.review-row.detail.missing > input {
+  display: none;
+}
+
+.review-row.detail.missing.adding > input {
+  display: block;
+}
+
+.review-row.detail .add {
+  display: none;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--danger);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--danger-line);
+  border-radius: 0;
+  padding: 0 0 1px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.review-row.detail.missing .add {
+  display: inline-block;
+}
+
+.review-row.detail.missing.adding .add {
+  display: none;
+}
+
+.review-row.detail .add:hover {
+  border-bottom-color: var(--danger);
+}
+
 /* The model's own sentence saying why an inferred value follows from the
    sentence marked in the note above. Said on the row, because the row is where
    the doctor signs off — the pane can only mark what the value was worked out
