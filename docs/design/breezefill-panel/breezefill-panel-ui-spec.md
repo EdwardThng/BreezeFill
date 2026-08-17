@@ -389,7 +389,14 @@ line above them.
 
 ---
 
-### ⊕ Add this form to the bank
+### ⊕ Add this form to the bank — **REMOVED 2026-08-17**
+
+**This section is no longer built.** The owner's call, and it is the design brief
+below arriving at its conclusion: a JSON block asking a doctor to read a schema
+is a developer artefact in a clinician's tool, and the schema it produced bought
+sharpness rather than coverage, so nothing about the fill depended on it. Schemas
+are authored from a learn-mode dump instead. Kept here as the record of what was
+built and why it went; do not implement it again from this spec.
 
 Heading: `+` in the same circled-numeral chip + **"Add this form to the bank"**.
 
@@ -427,6 +434,17 @@ uppercase caption.
 Changing it re-fetches the form bank and re-runs detection. Because there's no
 storage, a doctor pointing this at a local backend has to retype it **every
 time the panel is opened** — a known and accepted cost of the no-disk rule.
+
+**DEVELOPER ONLY as of 2026-08-17.** The drawer is `hidden` in the markup and
+revealed by `panel.js` only when `update_url` is absent from
+`chrome.runtime.getManifest()`, which is how Chrome distinguishes an unpacked
+install from a Web Store one. A doctor never sees it: the paragraph above
+describes a doctor retyping a local backend URL, which is not a thing a doctor
+has any reason to do, and pointing the panel at a server that is not there is
+the only outcome available to them. The `api-base` input stays in the DOM either
+way — only visibility moves — so nothing about which backend is called depends on
+the drawer. It is a heuristic, not a security boundary; anything that must not
+reach a doctor needs a real check.
 
 ---
 
