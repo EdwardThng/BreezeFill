@@ -807,11 +807,6 @@ function messageFor(error) {
   return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
 }
 
-/** Did the bank describe any of this page? Reporting only — never a gate. */
-function mappingLive() {
-  return !state.schema;
-}
-
 /**
  * The page's questions, each carrying the best instruction available for it.
  *
@@ -1658,6 +1653,13 @@ function locateRun(text, src) {
 // a doctor wrote.
 const QUOTE_MIN_WORDS = 2;
 
+// Between the citations sharing one piece of the note. A dataset value is a
+// string, so a piece two rows both cite has to carry both their quotes in one
+// attribute — and the separator has to be something a consultation cannot
+// contain. ASCII unit separator: not a character any keyboard puts in a note,
+// and not one the model can quote out of a note that never had it.
+const SRC_SEP = "\u001f";
+
 /**
  * Every place in the note this citation draws on. Zero, one, or several.
  *
@@ -1689,7 +1691,31 @@ function locateQuote(text, src) {
   for (const piece of src.split(/(?<=[.;])\s+/)) {
     const trimmed = piece.trim();
     if (trimmed.split(/\s+/).filter(Boolean).length < QUOTE_MIN_WORDS) continue;
-    const runs = runsOf(text, trimmed);
+    // As written first, and only then without whatever punctuation the model
+    // put on the end of it.
+    //
+    // The prompt asks for "the verbatim snippet" — singular — and says nothing
+    // about citing two of them, so when a question is answered from two lines
+    // the model invents the join, and the join is the one character it did not
+    // copy out of the note. "…by Dr Ong Wei Sheng; MC 14 days…" hands back a
+    // first piece ending in a semicolon the note spells as a full stop, and
+    // "Laparoscopic appendicectomy 13/03/2026." adds a full stop to a clause
+    // the note continues. Both were refused whole, so the treatment box —
+    // which is exactly the question answered from more than one line — marked
+    // nothing at all.
+    //
+    // This loosens nothing that matters. The words and every punctuation mark
+    // INSIDE the piece are still compared character for character, and the
+    // as-written form is still tried first, so no mark that works today moves.
+    // What is no longer required is that the model ended the sentence the same
+    // way the doctor did — which is a fact about the join, not about the
+    // quote. The uniqueness rule below still applies to the shortened form,
+    // and it is the guard that matters: a run appearing twice is refused
+    // whether or not a full stop was trimmed off it.
+    const asWritten = runsOf(text, trimmed);
+    const runs = asWritten.length
+      ? asWritten
+      : runsOf(text, trimmed.replace(/[.,;:]+$/, ""));
     // Exactly one, or none. A fragment appearing twice cannot say which of
     // the two the model meant, and marking the first is a coin toss shown to
     // the doctor as a fact — the same refusal the parser makes when a note
@@ -1721,27 +1747,59 @@ function buildNote() {
   }
   spans.sort((a, b) => a.at - b.at);
 
-  const parts = [];
-  let cursor = 0;
+  // Cut the note wherever the set of citations covering it changes, and let a
+  // piece belong to all of them.
+  //
+  // This replaces a rule that dropped a citation outright when an earlier one
+  // had already claimed text it overlapped. That rule was written to stop a
+  // nested span marking a fragment of somebody else's sentence, which is the
+  // right thing to refuse — but the price was paid by the wrong row and paid
+  // in silence. Two free-text boxes over one clinical paragraph is the normal
+  // shape of a claim form, not a corner case: "Principal diagnosis and
+  // clinical findings" and "Treatment or medication prescribed" sit next to
+  // each other on the test form, and both are answered from the operation
+  // lines. Whichever rendered second lost its highlight completely, and the
+  // pane told the doctor "quote not found in the note" about a quote sitting
+  // verbatim in the note — a refusal the doctor cannot act on and cannot even
+  // check, on the one screen whose job is showing where a value came from.
+  //
+  // Nothing is approximated to fix it. Every offset here still came from an
+  // exact match, so a piece belongs to a citation only where that citation
+  // genuinely covers it; overlap is simply recorded rather than resolved, and
+  // the reader decides which of them to light. A citation nothing overlaps
+  // yields exactly one piece, byte for byte the span this used to build — so
+  // the ordinary note is rendered exactly as before, and setHit still finds
+  // the value inside one piece rather than across two.
+  const edges = new Set([0, text.length]);
   for (const span of spans) {
-    // Two citations claiming overlapping text: the earlier one keeps it. A
-    // nested span would mark a fragment of somebody else's sentence.
-    if (span.at < cursor) continue;
-    if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
+    edges.add(span.at);
+    edges.add(span.end);
+  }
+  const cuts = [...edges].sort((a, b) => a - b);
+
+  const parts = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const at = cuts[i];
+    const end = cuts[i + 1];
+    const shown = text.slice(at, end);
+    if (!shown) continue;
+    const covering = spans.filter((span) => span.at < end && span.end > at);
+    if (!covering.length) {
+      parts.push(document.createTextNode(shown));
+      continue;
+    }
     const el = document.createElement("span");
     el.className = "quote";
-    // Two strings, and they are not always the same one. `src` is the model's
-    // quote and is the key markNote matches a row against; `shown` is what the
-    // note itself says at that position, which is what the doctor reads and
-    // what setHit must rebuild from. Rendering the model's copy would let a
-    // requoted line rewrite the consultation on screen.
-    el.dataset.src = span.src;
-    el.dataset.shown = text.slice(span.at, span.end);
-    el.textContent = el.dataset.shown;
+    // Two strings, and they are not always the same one. `srcs` are the
+    // models' quotes and are the key markNote matches a row against; `shown`
+    // is what the note itself says at that position, which is what the doctor
+    // reads and what setHit must rebuild from. Rendering the model's copy
+    // would let a requoted line rewrite the consultation on screen.
+    el.dataset.srcs = covering.map((span) => span.src).join(SRC_SEP);
+    el.dataset.shown = shown;
+    el.textContent = shown;
     parts.push(el);
-    cursor = span.end;
   }
-  if (cursor < text.length) parts.push(document.createTextNode(text.slice(cursor)));
   pre.replaceChildren(...parts);
 }
 
@@ -1792,7 +1850,11 @@ function markNote(row) {
   let target = null;
 
   for (const el of pre.querySelectorAll(".quote")) {
-    const on = Boolean(source) && el.dataset.src === source;
+    // `includes`, because a piece of the note two rows both cite carries both
+    // their quotes — see buildNote. Still an exact string match against the
+    // row's own source, so a piece lights for a row only where that row's
+    // citation actually covers it.
+    const on = Boolean(source) && el.dataset.srcs.split(SRC_SEP).includes(source);
     el.classList.toggle("on", on);
     el.classList.toggle("quoted", on && !reasoned);
     el.classList.toggle("reasoned", on && reasoned);
@@ -2236,79 +2298,6 @@ async function onPageChanged() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Growing the bank
-// ---------------------------------------------------------------------------
-
-/**
- * A draft schema for the form just filled, for a human to read and commit.
- *
- * Deliberately not installed anywhere. A schema is used on every later claim
- * against that form, so an unreviewed one turns one mis-mapped field into a
- * permanent wrong answer that nothing re-checks — and the fields here were
- * named by a model reading a page, not by anyone who has seen the form. The
- * review is cheap: it is a few dozen lines of JSON, and the labels are the
- * questions the doctor just answered.
- *
- * The descriptions are the weakest part and are worth editing by hand. A
- * schema earns its keep by telling the model what a question *means* — "the
- * date the patient FIRST consulted this doctor for this condition, not the
- * latest visit" — and all a page can supply is the wording of the question.
- */
-// Enough of a public-suffix list to guess an insurer's name from a host, and
-// not one character more — this is used for a display string a human edits,
-// never for matching. Singapore's are two-part (aia.com.sg), which is exactly
-// the trap: "the last two labels" of claimez.aia.com.sg is "com.sg".
-const HOST_SUFFIXES = new Set([
-  "com", "net", "org", "edu", "gov", "co", "sg", "uk", "au", "my", "id", "hk", "www",
-]);
-
-function draftSchema() {
-  const host = state.host || "";
-  const parts = host.split(".").filter(Boolean);
-  // The rightmost label that is not a suffix: claimez.aia.com.sg -> aia,
-  // roboform.com -> roboform. A guess, and labelled as one in display_name.
-  const brand = parts.filter((p) => !HOST_SUFFIXES.has(p)).pop() || "insurer";
-
-  return {
-    form_id: `${brand}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_v1`,
-    display_name: `Drafted from ${host} — rename me`,
-    insurer: brand.toUpperCase(),
-    fill_mode: "web",
-    // The full host, never a guess at the registrable domain. `hostMatches`
-    // matches subdomains too, so a wrong guess here does not merely miss —
-    // "com.sg" would claim every commercial site in Singapore. Widening this
-    // by hand to aia.com.sg is a one-word edit for whoever commits it; a
-    // schema that silently claims a whole TLD is not recoverable by review.
-    hosts: [host],
-    fields: state.rows.map((row) => ({
-      id: row.field_id,
-      label: row.label,
-      type: row.field_type,
-      source: "llm",
-      description: row.help || row.label,
-    })),
-  };
-}
-
-function showDraft() {
-  $("draft-json").value = JSON.stringify(draftSchema(), null, 2);
-  $("step-draft").hidden = false;
-  setStatus($("draft-status"), "");
-}
-
-async function onCopyDraft() {
-  const status = $("draft-status");
-  try {
-    await navigator.clipboard.writeText($("draft-json").value);
-    setStatus(status, "Copied. Save it into backend/schemas/ and restart the backend.");
-  } catch {
-    // Clipboard access can be refused; selecting the text is always available.
-    $("draft-json").select();
-    setStatus(status, "Select-all and copy — the clipboard was not available.", "error");
-  }
-}
-
 async function onFill() {
   const status = $("fill-status");
   setStatus(status, "Filling…", "busy");
@@ -2323,11 +2312,6 @@ async function onFill() {
       // Said once. The report banner directly below carries this, and the two
       // sat stacked saying the same thing in different words.
       setStatus(status, "");
-      // The form worked and nothing in the bank described it. Offer the
-      // schema now, while the page that produced it is still in front of the
-      // doctor — this is the only moment anyone can sanity-check the labels
-      // against the form they are looking at.
-      if (mappingLive()) showDraft();
       state.filled = true;
       updateProgress();
     }
@@ -2338,6 +2322,34 @@ async function onFill() {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether this copy was loaded from source rather than installed from the
+ * Chrome Web Store.
+ *
+ * Chrome writes `update_url` into the manifest of a store-installed item and
+ * leaves it absent on an unpacked one, so the manifest answers this on its own
+ * — no `management` permission, and nothing new in the permissions story a
+ * reviewer reads. It is a heuristic and it is not a security boundary: getting
+ * it wrong shows a doctor a text box, which is the behaviour that shipped until
+ * today. Anything that must not reach a doctor needs a real check, not this.
+ */
+function loadedFromSource() {
+  try {
+    return !("update_url" in chrome.runtime.getManifest());
+  } catch {
+    // No chrome.runtime at all means a test harness or a plain page. Treat that
+    // as "not a developer install": hidden is the safe default here, and the
+    // panel tests reveal it explicitly when they need it.
+    return false;
+  }
+}
+
+// The Backend URL override, and the only thing behind Advanced. A doctor who
+// changes it points the panel at a server that is not there, and they have no
+// reason to want to — the default is production. It stays in the DOM either way
+// so `api-base` is always readable; only its visibility moves.
+if (loadedFromSource()) $("advanced").hidden = false;
 
 $("api-base").value = DEFAULT_API_BASE;
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
@@ -2398,7 +2410,6 @@ $("check-next").addEventListener("click", () => {
 });
 $("note-toggle").addEventListener("click", toggleNote);
 $("fill-btn").addEventListener("click", onFill);
-$("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
 // this page's questions. It does not change *what* is filled — the page's own
 // questions, either way — only how well each one is put to the model.
@@ -2521,7 +2532,6 @@ globalThis.breezefillPanel = {
   scanPage,
   bestCandidate,
   fillPlan,
-  draftSchema,
   readableDate,
   localise,
   loadPrivacy,

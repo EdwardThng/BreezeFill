@@ -103,6 +103,16 @@ function respond(body, ok = true, status = 200) {
   });
 }
 
+/**
+ * The manifest `chrome.runtime.getManifest()` should answer with.
+ *
+ * A store-installed extension has `update_url` written into its manifest by
+ * Chrome and an unpacked one does not, which is how the panel tells a developer
+ * from a doctor. Defaults to the doctor: a store install is what almost every
+ * copy is, so it is what almost every test should be describing.
+ */
+let manifest;
+
 function loadPanel() {
   document.documentElement.innerHTML = PANEL_HTML;
   // The panel never reads a tab's address, but it does ask the injected
@@ -120,6 +130,7 @@ function loadPanel() {
     // listener is captured so a test can deliver a message the way Chrome
     // would, rather than calling the handler directly.
     runtime: {
+      getManifest: () => manifest,
       onMessage: {
         addListener: vi.fn((fn) => {
           pageListener = fn;
@@ -184,6 +195,10 @@ function shutDrawer() {
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  // A Web Store install, which is what a doctor has.
+  // Version matches the `/health` floor below: a mock that reads as out of date
+  // makes every test in the file refuse to send, which is its own bug hunt.
+  manifest = { name: "BreezeFill", version: "0.3.0", update_url: "https://clients2.google.com/service/update2/crx" };
   parseCalls = [];
   routes = {
     "/forms": () => respond(FORMS),
@@ -736,85 +751,42 @@ describe("mapping the page in front of the doctor", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Growing the bank
+// Advanced is the developer's, not the doctor's
 // ---------------------------------------------------------------------------
 
-describe("the draft schema", () => {
-  const ROWS = [
-    { field_id: "diagnosis_of_all_conditions_treated", label: "Diagnosis of all conditions treated", field_type: "text", help: "Diagnosis of all conditions treated", value: "Appendicitis", needs_review: false, status: "extracted" },
-    { field_id: "date_of_admission", label: "Date of admission", field_type: "date", help: null, value: "14/03/2026", needs_review: false, status: "extracted" },
-  ];
+// The Backend URL override is the only thing behind it, and a doctor who
+// changes it points the panel at a server that is not there. Chrome writes
+// `update_url` into a store-installed manifest and leaves it absent on an
+// unpacked one, so the manifest answers "is this a developer" with no extra
+// permission.
 
-  async function filledLive() {
-    page.survey = { ...page.survey, host: "claimez.aia.com.sg", candidates: [] };
-    const panel = loadPanel();
+describe("the Advanced drawer", () => {
+  test("a store install never sees it", async () => {
+    loadPanel();
     await settle();
-    panel.state.rows = ROWS;
-    panel.state.host = "claimez.aia.com.sg";
-    return panel;
-  }
 
-  test("it describes the form, and says where it came from", async () => {
-    const panel = await filledLive();
-    const draft = panel.draftSchema();
-
-    expect(draft.fill_mode).toBe("web");
-    // The full host, not a guess at the registrable domain. "The last two
-    // labels" of a Singapore host is "com.sg", and hostMatches() matches
-    // subdomains — that schema would claim every .com.sg site there is.
-    expect(draft.hosts).toEqual(["claimez.aia.com.sg"]);
-    // The insurer name is guessed past the suffixes, which is safe: it is a
-    // display string whoever commits the schema will edit.
-    expect(draft.insurer).toBe("AIA");
-    // The name is a guess off the host and has to be corrected by whoever
-    // commits it, so the draft says so rather than looking authoritative.
-    expect(draft.display_name).toMatch(/rename me/i);
-    expect(draft.fields).toEqual([
-      {
-        id: "diagnosis_of_all_conditions_treated",
-        label: "Diagnosis of all conditions treated",
-        type: "text",
-        source: "llm",
-        description: "Diagnosis of all conditions treated",
-      },
-      {
-        id: "date_of_admission",
-        label: "Date of admission",
-        type: "date",
-        source: "llm",
-        description: "Date of admission",
-      },
-    ]);
+    expect($("advanced").hidden).toBe(true);
   });
 
-  test("every field is described, not just the ones this note answered", async () => {
-    const panel = await filledLive();
-    panel.state.rows = [...ROWS, { field_id: "icd_10_code", label: "ICD-10 Code", field_type: "text", help: null, value: null, status: "missing", needs_review: true }];
-    // A schema describes the form. Dropping the blanks would mean the next
-    // claim, with a fuller note, could not fill the fields this one missed.
-    expect(panel.draftSchema().fields).toHaveLength(3);
+  test("an unpacked install does", async () => {
+    // The positive case, and it earns its place: `hidden` staying true is also
+    // what a broken selector or a renamed id looks like, and both read as this
+    // test passing.
+    manifest = { name: "BreezeFill", version: "0.3.0" };
+    loadPanel();
+    await settle();
+
+    expect($("advanced").hidden).toBe(false);
   });
 
-  test("it appears after a schema-free fill, and not before", async () => {
-    const panel = await filledLive();
-    expect($("step-draft").hidden).toBe(true);
+  test("the override still works when the drawer is hidden", async () => {
+    // Only visibility moves. `api-base` stays in the DOM and stays readable, so
+    // nothing about which backend is called depends on the drawer being open.
+    loadPanel();
+    await settle();
 
-    page.fill = { ok: true, refused: false, filled: 2, applied: [], report: EMPTY_REPORT };
-    await panel.onFill();
-
-    expect($("step-draft").hidden).toBe(false);
-    expect(JSON.parse($("draft-json").value).fields).toHaveLength(2);
-  });
-
-  test("a refused fill produces no draft", async () => {
-    // Nothing was written, so nothing was confirmed against the real page.
-    // A schema drafted from a page we could not fill is a guess about a form
-    // nobody has seen work.
-    const panel = await filledLive();
-    page.fill = { ok: true, refused: true, reason: "the page does not match", filled: 0, applied: [], report: EMPTY_REPORT };
-    await panel.onFill();
-
-    expect($("step-draft").hidden).toBe(true);
+    expect($("advanced").hidden).toBe(true);
+    expect($("api-base").value).toBeTruthy();
   });
 });
 
@@ -824,9 +796,13 @@ describe("the draft schema", () => {
 
 describe("a form the bank does not have, end to end", () => {
   // The flow as specified: fill in the details, check the bank, and when the
-  // form is not there, fill the page anyway and come back with a schema for
-  // next time. The pieces are unit-tested above; this walks the whole path in
-  // one go, because the failures that matter are at the joins.
+  // form is not there, fill the page anyway. The pieces are unit-tested above;
+  // this walks the whole path in one go, because the failures that matter are
+  // at the joins.
+  //
+  // It used to end with a drafted schema handed back for review. That step was
+  // removed on 2026-08-17 — it asked a doctor to read JSON — so a bank miss now
+  // costs sharpness and nothing else, which is what the rest of this test says.
   const CONTROLS = [
     { ref: "c1", label: "Patient's Full Name", type: "text" },
     { ref: "c2", label: "Diagnosis of all conditions treated", type: "text" },
@@ -902,19 +878,9 @@ describe("a form the bank does not have, end to end", () => {
     // different words directly above.
     expect($("fill-report").textContent).toMatch(/filled 3 field/i);
     expect($("fill-status").textContent).toBe("");
-
-    // 6. And the form comes back as a schema for the bank.
-    expect($("step-draft").hidden).toBe(false);
-    const draft = JSON.parse($("draft-json").value);
-    expect(draft.fill_mode).toBe("web");
-    expect(draft.hosts).toEqual(["portal.someinsurer.com"]);
-    expect(draft.fields.map((f) => f.label)).toEqual(CONTROLS.map((c) => c.label));
-    // Including the one this note could not answer: the schema describes the
-    // form, not this claim.
-    expect(draft.fields.map((f) => f.id)).toContain("icd_10_code");
   });
 
-  test("a form the bank already describes is not drafted again", async () => {
+  test("a form the bank already describes takes the same route", async () => {
     page.survey = {
       ok: true,
       host: "roboform.com",
@@ -941,9 +907,6 @@ describe("a form the bank does not have, end to end", () => {
     // bought was the instructions, not a different route.
     const paths = globalThis.fetch.mock.calls.map((c) => String(c[0]));
     expect(paths.some((p) => p.endsWith("/map-redacted"))).toBe(true);
-    // No draft: the bank already describes this form, and a second schema for
-    // it is how two descriptions of one form start disagreeing.
-    expect($("step-draft").hidden).toBe(true);
   });
 });
 
