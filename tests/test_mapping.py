@@ -879,6 +879,23 @@ def test_reasoning_never_reaches_the_output_grammar_as_a_union():
     assert "reasoning" in item["required"]
 
 
+def test_an_inferred_answer_is_asked_for_a_quote_too():
+    # The panel marks `source` in the note beside the value, so a source that
+    # is not in the notes word for word cannot be marked — and an inferred
+    # value is the one the doctor most needs to see the working for. Until
+    # this rule existed the prompt said "verbatim" only inside the rule for
+    # "extracted", which left the model free to describe what it reasoned
+    # from, or to leave source empty because the value is not written there.
+    # Either way the pane went blank on exactly the rows that matter.
+    prompt = SYSTEM_PROMPT.lower()
+    assert "source is a quote" in prompt
+    assert '"inferred" exactly as much as' in prompt
+    # And the division of labour between the two fields is spelled out, since
+    # the failure was the model putting the substance in reasoning and
+    # treating source as optional.
+    assert "what you worked out goes in reasoning" in prompt
+
+
 def test_symptom_timing_is_never_inferred():
     # The owner's call. A note saying "3 days sore throat, seen 02/08" invites
     # the arithmetic, and the arithmetic lands 30/07 on a claim form as a
