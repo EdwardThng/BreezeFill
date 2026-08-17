@@ -244,7 +244,24 @@ function Nav() {
 function Hero() {
   return (
     <header className="hero">
-      <p className="badge">Now on the Chrome Web Store</p>
+      {/* Three things were removed from this header on 2026-08-17, all on the
+          owner's call, and two of them had become untrue:
+
+          - A badge reading "Now on the Chrome Web Store". The listing is public
+            but the published build does not run against production, and `#/get`
+            hands out a zip instead, so announcing the store was advertising the
+            one route that is broken.
+          - A fineprint line, "One click from the Chrome Web Store." Same
+            problem, and it is now several clicks and Developer Mode.
+          - A trust line reading "No sign-in · Identifiers never reach the model
+            · Nothing is stored". The middle claim is the one CLAUDE.md's hard
+            rules forbid making: pass 3 of redaction IS a Claude call, so a name
+            the browser's pass 1 misses reaches Anthropic in the sweep. The
+            defensible claim is narrower — the model *answering the form* is not
+            shown identifiers — and it is made properly in the privacy section
+            rather than compressed into a badge.
+
+          Do not restore any of them from a design file. */}
       <h1>
         You already wrote this.
         <br />
@@ -264,20 +281,6 @@ function Hero() {
           Watch it fill a form
         </a>
       </div>
-      {/* The three things a doctor most needs to be true, and all three are.
-          The design put "Nothing leaves your browser" here, which is false —
-          the paste goes to the backend to be scrubbed. What is true, and is
-          the stronger claim anyway, is that the MODEL never sees identifiers. */}
-      <p className="trustline">
-        No sign-in · Identifiers never reach the model · Nothing is stored
-      </p>
-      {/* It installs in one click now. What the fineprint says instead is the
-          thing a doctor arriving from a search result actually needs to know
-          before they click: what it costs, and that it costs nothing today. */}
-      <p className="fineprint">
-        One click from the Chrome Web Store. Free during the pilot — you will be
-        asked before anything is charged.
-      </p>
       <HeroShot />
     </header>
   );
