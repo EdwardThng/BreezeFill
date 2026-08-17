@@ -391,6 +391,52 @@ function bestCandidate(scores) {
 function selectForm(form, host) {
   state.schema = form || null;
   if (host) state.host = host;
+  inferInsurer();
+}
+
+/**
+ * The insurer, from the form in front of the doctor rather than from the note.
+ *
+ * This is the one demographic where the page knows better than the paste. A
+ * note names its insurer in passing if at all — "(AIA Singapore)" after the
+ * policy number — while the schema that matched this page states it outright,
+ * and the insurer that belongs on a claim form is the one whose form it is. A
+ * note naming a different insurer than the form being filled is answering a
+ * question nobody asked.
+ *
+ * `assemble_claim` has done this server-side since 2026-08-11, but only on
+ * `POST /map` and the PDF path. The extension calls `/map-redacted`, whose
+ * schema comes from `_live_schema` and carries no `insurer` at all — so on the
+ * only path the panel actually uses, that fallback was unreachable and the box
+ * came back blank on every claim.
+ *
+ * Four refusals, and they are the whole design:
+ *
+ * - It only ever fills a BLANK. A value the doctor typed, or one the note
+ *   named, is a decision already made; this is a fallback, not a correction.
+ * - It never marks the field `touched`. The doctor did not answer it, so a
+ *   later parse that finds a real insurer in the note is still free to win.
+ * - It stays out of the way of a question already on screen. Two insurers in
+ *   one note is the two-candidates refusal, rendered as buttons, and writing
+ *   an answer over the top of it is exactly what `choices` exists to prevent.
+ * - It writes into the panel's own box, not into the review row, so the value
+ *   is visible and editable in the details drawer BEFORE Map runs. A
+ *   demographic reaches the doctor already green — it skips both the model and
+ *   the review confirm — so the one thing it must not do is appear for the
+ *   first time as an answer nobody was asked about.
+ *
+ * With no matched schema nothing happens, which is the schema-free path: the
+ * page's own controls carry no insurer, so the box stays blank and the doctor
+ * types one line.
+ */
+function inferInsurer() {
+  const inferred = (state.schema && state.schema.insurer) || "";
+  if (!inferred) return;
+  if (state.touched.has("insurer") || $("insurer").value.trim()) return;
+  const asking = $("choices-insurer");
+  if (asking && asking.children.length) return;
+  $("insurer").value = inferred;
+  updateFound();
 }
 
 /**
@@ -593,6 +639,11 @@ async function parsePaste() {
     $(id).value = value == null ? "" : value;
   }
   renderChoices(parsed.choices || {});
+  // After the loop, because the loop blanks a field the note did not name —
+  // including this one. Before `updateFound` would have been read as the
+  // parser's own finding; after `renderChoices`, so a note that named two
+  // insurers keeps the question rather than having it answered from the form.
+  inferInsurer();
   updateFound();
 }
 
