@@ -177,7 +177,9 @@ def test_fill_rejects_a_leftover_token():
 
 
 def test_a_web_schema_has_no_pdf_to_return():
-    response = client.post("/forms/roboform_test_v1/pdf", json={"values": {}})
+    # wizard_test_v1 is the remaining `fill_mode: "web"` schema in the bank —
+    # roboform_test_v1 stood here until it was deleted on 2026-08-17.
+    response = client.post("/forms/wizard_test_v1/pdf", json={"values": {}})
     assert response.status_code == 422
     assert "browser" in response.json()["detail"]
 
