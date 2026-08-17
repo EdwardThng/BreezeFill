@@ -58,12 +58,13 @@
 //
 // The DNS must exist BEFORE a build carrying this is handed to anyone. There
 // is no fallback to the old URL: the panel would report "could not reach the
-// backend" and the doctor's only route out is Advanced → Backend URL.
+// backend", and Advanced → Backend URL is now developer-only.
 //
-// Point this at http://localhost:8000 under Advanced for the RoboForm test
-// route: `roboform_test_v1` is `internal: true` and FORMFILL_SHOW_INTERNAL is
-// deliberately unset in production, so the deployed backend does not offer it
-// — a doctor must never be shown a form that is not a real insurer's.
+// Point this at http://localhost:8000 under Advanced to exercise
+// `wizard_test_v1`, the only internal schema left: it is `internal: true` and
+// FORMFILL_SHOW_INTERNAL is deliberately unset in production, so the deployed
+// backend does not offer it — a doctor must never be shown a form that is not a
+// real insurer's. That needs an unpacked install, which is where Advanced is.
 const DEFAULT_API_BASE = "https://api.breezefill.com";
 
 // Order matters: the orchestrator expects the other three to have registered
