@@ -403,28 +403,25 @@
       </section>
 
       <!--
-        Only ever shown after a schema-free map. The draft is for a human to
-        read and commit, not for the extension to install: a schema is used on
-        every later claim for that form, so an unreviewed one turns a single
-        mis-mapped field into a permanent wrong answer that nothing re-checks.
+        There was a "Add this form to the bank" step here until 2026-08-17: a
+        drafted schema, rendered as JSON for a human to read and commit. Removed
+        on the owner's call. It asked a doctor to review JSON, which is not a
+        thing a GP has any reason to be able to read, and the schema it drafted
+        bought sharpness rather than coverage — every question on the page is
+        attempted with or without one. Schemas are authored from a learn-mode
+        dump instead; see extension/learn/dump.js.
       -->
-      <section class="step" id="step-draft" aria-labelledby="h-draft" hidden>
-        <h2 id="h-draft">Add this form to the bank</h2>
-        <p class="step-sub">
-          This page had no schema. Below is a draft of one, built from the
-          fields BreezeFill found and the values you accepted. Read it, then
-          save it into <code>backend/schemas/</code> — the next claim on this
-          form will use it instead of guessing.
-        </p>
-        <div class="row-actions">
-          <button id="draft-copy" type="button">Copy JSON</button>
-        </div>
-        <p class="status" id="draft-status" role="status"></p>
-        <textarea id="draft-json" rows="14" spellcheck="false" readonly></textarea>
-      </section>
     </div>
 
-    <details class="advanced">
+    <!--
+      DEVELOPER ONLY, and hidden by default rather than shown by default: the
+      Backend URL override is a dev affordance, and a doctor who changes it
+      points the panel at a server that is not there. `panel.js` reveals this
+      only on an unpacked install — which is what "loaded from source" means —
+      so a Web Store install never shows it. Hidden in the markup so that a
+      panel whose script never ran does not flash it.
+    -->
+    <details class="advanced" id="advanced" hidden>
       <summary>Advanced</summary>
       <label class="field">
         <span>Backend URL</span>
