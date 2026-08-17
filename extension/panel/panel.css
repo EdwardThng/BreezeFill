@@ -993,15 +993,8 @@ details > *:not(summary) {
   line-height: 1.4;
 }
 
-.review-row.detail .note {
-  grid-area: note;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0;
-}
-
 .review-row.detail .badge {
+  grid-area: note;
   font-size: 11.5px;
   font-weight: 500;
 }
@@ -1011,7 +1004,7 @@ details > *:not(summary) {
    it can be trusted, on the screen where these values become the dictionary
    redaction scrubs the note with. A screen reader has no tick to look at, so
    the line leaves the layout and stays in the accessibility tree. */
-.review-row.detail.confirmed .note {
+.review-row.detail.confirmed .badge {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1118,16 +1111,19 @@ details > *:not(summary) {
   border-color: var(--check-line);
 }
 
-/* A field nothing answered is red and has no box.
+/* A field nothing answered says so, and is then typed into like any other.
 
-   Six empty inputs made a screen whose job is CHECKING read as a form to
-   fill, and the blank was the panel's answer to two different situations —
-   "the note does not say" and "you have not got here yet" — which look
-   identical. What it must not become is a dead end: `dob` is required and a
-   clinical note is nothing but dates, so an unlabelled one is never read as a
-   birth date and this row is the common case, not the corner. Hence Add,
-   which costs one word while the field is unwanted and is there the moment it
-   is not. */
+   What made the old card read as a form to fill was six inputs DRAWN AS
+   FIELDS — box, radius, hairline — around values that were already settled.
+   It was never the presence of somewhere to type. So this row keeps the same
+   borderless input as every other row and marks it: a red ground, the word
+   "Nothing found", and the caret's rule showing in --danger-line instead of
+   transparent, which is both the flag and the place to click.
+
+   The rule being visible at rest is the whole affordance, and it is why these
+   two declarations sit AFTER the hover and focus rules above rather than
+   beside their own kind — equal specificity, so order is what decides, and a
+   red row must not turn grey under the pointer. */
 .review-row.detail.missing {
   background: var(--danger-bg);
   border-color: var(--danger-line);
@@ -1138,38 +1134,12 @@ details > *:not(summary) {
   color: var(--danger);
 }
 
-.review-row.detail.missing > input {
-  display: none;
+.review-row.detail.missing > input,
+.review-row.detail.missing:hover > input {
+  border-bottom-color: var(--danger-line);
 }
 
-.review-row.detail.missing.adding > input {
-  display: block;
-}
-
-.review-row.detail .add {
-  display: none;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--danger);
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--danger-line);
-  border-radius: 0;
-  padding: 0 0 1px;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-
-.review-row.detail.missing .add {
-  display: inline-block;
-}
-
-.review-row.detail.missing.adding .add {
-  display: none;
-}
-
-.review-row.detail .add:hover {
+.review-row.detail.missing > input:focus {
   border-bottom-color: var(--danger);
 }
 
