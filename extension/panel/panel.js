@@ -1476,24 +1476,41 @@ function updateReviewMeta() {
  * included. Returns the span in the NOTE's coordinates, so what is marked is
  * always what the note says rather than what the model returned.
  */
-function locateRun(text, src) {
-  const at = text.indexOf(src);
-  if (at >= 0) return { at, end: at + src.length };
+/** Every place this run appears, by the whitespace rule above. */
+function runsOf(text, src) {
+  const runs = [];
+  for (let from = 0; ; ) {
+    const at = text.indexOf(src, from);
+    if (at < 0) break;
+    runs.push({ at, end: at + src.length });
+    from = at + 1;
+  }
+  if (runs.length) return runs;
 
   const words = src.split(/\s+/).filter(Boolean);
-  if (!words.length) return null;
+  if (!words.length) return runs;
   const pattern = words
     .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("\\s+");
-  const match = new RegExp(pattern).exec(text);
-  return match ? { at: match.index, end: match.index + match[0].length } : null;
+  const wrapped = new RegExp(pattern, "g");
+  for (let match; (match = wrapped.exec(text)); ) {
+    runs.push({ at: match.index, end: match.index + match[0].length });
+    if (match.index === wrapped.lastIndex) wrapped.lastIndex++;
+  }
+  return runs;
 }
 
-// A fragment shorter than this is not evidence of anything. "13/03/2026." is
-// in four places in an admission note, and marking the first one because a
-// citation happened to end with it is the wrong-citation failure by a shorter
-// route.
-const QUOTE_MIN_WORDS = 4;
+function locateRun(text, src) {
+  const runs = runsOf(text, src);
+  return runs.length ? runs[0] : null;
+}
+
+// A single token is not a citation. "13/03/2026." is in four places in an
+// admission note, and lighting the first one because a quote happened to end
+// with it is the wrong-citation failure by a shorter route. Two words is
+// enough — clinical shorthand is short, and "MC 2 days." is a whole sentence
+// a doctor wrote.
+const QUOTE_MIN_WORDS = 2;
 
 /**
  * Every place in the note this citation draws on. Zero, one, or several.
@@ -1516,11 +1533,24 @@ function locateQuote(text, src) {
   if (whole) return [whole];
 
   const found = [];
-  for (const piece of src.split(/(?<=[.;:])\s+/)) {
+  // A full stop or a semicolon, and NOT a colon. Splitting on a colon turns
+  // "Diagnosis: acute tonsillitis" — a paraphrase of "Dx acute tonsillitis."
+  // — into a fragment that IS in the note, and the pane draws a highlight
+  // round two words of somebody else's sentence. That is the wrong citation
+  // this whole pane exists to avoid, reached by the back door; the test named
+  // "marks NOTHING when the quote is not in the note verbatim" caught it on
+  // the first run.
+  for (const piece of src.split(/(?<=[.;])\s+/)) {
     const trimmed = piece.trim();
     if (trimmed.split(/\s+/).filter(Boolean).length < QUOTE_MIN_WORDS) continue;
-    const at = locateRun(text, trimmed);
-    if (at) found.push(at);
+    const runs = runsOf(text, trimmed);
+    // Exactly one, or none. A fragment appearing twice cannot say which of
+    // the two the model meant, and marking the first is a coin toss shown to
+    // the doctor as a fact — the same refusal the parser makes when a note
+    // offers two phone numbers. The whole-quote path above is left alone: a
+    // complete citation repeated word for word in one note is not a case
+    // anyone has met, and refusing it would lose a mark that works today.
+    if (runs.length === 1) found.push(runs[0]);
   }
   return found;
 }

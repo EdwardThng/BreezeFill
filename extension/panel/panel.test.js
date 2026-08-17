@@ -2350,6 +2350,68 @@ describe("the note pane", () => {
     expect($("note-text").textContent).toBe(wrapped);
   });
 
+  test("marks every sentence a citation draws on, not just the first", async () => {
+    // "What was done at this consultation" is answered from several lines at
+    // once, and the model cites all of them in one string joined with a
+    // semicolon. That string is nowhere in the note as one run, so the pane
+    // used to mark nothing at all on exactly the rows carrying the most.
+    const note =
+      "Seen 02/08/2026. Amoxicillin 500mg tds for 7 days. " +
+      "Dx acute tonsillitis. MC 2 days.";
+    await mapWithNote(
+      [
+        {
+          ...QUOTED,
+          label: "Treatment prescribed",
+          value: "Amoxicillin 500mg tds for 7 days; MC 2 days",
+          source: "Amoxicillin 500mg tds for 7 days. MC 2 days.",
+        },
+      ],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    expect(marks.map((m) => m.textContent)).toEqual([
+      "Amoxicillin 500mg tds for 7 days.",
+      "MC 2 days.",
+    ]);
+    // Still the doctor's own note, unchanged around the marks.
+    expect($("note-text").textContent).toBe(note);
+  });
+
+  test("a lone token is not a citation, however verbatim it is", async () => {
+    // "02/08/2026." is in the note, word for word. It is also in four places
+    // in a real admission note, and lighting the first because a quote
+    // happened to end with it is the wrong-citation failure by a shorter
+    // route. The other fragment here is a real attempt and is simply not in
+    // the note — the words are reordered — so nothing is marked at all.
+    await mapWithNote([{ ...QUOTED, source: "Dx tonsillitis, acute. 02/08/2026." }]);
+
+    $("rows").children[0].click();
+
+    expect(marked()).toBeNull();
+    expect($("note-following").textContent).toBe("quote not found in the note");
+  });
+
+  test("a fragment the note says twice marks neither", async () => {
+    // The same refusal the demographics parser makes over two phone numbers.
+    // Nothing here can say which of the two the model meant, and marking the
+    // first is a coin toss shown to the doctor as a fact.
+    const note = "MC 2 days. Dx acute tonsillitis. Reviewed 09/08/2026. MC 2 days.";
+    await mapWithNote(
+      [{ ...QUOTED, source: "Dx acute tonsillitis. MC 2 days." }],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    // The unambiguous half still lights; the repeated half does not.
+    expect(marks.map((m) => m.textContent)).toEqual(["Dx acute tonsillitis."]);
+  });
+
   test("marks NOTHING when the quote is not in the note verbatim", async () => {
     // The rule this whole pane rests on. A fuzzy match would draw a highlight
     // around a sentence the value did not come from, on the one screen whose
