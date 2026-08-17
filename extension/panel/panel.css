@@ -68,10 +68,28 @@
   --check-mark: #fdf3dc;
   /* The value itself, inside the sentence that carries it. */
   --check-hit: #f4dfa6;
-  /* A sentence a value was REASONED from rather than quoted out of. Marked,
-     because it is what the doctor has to read — just not as the answer. */
-  --check-faint: #fbf7ec;
   --missing: #6e6e73;
+
+  /* A sentence a value was REASONED from rather than quoted out of — marked,
+     because it is what the doctor has to read, just not as the answer.
+
+     A hue of its own rather than a paler amber, which is what it was. Two
+     different things were being said in one colour: amber is this panel's
+     word for "you have to check this", and that is equally true of a quoted
+     value and an inferred one. Whether the value is IN the sentence is a
+     different question, and answering it with the same amber four shades
+     lighter (#fbf7ec, on a #f5f5f4 ground) made the two marks read as
+     "highlighted" and "very slightly highlighted" rather than as two
+     relationships.
+
+     Violet because every other colour here is spoken for: green says settled,
+     amber says check this, red says nothing was found, and the blue belongs
+     to the Fill button alone. It asserts nothing about whether the value is
+     right — only that it was worked out rather than read off, which is
+     exactly the distinction the dashed rule was carrying by itself. */
+  --reason-mark: #ece7f6;
+  --reason-line: #6a54a3;
+  --reason-ink: #55408c;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
   --accent: #0071e3;
@@ -786,11 +804,16 @@ details > *:not(summary) {
 
 /* Still a highlight — it is the sentence the doctor has to read. What the
    dashed rule under it says is only that the value is not written in there. An
-   outline alone read as "nothing is marked". */
+   outline alone read as "nothing is marked".
+
+   And a different colour, not a fainter one. Two marks in the same hue
+   separated only by lightness put the whole weight of the distinction on the
+   dashed rule, which is four pixels of it; the fill is what the eye reads
+   first, and the fill was saying the same thing both times. */
 .quote.on.reasoned {
-  background: var(--check-faint);
+  background: var(--reason-mark);
   color: var(--text);
-  text-decoration: underline dashed var(--check);
+  text-decoration: underline dashed var(--reason-line);
   text-underline-offset: 4px;
 }
 
@@ -1153,12 +1176,17 @@ details > *:not(summary) {
 /* The model's own sentence saying why an inferred value follows from the
    sentence marked in the note above. Said on the row, because the row is where
    the doctor signs off — the pane can only mark what the value was worked out
-   FROM, and that sentence does not contain the answer. */
+   FROM, and that sentence does not contain the answer.
+
+   It takes the mark's colour rather than the badge's. This sentence and that
+   highlight are one fact said in two places, and leaving an amber explanation
+   pointing at a violet mark makes the reader do the joining. The badge above
+   it stays amber: "check this" is a separate claim, and it is still true. */
 .derived {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--check);
+  color: var(--reason-ink);
 }
 
 .date-hint {
