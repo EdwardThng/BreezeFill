@@ -221,40 +221,83 @@
             birth, 2 found in the note — pick the patient's, 9123 4567, 6123
             4567". `for` names the question and nothing else.
           -->
-          <div class="review-row" id="row-nric">
-            <div class="badge" id="badge-nric"></div>
+          <!--
+            The order is the card's, not the reading order's: label, then the
+            state, then the value. The badge sits between them because the two
+            states that print anything — a question and a blank — are things to
+            know BEFORE reading what is in the box, and because a confirmed row
+            hides that line entirely and closes the gap.
+
+            The tick is last and empty of meaning on its own: it is what a
+            confirmed row shows INSTEAD of the badge's sentence, which is
+            moved out of the layout but kept in the accessibility tree. So
+            `aria-hidden` here is not an omission — the sentence is still
+            announced, from the element the eye no longer needs.
+
+            `class="mono"` marks the three values with a shape. An NRIC read
+            back against a note is read character by character, and a
+            proportional face hides a transposed digit that a fixed grid
+            shows. The address and the insurer are words and stay in the body
+            face.
+          -->
+          <div class="review-row detail" id="row-nric">
             <label class="label" for="nric">NRIC</label>
-            <input id="nric" type="text" autocomplete="off" />
+            <div class="note">
+              <span class="badge" id="badge-nric"></span>
+              <button type="button" class="add">Add</button>
+            </div>
+            <input id="nric" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-nric"></div>
           </div>
-          <div class="review-row" id="row-dob">
-            <div class="badge" id="badge-dob"></div>
+          <div class="review-row detail" id="row-dob">
             <label class="label" for="dob">Date of birth</label>
-            <input id="dob" type="date" />
+            <div class="note">
+              <span class="badge" id="badge-dob"></span>
+              <button type="button" class="add">Add</button>
+            </div>
+            <input id="dob" class="mono" type="date" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-dob"></div>
           </div>
-          <div class="review-row" id="row-phone">
-            <div class="badge" id="badge-phone"></div>
+          <div class="review-row detail" id="row-phone">
             <label class="label" for="phone">Phone</label>
-            <input id="phone" type="text" autocomplete="off" />
+            <div class="note">
+              <span class="badge" id="badge-phone"></span>
+              <button type="button" class="add">Add</button>
+            </div>
+            <input id="phone" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-phone"></div>
           </div>
-          <div class="review-row" id="row-policy-number">
-            <div class="badge" id="badge-policy-number"></div>
+          <div class="review-row detail" id="row-policy-number">
             <label class="label" for="policy-number">Policy number</label>
-            <input id="policy-number" type="text" autocomplete="off" />
+            <div class="note">
+              <span class="badge" id="badge-policy-number"></span>
+              <button type="button" class="add">Add</button>
+            </div>
+            <input id="policy-number" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-policy-number"></div>
           </div>
-          <div class="review-row" id="row-insurer">
-            <div class="badge" id="badge-insurer"></div>
+          <div class="review-row detail" id="row-insurer">
             <label class="label" for="insurer">Insurer</label>
+            <div class="note">
+              <span class="badge" id="badge-insurer"></span>
+              <button type="button" class="add">Add</button>
+            </div>
             <input id="insurer" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-insurer"></div>
           </div>
-          <div class="review-row" id="row-address">
-            <div class="badge" id="badge-address"></div>
+          <div class="review-row detail" id="row-address">
             <label class="label" for="address">Address</label>
+            <div class="note">
+              <span class="badge" id="badge-address"></span>
+              <button type="button" class="add">Add</button>
+            </div>
             <input id="address" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-address"></div>
           </div>
         </details>
