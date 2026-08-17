@@ -503,6 +503,15 @@ button.link:hover {
   min-height: 1em;
 }
 
+/* An empty one holds open a line plus the step's gap on either side — about
+   35px of nothing between the heading and the work, which is what the review
+   screen showed for the whole time no status was being reported. The reserved
+   line is there so text arriving does not shift the layout; a status arriving
+   is rare and worth noticing, and a permanent gap is not. */
+.status:empty {
+  display: none;
+}
+
 .status.error {
   color: var(--danger);
   background: var(--danger-bg);
@@ -697,7 +706,10 @@ details > *:not(summary) {
   flex: none;
   background: none;
   border: 0;
-  padding: 0;
+  /* The only control that folds the pane away, and it was a 15px-tall word.
+     Padded to the 24px target minimum without moving the text. */
+  min-height: 24px;
+  padding: 0 2px;
   font-size: 12px;
   color: var(--muted-strong);
   text-decoration: underline;
@@ -1311,6 +1323,8 @@ button.confirm:active:not(:disabled) {
 }
 
 button.choice {
+  /* 24px minimum target: this was 23, which fails SC 2.5.8 by a pixel. */
+  min-height: 24px;
   padding: 4px 10px;
   font-family: var(--mono);
   font-size: 11px;
