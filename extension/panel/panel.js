@@ -1227,7 +1227,7 @@ const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
   { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
-  { key: "page", section: "step-page", title: "This page" },
+  { key: "page", section: "step-page", title: "Check the answers" },
 ];
 
 /** Show one step, collapse everything behind it, hide everything ahead. */

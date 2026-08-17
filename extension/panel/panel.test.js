@@ -2633,3 +2633,18 @@ describe("a failure a doctor can report", () => {
     expect($("map-status").textContent).not.toContain("terminal");
   });
 });
+
+describe("the screen where answers are checked", () => {
+  test("is named for the checking, not for the survey it used to be", async () => {
+    // It began as a report on the insurer's form — "7 questions on this
+    // page" — and "This page" fitted. Then the review moved onto the same
+    // screen: pressing Map hides the survey box and leaves the consultation,
+    // every mapped answer and Fill under a heading still naming the form.
+    const panel = await mapWith([ADMISSION_DATE]);
+
+    expect($("h-page").textContent).toBe("Check the answers");
+    expect($("step-page").hidden).toBe(false);
+    expect($("mapped").hidden).toBe(false);
+    expect(panel.state.rows).toHaveLength(1);
+  });
+});
