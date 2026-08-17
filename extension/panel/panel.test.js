@@ -2601,6 +2601,259 @@ describe("the note pane", () => {
     expect(marks.map((m) => m.textContent)).toEqual(["Dx acute tonsillitis."]);
   });
 
+  // -------------------------------------------------------------------------
+  // Two questions over one paragraph
+  // -------------------------------------------------------------------------
+  //
+  // The pane used to build one flat span per citation and DROP any citation
+  // overlapping one already placed — "the earlier one keeps it", written to
+  // stop a nested span marking a fragment of somebody else's sentence. The
+  // refusal was right; the price was paid by the wrong row and paid in
+  // silence. "Principal diagnosis and clinical findings" and "Treatment or
+  // medication prescribed" sit next to each other on the test form and are
+  // both answered from the operation lines, so whichever rendered second lost
+  // its highlight completely — and the pane said "quote not found in the note"
+  // about a quote sitting verbatim in the note. Two free-text boxes over one
+  // clinical paragraph is the ordinary shape of a claim form.
+  //
+  // The note is now cut wherever the SET of covering citations changes, and a
+  // piece may belong to several. Nothing is approximated: every offset still
+  // comes from an exact match, and overlap is recorded rather than resolved.
+  describe("two rows citing the same paragraph", () => {
+    const PARA =
+      "Admitted 12/03/2026, discharged 15/03/2026. " +
+      "Laparoscopic appendicectomy 13/03/2026 by Dr Ong. " +
+      "Operation code SF849A, Medisave table 4B.";
+
+    const OPERATION = "Laparoscopic appendicectomy 13/03/2026 by Dr Ong.";
+    const OPERATION_AND_CODE =
+      "Laparoscopic appendicectomy 13/03/2026 by Dr Ong. " +
+      "Operation code SF849A, Medisave table 4B.";
+
+    const findings = {
+      ...QUOTED,
+      field_id: "findings",
+      label: "Principal diagnosis and clinical findings",
+      value: "Acute appendicitis",
+      source: OPERATION_AND_CODE,
+    };
+    const treatment = {
+      ...QUOTED,
+      field_id: "treatment",
+      label: "Treatment or medication prescribed",
+      value: "Laparoscopic appendicectomy",
+      source: OPERATION,
+    };
+
+    const lit = () =>
+      [...$("note-text").querySelectorAll(".quote.on")].map((el) => el.textContent);
+
+    test("the row rendered second still marks its own sentence", async () => {
+      // The reported bug, in the order that produced it: findings is rendered
+      // first and its citation covers treatment's, so treatment used to mark
+      // nothing whatever the doctor did.
+      await mapWithNote([findings, treatment], PARA);
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect(lit()).toEqual([OPERATION]);
+      expect($("note-following").textContent).toBe(
+        "Treatment or medication prescribed"
+      );
+    });
+
+    test("and is not told its quote is missing from a note that contains it", async () => {
+      // The half that made it undiagnosable. A refusal the doctor cannot act
+      // on is worse than a blank, and this one was false as well as unhelpful.
+      await mapWithNote([findings, treatment], PARA);
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect($("note-following").textContent).not.toBe("quote not found in the note");
+    });
+
+    test("the wider citation still lights its whole extent", async () => {
+      // The other side of the same fix: the row that used to win must not now
+      // lose the tail of its own quote to the seam.
+      await mapWithNote([findings, treatment], PARA);
+
+      $("rows").children[0].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect(lit().join("")).toBe(OPERATION_AND_CODE);
+      expect($("note-following").textContent).toBe(
+        "Principal diagnosis and clinical findings"
+      );
+    });
+
+    test("neither order loses a row", async () => {
+      // Whichever way round the form asks them, both rows answer.
+      await mapWithNote([treatment, findings], PARA);
+
+      $("rows").children[0].dispatchEvent(new window.MouseEvent("mouseenter"));
+      expect(lit()).toEqual([OPERATION]);
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+      expect(lit().join("")).toBe(OPERATION_AND_CODE);
+    });
+
+    test("the value is still emphasised inside the shared sentence", async () => {
+      // A shared piece must still show the match rather than assert it — the
+      // whole reason an extracted value is filled rather than outlined.
+      await mapWithNote([findings, treatment], PARA);
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect($("note-text").querySelector(".hit").textContent).toBe(
+        "Laparoscopic appendicectomy"
+      );
+    });
+
+    test("hovering one row puts the other row's mark out", async () => {
+      // Sharing a piece must not mean sharing a highlight. Two citations lit
+      // at once is two answers to "where did this come from".
+      await mapWithNote([findings, treatment], PARA);
+
+      $("rows").children[0].dispatchEvent(new window.MouseEvent("mouseenter"));
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect(lit()).toEqual([OPERATION]);
+    });
+
+    test("a citation entirely inside another still marks", async () => {
+      // Containment rather than partial overlap — the case a "keep the
+      // earlier one" rule hides most completely, because the inner citation
+      // never reaches an edge of its own.
+      await mapWithNote(
+        [
+          { ...findings, source: PARA },
+          { ...treatment, source: OPERATION },
+        ],
+        PARA
+      );
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+
+      expect(lit()).toEqual([OPERATION]);
+    });
+
+    test("two rows quoting the identical sentence both mark it", async () => {
+      await mapWithNote(
+        [
+          { ...findings, source: OPERATION },
+          { ...treatment, source: OPERATION },
+        ],
+        PARA
+      );
+
+      $("rows").children[0].dispatchEvent(new window.MouseEvent("mouseenter"));
+      expect(lit()).toEqual([OPERATION]);
+
+      $("rows").children[1].dispatchEvent(new window.MouseEvent("mouseenter"));
+      expect(lit()).toEqual([OPERATION]);
+    });
+
+    test("the consultation on screen is still the one the doctor pasted", async () => {
+      // Cutting the note into pieces must not add, lose or reorder a
+      // character of it. This is the assertion that would catch an off-by-one
+      // in the segment boundaries, and it is the only one the doctor would
+      // ever notice.
+      await mapWithNote([findings, treatment], PARA);
+
+      expect($("note-text").textContent).toBe(PARA);
+    });
+
+    test("a citation nothing overlaps is still one span, not several", async () => {
+      // Segmentation is for overlap and nothing else. Fragmenting an ordinary
+      // citation would put a seam through every sentence in the pane and lose
+      // the emphasised value across it.
+      await mapWithNote([{ ...treatment, source: OPERATION }], PARA);
+
+      expect($("note-text").querySelectorAll(".quote")).toHaveLength(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The punctuation the model invents at a join
+  // -------------------------------------------------------------------------
+  //
+  // The prompt asks for "the verbatim snippet" — singular — and says nothing
+  // about citing two of them. So when a question is answered from two lines
+  // the model improvises the join, and the join is the one character it did
+  // not copy out of the note: a semicolon where the doctor wrote a full stop,
+  // or a full stop closing a clause the note carries on. Each piece is now
+  // tried as written FIRST and only then without its trailing punctuation.
+  describe("a quote that ends differently from the note", () => {
+    const lit = () =>
+      [...$("note-text").querySelectorAll(".quote.on")].map((el) => el.textContent);
+
+    test("a semicolon where the note wrote a full stop still marks", async () => {
+      await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis; MC 2 days." }]);
+
+      $("rows").children[0].click();
+
+      expect(lit()).toEqual(["Dx acute tonsillitis", "MC 2 days."]);
+    });
+
+    test("a full stop closing a clause the note carries on still marks", async () => {
+      const note = "Seen 02/08/2026. Dx acute tonsillitis with exudate. MC 2 days.";
+      await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis." }], note);
+
+      $("rows").children[0].click();
+
+      expect(lit()).toEqual(["Dx acute tonsillitis"]);
+    });
+
+    test("as written wins, so a mark that worked before does not shrink", async () => {
+      // The order matters and this is what pins it. Trimming first would eat
+      // the full stop off every sentence in the pane to buy nothing.
+      await mapWithNote([{ ...QUOTED, source: "Seen 02/08/2026. MC 2 days." }]);
+
+      $("rows").children[0].click();
+
+      expect(lit()).toEqual(["Seen 02/08/2026.", "MC 2 days."]);
+    });
+
+    test("the words themselves are still compared character for character", async () => {
+      // Only the terminal mark is forgiven. "bacterial" is not "acute", and
+      // trimming a full stop must not become a licence to approximate.
+      await mapWithNote([{ ...QUOTED, source: "Dx bacterial tonsillitis." }]);
+
+      $("rows").children[0].click();
+
+      expect(marked()).toBeNull();
+      expect($("note-following").textContent).toBe("quote not found in the note");
+    });
+
+    test("a trimmed piece the note says twice still marks neither", async () => {
+      // The uniqueness guard has to survive the trim, or forgiving a full stop
+      // becomes a way of reaching the coin toss it was written to refuse.
+      const note =
+        "Dx acute tonsillitis. Seen 02/08/2026. Dx acute tonsillitis, resolving.";
+      await mapWithNote(
+        [{ ...QUOTED, source: "Dx acute tonsillitis; Seen 02/08/2026." }],
+        note
+      );
+
+      $("rows").children[0].click();
+
+      expect(lit()).toEqual(["Seen 02/08/2026."]);
+    });
+
+    test("a comma join is still refused, and that is deliberate", async () => {
+      // The limit, pinned so nobody removes it by accident and nobody
+      // rediscovers it as a bug. Splitting on a comma would let a two-word
+      // fragment of a clinical sentence light somebody else's line — the same
+      // reason a colon is not split on either. A refused citation costs a
+      // highlight; a wrong one is rendered exactly like a right one.
+      await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis, MC 2 days." }]);
+
+      $("rows").children[0].click();
+
+      expect(marked()).toBeNull();
+      expect($("note-following").textContent).toBe("quote not found in the note");
+    });
+  });
+
   test("scrolls a mark that is off the bottom into view, with room to spare", async () => {
     // The one test in this file that reaches the scroll at all.
     //
