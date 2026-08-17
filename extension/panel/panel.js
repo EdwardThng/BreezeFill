@@ -923,6 +923,16 @@ async function onMap() {
     await detectForm();
   }
 
+  if (await checkVersion()) {
+    setStatus(
+      status,
+      "This version of BreezeFill is out of date and will not send anything. " +
+        "Update it at chrome://extensions, then reopen this panel.",
+      "error"
+    );
+    return;
+  }
+
   // Nothing is sent until the shapes are in. Awaited rather than checked, so
   // a click that lands during the first hundred milliseconds waits instead of
   // taking the "not loaded" branch.
@@ -2100,6 +2110,46 @@ async function loadPrivacy() {
   breezefillRedact.usePatterns(spec);
 }
 
+/**
+ * Whether this build is old enough that the backend refuses to talk to it.
+ *
+ * The one thing redacting in the browser cannot fix on its own: Chrome
+ * updates an extension on Chrome's schedule, and a Web Store review takes
+ * days. If a redaction bug ships there is no way to push a fix in minutes —
+ * but the server can refuse the old build, and a build that cannot map cannot
+ * send a note it redacted badly.
+ *
+ * Fails OPEN on a network error and CLOSED on an explicit answer. A backend
+ * that cannot be reached must not stop a doctor working — that is a support
+ * call, not a safety measure — but a backend that says "too old" is the
+ * authority on the question and is believed.
+ */
+function olderThan(installed, minimum) {
+  const parts = (value) => String(value || "0").split(".").map((n) => Number(n) || 0);
+  const a = parts(installed);
+  const b = parts(minimum);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+  }
+  return false;
+}
+
+async function checkVersion() {
+  const manifest =
+    globalThis.chrome && chrome.runtime && chrome.runtime.getManifest
+      ? chrome.runtime.getManifest()
+      : null;
+  if (!manifest) return false;
+  try {
+    const response = await fetch(`${apiBase()}/health`);
+    if (!response.ok) return false;
+    const body = await response.json();
+    return olderThan(manifest.version, body.min_extension_version);
+  } catch {
+    return false;
+  }
+}
+
 const privacyReady = loadPrivacy().catch((error) => {
   // Named on the button the doctor would press next, not in a console nobody
   // opens. `onMap` re-awaits this and refuses, so a panel in this state can
@@ -2132,5 +2182,7 @@ globalThis.breezefillPanel = {
   readableDate,
   localise,
   loadPrivacy,
+  olderThan,
+  checkVersion,
   state,
 };

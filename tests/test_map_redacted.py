@@ -152,3 +152,27 @@ class TestTheGuardsItKeeps:
         second = post().json()
         assert first == second
         assert "claim_id" not in json.dumps(first)
+
+
+class TestTheKillSwitch:
+    """The one gap redacting in the browser cannot close by itself.
+
+    Chrome updates an extension on its own schedule and a store review takes
+    days, so a redaction bug cannot be fixed in minutes the way a server one
+    can. What the server can do is refuse the old build — and a panel that
+    cannot map cannot send a note it redacted badly.
+    """
+
+    def test_health_publishes_the_oldest_build_it_will_answer(self) -> None:
+        body = client.get("/health").json()
+        assert body["min_extension_version"] == main.MIN_EXTENSION_VERSION
+
+    def test_the_shipped_extension_is_not_already_disowned(self) -> None:
+        # A floor above the version in the manifest would refuse every install
+        # on the day it shipped.
+        manifest = json.loads(
+            (Path(main.__file__).resolve().parents[1] / "extension" / "manifest.json").read_text()
+        )
+        installed = [int(n) for n in manifest["version"].split(".")]
+        minimum = [int(n) for n in main.MIN_EXTENSION_VERSION.split(".")]
+        assert installed >= minimum

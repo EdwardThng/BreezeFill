@@ -108,6 +108,7 @@ function loadPanel() {
   // The panel never reads a tab's address, but it does ask the injected
   // script to survey the page. Nothing here grants it access.
   globalThis.chrome = {
+    runtime_manifest_version: undefined,
     tabs: {
       query: vi.fn().mockResolvedValue([{ id: 1 }]),
       sendMessage: vi.fn((_tabId, message) =>
@@ -187,6 +188,7 @@ beforeEach(() => {
   routes = {
     "/forms": () => respond(FORMS),
     "patterns.json": () => respond(PATTERNS),
+    "/health": () => respond({ status: "ok", forms_loaded: 2, min_extension_version: "0.3.0" }),
     "/map-redacted": () => respond({ form_id: "__live__", fields: [] }),
     "/map-live": () => respond({ form_id: "__live__", fields: [] }),
     "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
@@ -1155,6 +1157,74 @@ describe("looking back at a finished step", () => {
 // ---------------------------------------------------------------------------
 // Nothing identifying leaves this tab
 // ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// The kill switch
+// ---------------------------------------------------------------------------
+
+describe("a build the backend has disowned", () => {
+  // The gap redacting in the browser cannot close by itself: Chrome updates
+  // an extension on its own schedule and a store review takes days, so a
+  // redaction bug cannot be fixed in minutes the way a server one can. The
+  // server can still refuse the old build, and a panel that cannot map cannot
+  // send a note it redacted badly.
+
+  test("version comparison is numeric, not alphabetical", () => {
+    const panel = loadPanel();
+    expect(panel.olderThan("0.9.0", "0.10.0")).toBe(true);
+    expect(panel.olderThan("0.10.0", "0.9.0")).toBe(false);
+    expect(panel.olderThan("0.3.0", "0.3.0")).toBe(false);
+    expect(panel.olderThan("1.0", "0.3.0")).toBe(false);
+  });
+
+  test("an out-of-date panel refuses to send anything", async () => {
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.2.1" });
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+    expect($("map-status").textContent).toMatch(/out of date/i);
+  });
+
+  test("a current panel is not stopped", async () => {
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.3.0" });
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(1);
+  });
+
+  test("an unreachable backend does not stop a doctor working", async () => {
+    // Fails open on purpose. A blocked panel is the right answer to "that
+    // build puts names on the wire" and the wrong one to a flaky network.
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.3.0" });
+    routes["/health"] = () => Promise.reject(new TypeError("Failed to fetch"));
+
+    expect(await panel.checkVersion()).toBe(false);
+  });
+});
 
 describe("what actually goes on the wire", () => {
   // The claim the product makes, asserted against the requests themselves

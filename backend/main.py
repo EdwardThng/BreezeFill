@@ -622,9 +622,29 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
     )
 
 
+# The oldest extension build this server will answer a mapping request from.
+#
+# The kill switch for the one thing redacting in the browser cannot fix: an
+# extension is updated by Chrome on Chrome's schedule, and a Web Store review
+# takes days. If a redaction bug ships, there is no way to push a fix in
+# minutes the way a server redeploy can — but there IS a way to stop the old
+# build from sending anything, and this is it. Raise it, and every panel older
+# than the number refuses to map before it redacts, rather than redacting
+# badly.
+#
+# Raise it ONLY for a fault that makes the old build unsafe. It stops doctors
+# working, which is the correct response to "that version puts names on the
+# wire" and a wildly disproportionate one to a UI bug.
+MIN_EXTENSION_VERSION = "0.3.0"
+
+
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "forms_loaded": len(FORM_SCHEMAS)}
+    return {
+        "status": "ok",
+        "forms_loaded": len(FORM_SCHEMAS),
+        "min_extension_version": MIN_EXTENSION_VERSION,
+    }
 
 
 # ---------------------------------------------------------------------------
