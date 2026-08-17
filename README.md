@@ -156,10 +156,10 @@ A synthetic sample form (`dev_sample_v1`) ships with the repo so the pipeline ca
 
 **For a web form, you do not have to write the schema first.** The extension
 fills whatever questions are on the page whether or not one exists — a schema
-only makes the answers sharper. Fill the form once and it hands back a draft
-schema to review and drop into `backend/schemas/`. Read it before committing:
-the field descriptions start out as the page's own wording, and a description
-is what tells the model what a question *means*.
+only makes the answers sharper. To write one, take a learn-mode dump of the page
+(`extension/learn/dump.js`) and author the schema from that. The panel used to
+offer a drafted schema after a schema-free fill; that was removed on 2026-08-17,
+because it asked a doctor to review JSON.
 
 Author a web schema's labels from **the page's own wording**, not from the
 equivalent PDF form's. The join between schema fields and live controls

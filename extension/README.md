@@ -119,7 +119,7 @@ not meaning. "7. When did the patient first consult you" and "Date of first
 consultation" are the same question, share one content token, score 0.22, and
 do not match. It fails safely — the control is still filled from its own
 label — but it means **a web schema wants labels authored from the page's own
-wording**, which is what the draft-schema flow produces, rather than from the
+wording**, which is what a learn-mode dump gives you, rather than from the
 labels of the equivalent PDF form. Do not assume `aia_ghs_claim`'s labels will
 enrich the ClaimEZ page; they were written for a PDF.
 
@@ -135,19 +135,25 @@ form better than the page does.
 field in one request. It needs an `ANTHROPIC_API_KEY` — unlike the RoboForm
 route above, these fields are `source: "llm"`.
 
-**A successful fill of a form nothing described hands back a draft schema.** JSON in the
-panel, for you to read and commit into `backend/schemas/`. It is not installed
-and not committed automatically, and that is deliberate: a schema governs every
-later claim against that form, so an unreviewed one turns one mis-mapped field
-into a permanent wrong answer nothing re-checks. Two things to fix by hand
-every time — `display_name` (guessed from the host, and it says so) and the
-`description`s, which start as the labels and are where a schema earns its
-keep.
+**A successful fill of a form nothing described used to hand back a draft
+schema** — JSON in the panel, for a human to read and commit into
+`backend/schemas/`. **Removed 2026-08-17**, on the owner's call: it asked a
+doctor to review JSON, which is not something a GP has any reason to be able to
+read, and the schema it produced bought sharpness rather than coverage, so
+nothing about the fill ever depended on it.
 
-`hosts` in a draft is the **full host**, not a guessed registrable domain: the
-last two labels of `claimez.aia.com.sg` are `com.sg`, and host matching covers
-subdomains, so that draft would have claimed every commercial site in
-Singapore. Widen it by hand if you want the whole domain.
+Schemas are authored from a **learn-mode dump** instead (`extension/learn/dump.js`),
+which is the better input anyway: it reads the page directly rather than
+inferring the form from one claim against it, it covers controls a sparse note
+left blank, and it can be taken per wizard step. Two things the drafts always
+needed fixing by hand and a dump does not pretend to answer either —
+`display_name`, and the `description`s, which are where a schema earns its keep.
+
+One trap the draft flow encoded, still worth knowing when writing `hosts` by
+hand: use the **full host**, not a guessed registrable domain. The last two
+labels of `claimez.aia.com.sg` are `com.sg`, and host matching covers
+subdomains, so that schema would claim every commercial site in Singapore.
+Widen it deliberately if you want the whole domain.
 
 ### Wizards: one step in the DOM at a time
 
