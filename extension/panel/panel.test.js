@@ -126,6 +126,21 @@ function loadPanel() {
       ),
     },
     scripting: { executeScript: vi.fn().mockResolvedValue([]) },
+    // The ONE thing this extension persists. `storageWrites` records every
+    // call so a test can assert that nothing but the licence ever lands here.
+    storage: {
+      local: {
+        get: vi.fn(async (key) => ({ ...(storageBacking[key] !== undefined ? { [key]: storageBacking[key] } : {}) })),
+        set: vi.fn(async (entries) => {
+          storageWrites.push(entries);
+          Object.assign(storageBacking, entries);
+        }),
+        remove: vi.fn(async (key) => {
+          storageWrites.push({ removed: key });
+          delete storageBacking[key];
+        }),
+      },
+    },
     // The injected script reports a wizard step rendering through here. The
     // listener is captured so a test can deliver a message the way Chrome
     // would, rather than calling the handler directly.
@@ -156,6 +171,10 @@ const $ = (id) => document.getElementById(id);
 
 /** Every call the panel made to the local parser, with its arguments. */
 let parseCalls;
+
+/** What chrome.storage.local holds, and every write made to it. */
+let storageBacking;
+let storageWrites;
 
 /**
  * Stand in for the local parser.
@@ -195,6 +214,8 @@ function shutDrawer() {
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  storageBacking = {};
+  storageWrites = [];
   // A Web Store install, which is what a doctor has.
   // Version matches the `/health` floor below: a mock that reads as out of date
   // makes every test in the file refuse to send, which is its own bug hunt.
@@ -3217,5 +3238,135 @@ describe("the screen where answers are checked", () => {
     expect($("step-page").hidden).toBe(false);
     expect($("mapped").hidden).toBe(false);
     expect(panel.state.rows).toHaveLength(1);
+  });
+});
+
+/**
+ * The subscription.
+ *
+ * chrome.storage exists in this extension for one string. The tests that
+ * matter are the ones that keep it that way, and the one that keeps the panel
+ * from claiming to know something only the server can know.
+ */
+describe("the licence key", () => {
+  const settleLoad = async () => {
+    await settle();
+    await settle();
+  };
+
+  test("is restored from storage when the panel opens", async () => {
+    storageBacking.licence = "eyJzdWIiOiJzdWJfMSJ9.sig";
+    loadPanel();
+    await settleLoad();
+
+    expect($("licence-key").value).toBe("eyJzdWIiOiJzdWJfMSJ9.sig");
+    expect($("licence-box").dataset.state).toBe("set");
+  });
+
+  test("rides with a mapping request as a bearer token", async () => {
+    // The header `_require_licence` reads. Sent whether or not the gate is on,
+    // so switching FORMFILL_REQUIRE_LICENCE on does not need every panel in
+    // the field to update first.
+    storageBacking.licence = "tok_abc";
+    const panel = loadPanel();
+    await settleLoad();
+    $("paste").value = NOTE;
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    expect(call[1].headers.Authorization).toBe("Bearer tok_abc");
+  });
+
+  test("and is simply absent when there is none", async () => {
+    // No empty `Bearer `, which reads to a server as a malformed credential
+    // rather than as no credential.
+    const panel = loadPanel();
+    await settleLoad();
+    $("paste").value = NOTE;
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    expect("Authorization" in call[1].headers).toBe(false);
+  });
+
+  test("typing one saves it, trimmed", async () => {
+    loadPanel();
+    await settleLoad();
+    $("licence-key").value = "  tok_pasted  ";
+    $("licence-key").dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+
+    expect(storageBacking.licence).toBe("tok_pasted");
+  });
+
+  test("clearing it removes it from disk rather than storing an empty string", async () => {
+    storageBacking.licence = "tok_old";
+    loadPanel();
+    await settleLoad();
+    $("licence-key").value = "";
+    $("licence-key").dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+
+    expect("licence" in storageBacking).toBe(false);
+  });
+
+  test("NOTHING but the licence is ever written to disk", async () => {
+    // The guard on the whole arrangement. The ban on chrome.storage was about
+    // the consultation note, and this is the assertion that keeps the
+    // exception from widening into the thing it was protecting against.
+    const panel = loadPanel();
+    await settleLoad();
+    $("licence-key").value = "tok_x";
+    $("licence-key").dispatchEvent(new Event("input", { bubbles: true }));
+    $("paste").value = NOTE;
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    await panel.onMap();
+    await settle();
+
+    for (const write of storageWrites) {
+      expect(Object.keys(write)).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^(licence|removed)$/)]),
+      );
+      expect(Object.keys(write)).toHaveLength(1);
+    }
+    const written = JSON.stringify(storageWrites);
+    expect(written).not.toContain("Chua Beng Huat");
+    expect(written).not.toContain("S7211043C");
+    expect(written).not.toContain("tonsillitis");
+  });
+
+  test("a storage failure does not stop the panel opening", async () => {
+    // An older Chrome, a denied permission, a corrupted profile. None of them
+    // is a reason to refuse to render a panel the doctor can still type into.
+    loadPanel();
+    chrome.storage.local.get.mockRejectedValueOnce(new Error("no storage"));
+    await settleLoad();
+
+    expect($("licence-key")).not.toBeNull();
+    expect($("h-page")).not.toBeNull();
+  });
+
+  test("it never claims the subscription is valid", async () => {
+    // The panel cannot know that — only the server can, and only when it maps.
+    // A green "subscription active" that turns out to be a lapsed subscription
+    // the moment a doctor presses Fill is worse than saying nothing.
+    storageBacking.licence = "tok_whatever";
+    loadPanel();
+    await settleLoad();
+
+    const note = $("licence-note").textContent;
+    expect(note).not.toMatch(/active|valid|verified|subscribed/i);
+    expect(note).toMatch(/checked when you map/i);
   });
 });

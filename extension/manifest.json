@@ -5,7 +5,7 @@
   "description": "Fills insurer claim forms from a clinical note. Fills in place; never submits.",
   "minimum_chrome_version": "114",
 
-  "permissions": ["activeTab", "scripting", "sidePanel"],
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
 
   "icons": {
     "16": "icons/chrome-toolbar-16.png",

@@ -170,6 +170,15 @@ const state = {
   forms: [],
   /** field_id of the row the note pane is currently marking. */
   reading: null,
+  /**
+   * The clinic's licence key, or "".
+   *
+   * The ONE thing this panel persists. Everything else here — the note, the
+   * demographics, the mapped rows — is memory-only by design, and that is not
+   * loosened by this: `chrome.storage.local` is written by exactly one
+   * function below and it writes exactly this string.
+   */
+  licence: "",
   /** Whether the last /forms call failed, as opposed to returning nothing. */
   formsFailed: false,
   /** Review rows from POST /map. */
@@ -1026,7 +1035,14 @@ async function onMap() {
     }
     const response = await fetch(`${apiBase()}/map-redacted`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // The licence rides as a bearer token because that is what
+      // `_require_licence` reads. It is sent even when the gate is off, so
+      // switching FORMFILL_REQUIRE_LICENCE on does not need every panel in the
+      // field to update first.
+      headers: {
+        "Content-Type": "application/json",
+        ...(state.licence ? { Authorization: `Bearer ${state.licence}` } : {}),
+      },
       body: JSON.stringify(request),
     });
     if (!response.ok) {
@@ -1981,6 +1997,70 @@ function toggleNote() {
 // the doctor points at something is one they can trust, and one that drifts on
 // its own is one they have to re-check.
 
+// ---------------------------------------------------------------------------
+// The subscription
+// ---------------------------------------------------------------------------
+//
+// `chrome.storage.local` exists in this extension for ONE string, and the rule
+// is worth stating where somebody would come to add a second: the ban on
+// storage was never about disk in the abstract, it was about the consultation
+// note. A doctor cannot retype a licence key between every patient, and a key
+// is not patient data — it names a subscription and nothing else.
+//
+// So: this is the only writer, and it writes one key. If anything else ever
+// needs to survive a panel close, it does not belong here — it belongs in a
+// conversation about whether the note-never-touches-disk guarantee still
+// holds, because that guarantee is the reason a clinician is being asked to
+// trust this at all.
+const LICENCE_SLOT = "licence";
+
+/** Read the stored licence, if any. Never throws — a panel must still open. */
+async function loadLicence() {
+  try {
+    const stored = await chrome.storage.local.get(LICENCE_SLOT);
+    state.licence = String(stored?.[LICENCE_SLOT] || "");
+  } catch {
+    // An older Chrome, a denied permission, a corrupted profile. None of them
+    // is a reason to refuse to render — the doctor can paste the key again,
+    // and the mapping call reports the real problem if the gate is on.
+    state.licence = "";
+  }
+  const field = $("licence-key");
+  if (field) field.value = state.licence;
+  showLicence();
+}
+
+/** Persist what the doctor typed. Trimmed, because a pasted key carries. */
+async function saveLicence(value) {
+  state.licence = String(value || "").trim();
+  showLicence();
+  try {
+    if (state.licence) await chrome.storage.local.set({ [LICENCE_SLOT]: state.licence });
+    else await chrome.storage.local.remove(LICENCE_SLOT);
+  } catch {
+    // Kept in memory regardless, so this session still works.
+  }
+}
+
+/**
+ * What the subscription block says about itself.
+ *
+ * Deliberately does NOT claim the subscription is valid. This panel cannot
+ * know that — only the server can, and only when it maps — so the line says
+ * what is actually true here: whether a key is present. A green "subscription
+ * active" that turns out to be a lapsed subscription at the moment a doctor
+ * presses Fill is worse than saying nothing.
+ */
+function showLicence() {
+  const note = $("licence-note");
+  const box = $("licence-box");
+  if (!note || !box) return;
+  note.textContent = state.licence
+    ? "Saved on this computer. It is checked when you map a claim."
+    : "Paste the licence key from breezefill.com. Without it, mapping may be refused.";
+  box.dataset.state = state.licence ? "set" : "unset";
+}
+
 function renderRows() {
   // Rows appearing and rows being discarded both come through here, and the
   // way back to them has to appear and disappear with them.
@@ -2353,6 +2433,8 @@ function loadedFromSource() {
 if (loadedFromSource()) $("advanced").hidden = false;
 
 $("api-base").value = DEFAULT_API_BASE;
+$("licence-key").addEventListener("input", (event) => saveLicence(event.target.value));
+loadLicence();
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
 $("paste").addEventListener("input", scheduleParse);
 for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {

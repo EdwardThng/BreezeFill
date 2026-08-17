@@ -50,7 +50,7 @@ an already-injected insurer tab needs reloading too.
 
 By default the panel talks to the deployed backend. Point it at a local one
 under **Advanced → Backend URL** (in-memory for the session; the extension
-requests no storage permission, so there is nowhere to persist it).
+persists only the licence key, never a note).
 
 ## How it fits together
 
@@ -76,7 +76,7 @@ after the doctor put that script there. The visible cost is that opening the
 panel on one tab and then switching to another means clicking the icon again.
 That is the grant working, not a bug.
 
-`chrome.storage` is not requested either. The claim lives in the panel's
+`chrome.storage` holds the licence key and nothing else. The claim lives in the panel's
 memory while it is open and nowhere else, so a clinical note cannot reach disk
 by mistake. This is also why `background.js` stays empty of state: an MV3
 service worker is evicted after ~30s idle, so anything it had to remember

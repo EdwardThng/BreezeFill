@@ -421,6 +421,30 @@
       so a Web Store install never shows it. Hidden in the markup so that a
       panel whose script never ran does not flash it.
     -->
+    <!--
+      The subscription, and it is NOT in Advanced.
+
+      Advanced reveals itself only on an unpacked install, so anything put
+      there is invisible to every doctor who installed from the store — which
+      is everyone this field exists for. It sits on its own, always shown, and
+      collapsed until it has something to say.
+    -->
+    <details class="licence" id="licence-box">
+      <summary>Subscription</summary>
+      <label class="field">
+        <span>Licence key</span>
+        <input
+          id="licence-key"
+          type="text"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="Paste the key from breezefill.com"
+        />
+      </label>
+      <p class="note" id="licence-note"></p>
+    </details>
+
     <details class="advanced" id="advanced" hidden>
       <summary>Advanced</summary>
       <label class="field">
@@ -428,9 +452,8 @@
         <input id="api-base" type="url" autocomplete="off" />
       </label>
       <p class="note">
-        Held in memory for this session only. BreezeFill requests no storage
-        permission, so nothing here — and no part of the note — is written to
-        disk.
+        Held in memory for this session only. The licence key is the ONLY thing
+        BreezeFill writes to disk — no part of the note ever is.
       </p>
     </details>
 

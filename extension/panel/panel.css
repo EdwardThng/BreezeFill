@@ -588,6 +588,7 @@ button.link:hover {
 details.found,
 details.extra,
 details.advanced,
+details.licence,
 details.quiet {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -595,8 +596,24 @@ details.quiet {
   padding: 10px 12px;
 }
 
-details.advanced {
+details.advanced,
+details.licence {
   margin: 0 16px 16px;
+}
+
+/* The subscription drawer, and the only signal it is allowed to give.
+   `set` says a key is present on this computer — never that it is valid, which
+   is a thing only the server can know and only while mapping. So this is a
+   quiet neutral mark, not a green tick. */
+details.licence[data-state="set"] > summary::after {
+  content: " · saved";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+details.licence #licence-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
 }
 
 /* The check screen's cards sit inside the drawer, so the drawer stops being a

@@ -70,8 +70,15 @@ block is the part that constrains what you may do.
   long-lived in-memory state, no remote code execution, no `eval`.
 - **The extension never submits a form**, never overwrites an answer already in
   a control, and never clicks a page button. It fills in place and stops.
-- **No `chrome.storage`, and the permission is not requested.** Patient notes
-  must not reach disk. State lives in the side panel's memory.
+- **`chrome.storage` holds the licence key and NOTHING else.** The permission
+  is requested as of 2026-08-17, and the exception is exactly one string: a
+  doctor cannot retype a subscription key between every patient, and a key
+  names a subscription rather than a patient. The rule that mattered is
+  unchanged and is the one to defend — **no part of the consultation note, and
+  no demographic, ever reaches disk.** `panel.js` has one writer
+  (`saveLicence`) and `panel.test.js` asserts nothing else is ever written. If
+  something new needs to survive a panel close, that is a conversation about
+  whether the note-never-touches-disk guarantee still holds, not a second key.
 
 ## Layout
 
@@ -385,7 +392,7 @@ possible at all, and it is a property to preserve rather than a Fly detail.
 | `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly — **and `llm_sweep`, which is pass 3 and is an Anthropic call** |
 | `extension/privacy/` | `parse.js` + `redact.js` + `patterns.json`. Where redaction actually happens now. `patterns.json` is read by the Python too — edit it once, never twice |
 | `backend/schemas/*.json` | The form bank. `fill_mode` is `acroform`, `overlay` or `web` |
-| `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists. Progressive — `STEPS` and `showStep()` move visibility only, never the values |
+| `extension/panel/` | The doctor's surface. Holds the claim in memory; the only thing on disk is the licence key. Progressive — `STEPS` and `showStep()` move visibility only, never the values |
 | `docs/design/breezefill-panel/` | The panel redesign: handoff, UI brief, logo mark, prototypes. Renamed from the working name it was authored under |
 | `extension/learn/dump.js` | Label resolution + the scrubber. Used by both learn mode and the filler. Also groups radios/checkboxes into one question, and derives repeating-entry indices from DOM shape |
 | `extension/fill/locate.js` | Joins schema fields to live controls by label. Also what identifies a form |
@@ -1310,7 +1317,7 @@ another means clicking the icon again. `optional_host_permissions` is declared
 but not yet requested — it is there for the `MutationObserver` work, which
 needs access that survives a wizard step.
 
-No `chrome.storage` anywhere, and the permission is not requested: patient
+`chrome.storage` holds the licence key and nothing else (2026-08-17): patient
 notes must not reach disk. This is also why `background.js` is nearly empty —
 a service worker acting as a message broker is evicted after ~30s idle, so it
 would have to persist the note to survive. State lives in the panel.
@@ -1887,9 +1894,10 @@ omission to "fix".
   form and nothing ever re-reads it, so it is committed by a human who has read
   it or not at all. This was decided with the alternatives on the table
   (auto-PR, auto-write). Schemas now come from a learn-mode dump.
-- **No `chrome.storage`, and the permission is not requested.** Patient notes
-  must not reach disk. The claim lives in the side panel's memory while the
-  doctor has it open; closing the panel discards it. Any future need to
+- **`chrome.storage` is for the licence key and nothing else** (since
+  2026-08-17). Patient notes must not reach disk: the claim lives in the side
+  panel's memory while the doctor has it open, and closing the panel discards
+  it. One writer, one key, asserted. Any future need to
   remember something between events belongs in the panel, not the service
   worker — a worker that has to survive eviction has to persist.
 - **The extension never submits.** It fills in place; the doctor clicks submit

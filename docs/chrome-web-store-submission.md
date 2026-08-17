@@ -153,7 +153,7 @@ PRIVACY
 - The patient's name, ID number, date of birth, phone, address and policy number are removed from the consultation note before any of it is sent for processing. Those details are found by pattern matching in the extension's backend, never by an AI model, and they are used as the dictionary the note is scrubbed against.
 - The de-identified clinical text is then processed by an AI model to map it onto the form's questions.
 - Nothing is stored. The service keeps no record of a claim after the request that carried it.
-- The extension requests no access to any website until you click its icon on the tab you want filled, and it asks for no storage permission — nothing is written to disk.
+- The extension requests no access to any website until you click its icon on the tab you want filled, and the only thing it writes to disk is your subscription licence key — no part of a consultation note ever is.
 
 Full privacy policy: https://breezefill.com/privacy
 
@@ -201,7 +201,16 @@ The side panel is the extension's entire user interface. It has to sit beside th
 
 A popup cannot do this: it closes as soon as the user clicks the page, and the review step requires reading and confirming each proposed value one at a time while the form stays visible.
 
-The panel also holds the claim in memory only. There is no storage permission, so nothing the user pastes is written to disk.
+The panel holds the claim in memory only. The `storage` permission is used for exactly one value — the subscription licence key — so nothing the user pastes is written to disk.
+```
+
+**`storage`** — NEW in 0.4.0, and a reviewer will ask about it, so it is
+answered here in the same terms as the others.
+
+```
+BreezeFill is a paid subscription. After subscribing on breezefill.com the user is given a licence key, and the panel needs to remember it so they do not have to paste it again between patients.
+
+That key is the only thing BreezeFill writes to storage. It identifies a subscription and contains no personal or health information — no name, no email, no clinic. The consultation note the user pastes, the patient details read from it, and every proposed answer are all held in memory for as long as the panel is open and discarded when it closes. None of them is ever written to disk.
 ```
 
 ### Remote code
