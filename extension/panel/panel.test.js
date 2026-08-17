@@ -842,7 +842,10 @@ describe("a form the bank does not have, end to end", () => {
     // 5. Fill the page.
     page.fill = { ok: true, refused: false, filled: 3, applied: [], report: EMPTY_REPORT };
     await panel.onFill();
-    expect($("fill-status").textContent).toMatch(/filled 3 field/i);
+    // Said once, in the report. The status line used to repeat it in
+    // different words directly above.
+    expect($("fill-report").textContent).toMatch(/filled 3 field/i);
+    expect($("fill-status").textContent).toBe("");
 
     // 6. And the form comes back as a schema for the bank.
     expect($("step-draft").hidden).toBe(false);
@@ -2437,5 +2440,52 @@ describe("a refusal that names a field", () => {
     await panel.onMap();
 
     expect($("step-page").hidden).toBe(false);
+  });
+});
+
+describe("a fill that wrote nothing", () => {
+  const NOTHING = {
+    ok: true, refused: false, filled: 0, applied: [],
+    report: { results: [{ fieldId: "date_of_admission", status: "skipped", reason: "already answered" }],
+              unknownControls: [], deferred: 0, matched: 1, intended: 1, matchRate: 1, safeToFill: true },
+  };
+
+  test("does not congratulate the doctor in green", async () => {
+    // It read "Filled 0 fields on this page." in the success colour, over
+    // "Check each one on the form, then submit it yourself" — an instruction
+    // to check nothing, in the one place the panel is meant to be careful.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = NOTHING;
+    await panel.onFill();
+
+    expect($("fill-report").querySelector(".is-success")).toBeNull();
+    expect($("fill-report").textContent).toContain("Nothing was written on this page");
+    expect($("fill-report").textContent).not.toContain("Filled 0 field");
+  });
+
+  test("and still says nothing was overwritten", async () => {
+    // The other half of the news, and the one a doctor actually wants: their
+    // own answers are untouched.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = NOTHING;
+    await panel.onFill();
+
+    expect($("fill-report").textContent).toContain("Nothing was overwritten");
+  });
+
+  test("a refused fill grows no empty list", async () => {
+    // "What happened to each field" was rendering as a heading over nothing.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = { ok: true, refused: true, reason: "only 1 of 3 fields matched this page",
+                  filled: 0, applied: [],
+                  report: { results: [], unknownControls: [], deferred: 0, matched: 1,
+                            intended: 3, matchRate: 0.33, safeToFill: false } };
+    await panel.onFill();
+
+    expect($("fill-report").textContent).not.toContain("What happened to each field");
+    expect($("fill-status").textContent).toContain("Nothing was filled");
   });
 });

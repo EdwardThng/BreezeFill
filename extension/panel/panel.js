@@ -1768,8 +1768,14 @@ function renderReport(response) {
   // from the doctor — what landed, what belongs to a later step, and what they
   // must write themselves — so each gets its own block rather than one flat
   // list where the important one scrolls past.
-  const written = (response.applied || []).filter((a) => a.status === "filled").length;
-  if (!response.refused) {
+  // The filler's own count is authoritative; `applied` is the per-field
+  // detail behind it and is not always sent. They disagreed silently before —
+  // the status line quoted one and the banner counted the other.
+  const written =
+    typeof response.filled === "number"
+      ? response.filled
+      : (response.applied || []).filter((a) => a.status === "filled").length;
+  if (!response.refused && written > 0) {
     const banner = document.createElement("div");
     banner.className = "report-block is-success";
     const heading = document.createElement("h3");
@@ -1780,6 +1786,21 @@ function renderReport(response) {
     body.textContent = "Check each one on the form, then submit it yourself.";
     banner.append(heading, body);
     container.append(banner);
+  } else if (!response.refused) {
+    // Nothing was written, and the success block is the wrong thing to say
+    // about that. It read "Filled 0 fields on this page." in confident green,
+    // over "Check each one on the form" — an instruction to check nothing.
+    // Every value was already answered, or belonged elsewhere; the list below
+    // says which, per field, and that is the whole of the news.
+    const none = document.createElement("div");
+    none.className = "report-block is-manual";
+    const heading = document.createElement("h3");
+    heading.textContent = "Nothing was written on this page.";
+    const body = document.createElement("p");
+    body.className = "note";
+    body.textContent = "Nothing was overwritten either. What happened to each field is below.";
+    none.append(heading, body);
+    container.append(none);
   }
 
   const list = document.createElement("ul");
@@ -1800,12 +1821,16 @@ function renderReport(response) {
     item.textContent = `${name} — ${outcome}${why}`;
     list.append(item);
   }
-  const detail = document.createElement("div");
-  detail.className = "report-block";
-  const detailHeading = document.createElement("h3");
-  detailHeading.textContent = "What happened to each field";
-  detail.append(detailHeading, list);
-  container.append(detail);
+  // Only when there is something in it. A refused fill reports no results at
+  // all, and the heading was rendering over an empty list.
+  if (list.children.length) {
+    const detail = document.createElement("div");
+    detail.className = "report-block";
+    const detailHeading = document.createElement("h3");
+    detailHeading.textContent = "What happened to each field";
+    detail.append(detailHeading, list);
+    container.append(detail);
+  }
 
   // Fields belonging to a step that is not rendered. Said plainly, because
   // otherwise they are indistinguishable from fields that failed — and the
@@ -2004,7 +2029,9 @@ async function onFill() {
       // reviewing quickly, so nothing was written and nothing is retried.
       setStatus(status, `Nothing was filled: ${response.reason}`, "error");
     } else {
-      setStatus(status, `Filled ${response.filled} field${response.filled === 1 ? "" : "s"}. Check each one, then submit the form yourself.`);
+      // Said once. The report banner directly below carries this, and the two
+      // sat stacked saying the same thing in different words.
+      setStatus(status, "");
       // The form worked and nothing in the bank described it. Offer the
       // schema now, while the page that produced it is still in front of the
       // doctor — this is the only moment anyone can sanity-check the labels
