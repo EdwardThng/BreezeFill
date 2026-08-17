@@ -42,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from licence import LicenceError, verify_licence
+from licence import LicenceError, mint_licence, verify_licence
 
 from demographics import (
     ParsedDemographics,
@@ -734,12 +734,147 @@ MIN_EXTENSION_VERSION = "0.3.0"
 PUBLISHED_EXTENSION_VERSION = "0.2.1"
 
 
+# ---------------------------------------------------------------------------
+# Issuing a licence
+# ---------------------------------------------------------------------------
+#
+# `licence.py` verifies tokens and says in its own docstring that minting
+# belongs on a Stripe webhook, "not called from any request path a doctor can
+# reach". That rule is right about the danger and wrong about the only route
+# available, so it is amended here rather than quietly broken.
+#
+# A webhook fires server to server. It can mint a token; it cannot hand one to
+# the browser that just paid, so the token would have to arrive by email — a
+# mail service this project does not have, on the one flow that must not fail.
+#
+# What actually guards issuance is not *where* the call comes from but *what it
+# has to prove*. `/licence/claim` mints nothing on demand: it takes a Stripe
+# checkout session id, and the server asks STRIPE whether that session was paid
+# before it will sign anything. A `cs_…` id is minted by Stripe, names one
+# checkout, and cannot be guessed — so possessing one that Stripe confirms as
+# paid is the proof a webhook would have been standing in for. Minting on proof
+# of payment is not minting on demand.
+#
+# The success_url is built HERE from server config and never from the request.
+# A client-supplied return address on a payment flow is an open redirect with a
+# Stripe checkout in front of it.
+
+SITE_ORIGIN = os.environ.get("BREEZEFILL_SITE_ORIGIN", "https://breezefill.com")
+
+
+def _stripe():
+    """The Stripe SDK, configured, or a 503 that says which key is missing.
+
+    Imported inside the function rather than at module scope: every other route
+    in this file works without Stripe, and an import-time failure would take
+    the whole API down over a subscription feature nobody has switched on.
+    """
+    key = os.environ.get("STRIPE_SECRET_KEY")
+    if not key:
+        raise HTTPException(status_code=503, detail="Subscriptions are not configured.")
+    import stripe as stripe_sdk
+
+    stripe_sdk.api_key = key
+    return stripe_sdk
+
+
+class CheckoutResponse(BaseModel):
+    url: str
+
+
+@app.post("/checkout", response_model=CheckoutResponse)
+def create_checkout() -> CheckoutResponse:
+    """Open a Stripe Checkout for the one price this product sells.
+
+    Takes no body on purpose. There is a single plan, and every parameter a
+    caller could supply — the price, the quantity, where they land afterwards —
+    is one a caller could tamper with.
+    """
+    price = os.environ.get("STRIPE_PRICE_ID")
+    if not price:
+        raise HTTPException(status_code=503, detail="Subscriptions are not configured.")
+    stripe_sdk = _stripe()
+    try:
+        session = stripe_sdk.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": price, "quantity": 1}],
+            success_url=f"{SITE_ORIGIN}/#/get?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{SITE_ORIGIN}/#/get",
+        )
+    except Exception as exc:  # noqa: BLE001 - stripe raises a family of these
+        # Type only. A Stripe exception quotes the request, and the request
+        # carries the account's own identifiers.
+        logger.error("stripe checkout create failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Could not open checkout.") from exc
+    return CheckoutResponse(url=session.url)
+
+
+class ClaimRequest(BaseModel):
+    session_id: str
+
+
+class ClaimResponse(BaseModel):
+    licence: str
+
+
+@app.post("/licence/claim", response_model=ClaimResponse)
+def claim_licence(request: ClaimRequest) -> ClaimResponse:
+    """A paid checkout session, in; a licence token, out. Nothing is stored.
+
+    Idempotent by construction: the token is derived from the subscription id
+    and the signing secret, so claiming twice returns an equally valid token
+    and a doctor who loses theirs can revisit the link in their Stripe receipt.
+    """
+    secret = os.environ.get("FORMFILL_LICENCE_SECRET", "")
+    if not secret:
+        # The same refusal `verify_licence` makes. A deploy that forgot the
+        # secret must issue nothing rather than sign with the empty string,
+        # which is a valid HMAC key and would make every token forgeable.
+        raise HTTPException(status_code=503, detail="Subscriptions are not configured.")
+
+    stripe_sdk = _stripe()
+    try:
+        session = stripe_sdk.checkout.Session.retrieve(request.session_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("stripe session lookup failed: %s", type(exc).__name__)
+        # 404 and not 502: the overwhelmingly likely cause is a session id that
+        # is not one of ours, and telling the caller the server broke sends
+        # them to support over something they mistyped.
+        raise HTTPException(status_code=404, detail="That checkout was not found.") from exc
+
+    if session.get("payment_status") not in {"paid", "no_payment_required"}:
+        # A session id exists from the moment checkout OPENS, so holding one
+        # proves somebody started paying, never that they finished.
+        raise HTTPException(status_code=402, detail="That checkout has not been paid.")
+
+    subscription = session.get("subscription")
+    if not isinstance(subscription, str):
+        subscription = getattr(subscription, "id", None) or (subscription or {}).get("id")
+    if not subscription:
+        raise HTTPException(status_code=402, detail="That checkout has no subscription.")
+
+    try:
+        return ClaimResponse(licence=mint_licence(subscription, secret))
+    except LicenceError as exc:
+        logger.error("licence mint failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Subscriptions are not configured.") from exc
+
+
 @app.get("/health")
 def health() -> dict:
     return {
         "status": "ok",
         "forms_loaded": len(FORM_SCHEMAS),
         "min_extension_version": MIN_EXTENSION_VERSION,
+        # Configuration state, never a value. This is what makes "are the keys
+        # in and working" answerable from outside without a live charge, and it
+        # discloses nothing: whether a subscription product exists is already
+        # on the pricing page.
+        "subscriptions": bool(
+            os.environ.get("STRIPE_SECRET_KEY")
+            and os.environ.get("STRIPE_PRICE_ID")
+            and os.environ.get("FORMFILL_LICENCE_SECRET")
+        ),
     }
 
 
