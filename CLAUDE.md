@@ -278,7 +278,7 @@ rather than shipping into the queue.
 | One path: always map the page | **Built and green (2026-08-05).** The bank stopped gating: every fillable control becomes a question, a matching schema lends its `description` to the controls it describes, and a miss costs sharpness rather than the fill. `POST /map` is no longer used by the extension — `/map-live` carries both kinds of field. See "the bank is no longer a gate" |
 | Wizard support (steps + options) | **Built 2026-08-04; first exercised 2026-08-06** against `tests/fixtures/wizard_like.html` and `wizard_test_v1`, the first schema to declare `step` and `options`. Re-measured 2026-08-15 on the three-step fixture: with one step in the DOM, whole-plan `locate` matches 8 of 20 and **refuses**, `locateSteps` matches 8 and fills — the failure the per-step guard was written for, reproduced again on the wider form. Still **never run on a real wizard**; the fixture is synthetic and modelled on a verbal description. See "The AIA form" |
 | Repeating entries, checkbox/option handling | **Built 2026-08-06, fixture-tested only.** Entry grouping from DOM shape (`instanceIndexOf`), options-beat-type coercion, never-overwrite, none-of-the-above, no-duplicate-option. Every one of these was designed from a verbal account of ClaimEZ — see the warning at the top of "The AIA form". **Entry grouping has a known false positive as of 2026-08-15** — it reads a grid-layout question row as an entry; see the trap |
-| Bank → fallback → draft schema | Working in tests. The wizard problem below is now addressed — see "The AIA form" — Form identified by fingerprint against every schema; `POST /map-live` maps against the page's own labels when nothing fits; a successful schema-free fill hands back a draft schema to review and commit. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
+| Bank → fallback | Working in tests. The wizard problem below is now addressed — see "The AIA form" — form identified by fingerprint against every schema, and `POST /map-live` maps against the page's own labels when nothing fits. **The draft-schema third step was removed 2026-08-17**; schemas come from a learn-mode dump. Never run in a browser: RoboForm is in the bank, so it exercises the wrong branch |
 | Single-machine assumption | **Gone.** The server is stateless as of 2026-08-04, so `--ha=false` is a cost preference and serverless is possible |
 | Vercel **production** | **Live**, region `sin1`, plan **Pro since 2026-08-06**. Re-verified 2026-08-08 against `api.breezefill.com` with plain `curl`, no SSO wall: `/health` returns `{"status":"ok","forms_loaded":8}`, `/forms` answers, `/download/breezefill-extension.zip` returns 86 KB of `application/zip`, and **`POST /map` returns real review rows from a live model call**. An earlier row here said `/map` 503s on a Preview-scoped key; that was fixed on 2026-08-05 and the row was never updated |
 | Vercel migration | **Done (2026-08-05).** Production is public; **previews are behind Deployment Protection**, so only `vercel curl` reaches them and the extension cannot. `DEFAULT_API_BASE` points at production |
@@ -694,6 +694,51 @@ an unknown property risks `Invalid vercel.json`, and a config that fails to
 parse is a deploy failure this repo has already paid for once (see the BOM
 trap).
 
+
+**The draft schema is gone, and Advanced is the developer's (2026-08-17).** Two
+removals from the panel, both the owner's call, and they share a reason: the
+panel had two blocks whose audience was not the doctor sitting in front of it.
+
+*The draft schema.* A successful fill on a page nothing described used to hand
+back a proposed schema as JSON, for a human to read and commit into
+`backend/schemas/`. The human was a GP. Asking a doctor to review JSON is asking
+for something they have no reason to be able to do, and the argument that made
+the draft safe to offer is the same one that makes it costless to delete: a
+schema only ever makes answers *sharper*, never decides whether a question is
+attempted, so a form with no schema fills exactly as it did before. `draftSchema`,
+`showDraft`, `onCopyDraft`, `HOST_SUFFIXES` and `mappingLive` are all gone, along
+with the `step-draft` section. **Schemas are authored from a learn-mode dump
+instead**, which is the better input anyway: it reads the page rather than
+inferring the form from one claim against it, it covers controls a sparse note
+left blank, and it can be taken per wizard step.
+
+What survives the removal is the rule underneath it — see the guardrail. No route
+may write a schema to disk from a running claim, and the full-host trap
+(`claimez.aia.com.sg` → not `com.sg`) now has to be applied by whoever writes
+`hosts` by hand.
+
+*Advanced.* The Backend URL override is a developer affordance that was visible
+to every install. It is now `hidden` in the markup and revealed by `panel.js`
+only when `update_url` is **absent** from `chrome.runtime.getManifest()`, which
+is how Chrome distinguishes an unpacked install from a Web Store one. Three
+things about that mechanism worth keeping:
+
+- **It needs no permission.** The manifest answers it directly; `chrome.management`
+  would have meant a new permission in the story a store reviewer reads, which is
+  a bad trade for hiding a text box.
+- **Hidden is the default, both in markup and on failure.** The `<details>` ships
+  hidden and the check reveals it, so a panel whose script never ran does not
+  flash it, and a `getManifest` that throws leaves it hidden.
+- **It is a heuristic, not a security boundary.** Getting it wrong shows a doctor
+  a text box — the behaviour that shipped until today. Anything that genuinely
+  must not reach a doctor needs a real check.
+
+`api-base` stays in the DOM either way, so only visibility moves and nothing
+about which backend is called depends on the drawer being open. **Consequence to
+accept:** on a Web Store install there is no way to point the panel at a local
+backend, which matters for the RoboForm route (`FORMFILL_SHOW_INTERNAL`) and for
+`wizard_test_v1` — both need a local server. Test those on the unpacked copy,
+which is what a developer is running anyway.
 
 **Pricing, and the gate that does not exist yet (2026-08-12).** The owner's
 call: **SGD 200/month per clinic**, billed through Stripe on the website, with
@@ -1185,8 +1230,10 @@ So there is now **one path**: every fillable control on the page becomes a
 question to map. A schema that fits lends its `description` to the controls it
 describes; a schema that does not fit costs sharpness and nothing else. No
 picker to get past, no fallback to opt into, and no state in which the panel
-looks at a form it declines to fill. `mappingLive()` survives as a *report* —
-"did the bank describe any of this" — and gates only the draft-schema offer.
+looks at a form it declines to fill. `mappingLive()` survived as a *report* —
+"did the bank describe any of this" — gating only the draft-schema offer, and
+**went with it on 2026-08-17**: with nothing left to gate, a helper answering a
+question nobody asks is a thing to delete rather than keep.
 
 **The privacy property was kept, not traded.** A described control travels
 under the *schema's* wording rather than the page's, so a page the bank fully
@@ -1286,13 +1333,13 @@ that replaces it.** The owner's design (2026-08-03). Three steps:
    because a name has no shape. `test_a_name_in_a_label_is_the_known_hole`
    asserts the failure so nobody rediscovers it by accident.
 
-3. **A successful schema-free fill hands back a draft schema** for a human to
-   read and commit. Not installed, not auto-committed, not PR'd — the owner's
-   call, and the right one: a schema is used on every later claim against that
-   form, so an unreviewed one turns a single mis-mapped field into a permanent
-   wrong answer that nothing ever re-checks. The draft appears while the page
-   that produced it is still on screen, which is the only moment anyone can
-   check the labels against the form they are looking at.
+3. ~~**A successful schema-free fill hands back a draft schema**~~ — **removed
+   2026-08-17. See "The draft schema is gone" below.** It was a proposal for a
+   human to read and commit, never installed or auto-PR'd, and it appeared while
+   the page that produced it was still on screen. What ended it was the audience:
+   the human reading it was a GP, and the reason it was safe to offer at all —
+   that a schema only ever makes answers sharper — is also the reason nothing was
+   lost by deleting it.
 
 Two traps found while building it, both in the draft:
 
@@ -1729,11 +1776,13 @@ omission to "fix".
   This is what keeps a fully-described page from sending page text to the
   model, and it is easy to undo by "simplifying" `locate.enrich` to keep the
   live label. Only questions nothing describes may carry their own labels out.
-- **A drafted schema is a proposal, never an installation.** `/map-live`
-  returns rows; the panel renders JSON; a human commits it. Do not add a route
-  that writes a schema to disk from a running claim — the schema then governs
-  every later claim on that form and nothing would ever re-read it. This was
-  decided with the alternatives on the table (auto-PR, auto-write).
+- **No route may write a schema to disk from a running claim.** The panel's
+  draft-schema offer was removed on 2026-08-17 (see "The draft schema is gone"),
+  so there is nothing left that *proposes* one either — but the rule that
+  outlived it is the important half: a schema governs every later claim on that
+  form and nothing ever re-reads it, so it is committed by a human who has read
+  it or not at all. This was decided with the alternatives on the table
+  (auto-PR, auto-write). Schemas now come from a learn-mode dump.
 - **No `chrome.storage`, and the permission is not requested.** Patient notes
   must not reach disk. The claim lives in the side panel's memory while the
   doctor has it open; closing the panel discards it. Any future need to
