@@ -1087,6 +1087,63 @@ describe("looking back at a finished step", () => {
       row.querySelector(".done-name").textContent.includes(title)
     );
 
+  test("stepping back from a mapped review offers the way back to it", async () => {
+    // showStep hides every step ahead of the one being shown, which is right
+    // while a claim is being built and wrong once one has been mapped: the
+    // answers are still in memory, and going back to check a spelling took
+    // them off screen with mapping again as the only route back — a model
+    // call, and every confirm click thrown away.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text", help: null,
+        value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ];
+    panel.showStep("page");
+    expect($("back-to-review").hidden).toBe(true);   // already there
+
+    doneRow("Patient").click();   // the row IS the button back
+    expect($("step-name").hidden).toBe(false);
+    expect($("step-page").hidden).toBe(true);
+    expect($("back-to-review").hidden).toBe(false);
+
+    $("back-to-review").click();
+    expect($("step-page").hidden).toBe(false);
+    // The review was hidden, never rebuilt: the row is the same one.
+    expect(panel.state.rows).toHaveLength(1);
+  });
+
+  test("no review, no way back to one", async () => {
+    // On the way through, the button would point at a screen that has not
+    // happened. It appears only once there is something behind it.
+    const panel = loadPanel();
+    await settle();
+    expect($("back-to-review").hidden).toBe(true);
+
+    panel.showStep("note");
+    expect($("back-to-review").hidden).toBe(true);
+  });
+
+  test("rows discarded by a section change take the button with them", async () => {
+    // A wizard step change throws the answers away on purpose. A button
+    // leading to an empty review is worse than no button, so it is gated on
+    // the rows rather than on a flag saying a mapping once happened.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text", help: null,
+        value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ];
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(false);
+
+    panel.state.rows = [];
+    panel.renderRows();
+    expect($("back-to-review").hidden).toBe(true);
+  });
+
   test("the row carries the value, so there is nothing to expand", async () => {
     const panel = loadPanel();
     await settle();

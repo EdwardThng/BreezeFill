@@ -1359,3 +1359,38 @@ button.choice:hover {
   background: var(--surface);
   border-color: var(--check);
 }
+
+/* ------------------------------------------------- back to a live review */
+
+/* Reads as a way back rather than an action: quiet, full width, and carrying
+   the same chevron the collapsed rows use, pointing the other way. It only
+   exists while a mapped review is standing behind it. */
+.back-to-review {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-strong);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.back-to-review::before {
+  content: "‹";
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.back-to-review:hover {
+  background: #f7f7f6;
+}

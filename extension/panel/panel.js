@@ -1298,6 +1298,7 @@ function showStep(key) {
 
   placeLedger();
   showNotePane();
+  updateBackToReview();
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
@@ -1305,6 +1306,28 @@ function showStep(key) {
   const scroll = $("scroll");
   if (scroll) scroll.scrollTop = 0;
 }
+
+/**
+ * Show the way back to the review, when there is a review to go back to.
+ *
+ * `showStep` hides every step ahead of the one being shown, which is the right
+ * behaviour while a claim is being built: those steps have not happened yet.
+ * Once a mapping has landed it is the wrong behaviour, because the answers
+ * HAVE happened — they are in `state.rows` the whole time — and stepping back
+ * to check a spelling took them off screen with no route back. Mapping again
+ * was the only way, which costs a model call and throws away every confirm
+ * click the doctor had already made.
+ *
+ * Gated on the rows rather than on a flag, so it disappears by itself when a
+ * wizard step change discards them: there is then nothing behind the button,
+ * and a button leading to an empty review is worse than no button.
+ */
+function updateBackToReview() {
+  const button = $("back-to-review");
+  if (!button) return;
+  button.hidden = !(state.rows.length && state.step !== "page");
+}
+
 
 /** A finished step in one line: what actually went into it. */
 function summaryOf(key) {
@@ -1660,6 +1683,9 @@ function followScroll() {
 }
 
 function renderRows() {
+  // Rows appearing and rows being discarded both come through here, and the
+  // way back to them has to appear and disappear with them.
+  updateBackToReview();
   const container = $("rows");
   // Which rows were already on screen before this render. A row that was here
   // has not entered, so it must not play an entrance: without this, every row
@@ -2151,6 +2177,10 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // a doctor who took a schema back did so because it was the wrong one, and
 // re-detection putting it straight back on the next wizard step is the change
 // nobody would be told about.
+// Straight back to the answers, with every confirm click still on them. The
+// review is never rebuilt from here — it was never taken down, only hidden.
+$("back-to-review").addEventListener("click", () => showStep("page"));
+
 $("form-id").addEventListener("change", () => {
   state.formChosenByHand = true;
   state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
@@ -2261,6 +2291,9 @@ const privacyReady = loadPrivacy().catch((error) => {
 globalThis.breezefillPanel = {
   onMap,
   showStep,
+  // Exported for the test that discards the rows and expects the way back to
+  // them to go with them, which is the one path no user gesture reaches.
+  renderRows,
   onFill,
   parsePaste,
   pastedText,
