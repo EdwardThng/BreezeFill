@@ -256,6 +256,13 @@
             know BEFORE reading what is in the box, and because a confirmed row
             hides that line entirely and closes the gap.
 
+            A blank row says it is blank and then gets out of the way. There
+            was an Add button here that opened the box on request; it was one
+            click in front of the only thing the doctor can do on that row,
+            and the row already says "Nothing found" in words. The box is
+            simply there, marked red under the caret's rule rather than drawn
+            as an empty field.
+
             The tick is last and empty of meaning on its own: it is what a
             confirmed row shows INSTEAD of the badge's sentence, which is
             moved out of the layout but kept in the accessibility tree. So
@@ -270,60 +277,42 @@
           -->
           <div class="review-row detail" id="row-nric">
             <label class="label" for="nric">NRIC</label>
-            <div class="note">
-              <span class="badge" id="badge-nric"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-nric"></span>
             <input id="nric" class="mono" type="text" autocomplete="off" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-nric"></div>
           </div>
           <div class="review-row detail" id="row-dob">
             <label class="label" for="dob">Date of birth</label>
-            <div class="note">
-              <span class="badge" id="badge-dob"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-dob"></span>
             <input id="dob" class="mono" type="date" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-dob"></div>
           </div>
           <div class="review-row detail" id="row-phone">
             <label class="label" for="phone">Phone</label>
-            <div class="note">
-              <span class="badge" id="badge-phone"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-phone"></span>
             <input id="phone" class="mono" type="text" autocomplete="off" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-phone"></div>
           </div>
           <div class="review-row detail" id="row-policy-number">
             <label class="label" for="policy-number">Policy number</label>
-            <div class="note">
-              <span class="badge" id="badge-policy-number"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-policy-number"></span>
             <input id="policy-number" class="mono" type="text" autocomplete="off" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-policy-number"></div>
           </div>
           <div class="review-row detail" id="row-insurer">
             <label class="label" for="insurer">Insurer</label>
-            <div class="note">
-              <span class="badge" id="badge-insurer"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-insurer"></span>
             <input id="insurer" type="text" autocomplete="off" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-insurer"></div>
           </div>
           <div class="review-row detail" id="row-address">
             <label class="label" for="address">Address</label>
-            <div class="note">
-              <span class="badge" id="badge-address"></span>
-              <button type="button" class="add">Add</button>
-            </div>
+            <span class="badge" id="badge-address"></span>
             <input id="address" type="text" autocomplete="off" />
             <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-address"></div>
