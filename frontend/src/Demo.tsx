@@ -296,8 +296,8 @@ export default function Demo() {
       </div>
 
       <div className="demo-outro">
-        <a className="btn btn-primary btn-large" href="/download/breezefill-extension.zip" download>
-          Download for Chrome
+        <a className="btn btn-primary btn-large" href="#/get">
+          Get BreezeFill
         </a>
         <a className="btn btn-ghost btn-large" href="#/">
           Back to the start

@@ -187,7 +187,9 @@ describe("getting around", () => {
 
   test("there is a way to the download and back to the landing page", () => {
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
-    expect(links).toContain("/download/breezefill-extension.zip");
+    // Through the funnel, like every other way in. The demo used to offer the
+    // zip directly, which is now the one route that skips the price.
+    expect(links).toContain("#/get");
     expect(links).toContain("#/");
   });
 });

@@ -1375,3 +1375,134 @@
   height: auto;
   opacity: 0.18;
 }
+
+/* ---------------------------------------------------------- #/get  */
+
+/* The subscribe-then-install funnel. Scoped under .landing like everything
+   else here: styles.css is the claim UI's and is globally scoped, and it
+   already collides with this file on .step and .pill. */
+
+.landing.get-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 20px 96px;
+}
+
+.landing .get-back {
+  display: inline-block;
+  margin-bottom: 28px;
+  font-size: 14px;
+  font-weight: 500;
+  /* .landing a { color: inherit } is specificity 0,1,1 and outranks a bare
+     class, so the ink has to be claimed at .landing-scope or the link takes
+     the page's body colour. */
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.landing .get-back:hover {
+  text-decoration: underline;
+}
+
+.landing .get-head h1 {
+  margin: 8px 0 12px;
+}
+
+.landing .get-steps {
+  list-style: none;
+  margin: 40px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.landing .get-step {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-card);
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+/* A step that cannot be taken yet is dimmed but never hidden — the doctor
+   should be able to read what is coming before they pay for it. */
+.landing .get-step.shut {
+  opacity: 0.55;
+}
+
+.landing .get-step.done {
+  border-color: var(--accent);
+}
+
+.landing .get-step-index {
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 15px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+}
+
+.landing .get-step.done .get-step-index {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.landing .get-step-body {
+  flex: 1 1 auto;
+}
+
+.landing .get-step-body h2 {
+  margin: 4px 0 8px;
+  font-size: 19px;
+}
+
+.landing .get-step-body .btn {
+  margin-top: 16px;
+}
+
+.landing .get-note {
+  margin: 0;
+  color: var(--ink-quiet);
+}
+
+/* The paragraph saying what a subscription does NOT do. Given a box of its
+   own because a doctor about to enter card details is exactly who is owed it,
+   and a caveat set as body text under two buttons is a caveat nobody reads. */
+.landing .get-honest {
+  margin-top: 40px;
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--bg-raise);
+}
+
+.landing .get-honest h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.landing .get-honest p {
+  margin: 0 0 12px;
+}
+
+.landing .get-honest p:last-child {
+  margin-bottom: 0;
+}
+
+.landing .get-page .fineprint {
+  margin-top: 32px;
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .landing .get-step {
+    flex-direction: column;
+    gap: 12px;
+  }
+}

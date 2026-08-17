@@ -14,7 +14,35 @@ import { useEffect, useRef, useState } from "react";
  * that plainly; for a doctor signing the result, it is the selling point.
  */
 
+/**
+ * The listing, live and public since 2026-08-17.
+ *
+ * The id is Google's, not ours, and it is permanent for the life of the item —
+ * so it is written here once and imported everywhere rather than repeated.
+ */
+export const STORE_ID = "efkojikbkmdglnjljmadmoboifjbblkm";
+export const STORE_URL = `https://chromewebstore.google.com/detail/${STORE_ID}`;
+
+/**
+ * The by-hand install, kept and no longer advertised.
+ *
+ * `GET /download/breezefill-extension.zip` still works and is still the route
+ * a Chrome Web Store reviewer and anyone on an unmanaged browser can use. What
+ * changed is that it is no longer what the buttons point at: a store install
+ * auto-updates, and the stale-build trap in CLAUDE.md is the reason that
+ * matters more than the convenience does.
+ */
 export const DOWNLOAD_URL = "/download/breezefill-extension.zip";
+
+/**
+ * Where every "get it" control on the site now goes.
+ *
+ * One funnel, not two. The store link and the Subscribe button used to be
+ * separate offers on the same page, which asked a doctor to work out for
+ * themselves whether installing meant paying. `#/get` puts the two in order
+ * and says which one is required.
+ */
+export const GET_ROUTE = "#/get";
 
 /**
  * ---------------------------------------------------------------------------
@@ -203,7 +231,7 @@ function Nav() {
 function Hero() {
   return (
     <header className="hero">
-      <p className="badge">Chrome Web Store listing coming soon</p>
+      <p className="badge">Now on the Chrome Web Store</p>
       <h1>
         You already wrote this.
         <br />
@@ -216,8 +244,8 @@ function Hero() {
         what you confirm. It never submits.
       </p>
       <div className="cta-row">
-        <a className="btn btn-primary btn-large" href={DOWNLOAD_URL} download>
-          Download for Chrome
+        <a className="btn btn-primary btn-large" href={GET_ROUTE}>
+          Get BreezeFill
         </a>
         <a className="btn btn-ghost btn-large" href="#/demo">
           Watch it fill a form
@@ -230,9 +258,12 @@ function Hero() {
       <p className="trustline">
         No sign-in · Identifiers never reach the model · Nothing is stored
       </p>
+      {/* It installs in one click now. What the fineprint says instead is the
+          thing a doctor arriving from a search result actually needs to know
+          before they click: what it costs, and that it costs nothing today. */}
       <p className="fineprint">
-        Not on the Chrome Web Store yet — unzip it and load it from
-        <code> chrome://extensions</code>. Takes about a minute.
+        One click from the Chrome Web Store. Free during the pilot — you will be
+        asked before anything is charged.
       </p>
       <HeroShot />
     </header>
@@ -413,20 +444,24 @@ function Pricing() {
         {/* No dead button. Until the payment link exists there is nothing to
             subscribe to, and a control that looks live and does nothing is
             worse on a page taking money than no control at all. */}
+        {/* Through #/get rather than straight to Stripe, so the price and the
+            install are read in that order and nobody reaches checkout without
+            the honest paragraph about what a subscription does and does not
+            do. One funnel; see GET_ROUTE. */}
         {subscribeUrl() ? (
           <>
-            <a className="btn btn-primary btn-large" href={subscribeUrl()}>
+            <a className="btn btn-primary btn-large" href={GET_ROUTE}>
               Subscribe
             </a>
             <p className="price-note">
-              Billed monthly, cancel any time. After checkout you are given a
-              licence key and the link to install from the Chrome Web Store.
+              Billed monthly, cancel any time. Checkout is handled by Stripe,
+              then you install from the Chrome Web Store.
             </p>
           </>
         ) : (
           <p className="price-pending">
-            Subscriptions open when the Chrome Web Store listing is approved.
-            Until then it is free and installs by hand.
+            Subscriptions are not open yet. The extension is on the Chrome Web
+            Store and free to install during the pilot.
           </p>
         )}
       </div>
@@ -658,19 +693,26 @@ function FinalCta() {
           silently next to a priced plan asks the reader to work out whether
           they are about to be charged, and that is the one thing a page taking
           money must not make them guess at. */}
+      {/* The offer and the price in the same breath, still — but the trigger
+          has changed. This used to say the price starts "when it reaches the
+          Chrome Web Store", which stopped being a future event on 2026-08-17
+          and would have read as "you are being charged from today" beside a
+          pricing card that has no Subscribe button. The pilot is what is on
+          offer; the price is what it becomes, and neither is tied to an event
+          that has already happened. */}
       <p>
-        Free during the pilot, while it installs by hand. It becomes{" "}
-        {PRICE.currency} {PRICE.amount} a {PRICE.period} when it reaches the
-        Chrome Web Store — the pilot is not a trial that expires underneath
-        you, and you will be asked before anything is charged.
+        Free during the pilot. It becomes {PRICE.currency} {PRICE.amount} a{" "}
+        {PRICE.period} once subscriptions open — the pilot is not a trial that
+        expires underneath you, and you will be asked before anything is
+        charged.
       </p>
       <p>
         Works in Chrome. Uninstalling it leaves nothing behind, because nothing
         was ever saved.
       </p>
       <div className="cta-row">
-        <a className="btn btn-primary btn-large" href={DOWNLOAD_URL} download>
-          Download for Chrome
+        <a className="btn btn-primary btn-large" href={GET_ROUTE}>
+          Get BreezeFill
         </a>
         <a className="btn btn-ghost btn-large" href="#/demo">
           See the demo first

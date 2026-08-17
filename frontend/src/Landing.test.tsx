@@ -15,10 +15,12 @@ import App, { routeOf } from "./App";
 import Landing, {
   DEMO_VIDEO,
   DEMO_VIDEO_POSTER,
-  DOWNLOAD_URL,
+  GET_ROUTE,
   HERO_SHOT,
+  STORE_URL,
   subscribeUrl,
 } from "./Landing";
+import Subscribe, { checkoutDone } from "./Subscribe";
 
 describe("routing", () => {
   test.each([
@@ -28,6 +30,9 @@ describe("routing", () => {
     ["#/demo", "demo"],
     ["#demo", "demo"],
     ["#/app", "app"],
+    ["#/get", "get"],
+    // Stripe returns with a query on the hash; the route must survive it.
+    ["#/get?paid=1", "get"],
     ["#/nonsense", "landing"],
   ])("%s -> %s", (hash, expected) => {
     expect(routeOf(hash)).toBe(expected);
@@ -138,22 +143,45 @@ describe("what the page promises", () => {
     expect(cta.textContent).toMatch(/200/);
   });
 
-  test("it is honest that this is not a Web Store install", () => {
+  test("it no longer says the listing is pending", () => {
+    // It was published on 2026-08-17. The page carried "Not on the Chrome Web
+    // Store yet" and "listing coming soon" for a while afterwards, which is
+    // the kind of staleness a marketing page hides well: nothing breaks, it
+    // just tells every visitor something false about how to install.
     render(<Landing />);
-    expect(screen.getByText(/not on the Chrome Web Store yet/i)).toBeDefined();
+    const body = document.body.textContent!;
+    expect(body).not.toMatch(/not on the Chrome Web Store yet/i);
+    expect(body).not.toMatch(/listing coming soon/i);
+    expect(body).not.toMatch(/installs by hand/i);
+  });
+
+  test("the price is not triggered by an event that has already happened", () => {
+    // The trap this closes. The copy said the price starts "when it reaches
+    // the Chrome Web Store" — true while that was in the future, and on the
+    // day it shipped it started reading as "you are being charged from
+    // today", beside a pricing card with no Subscribe button on it.
+    render(<Landing />);
+    const body = document.body.textContent!;
+    expect(body).not.toMatch(/when it reaches the Chrome Web Store/i);
   });
 });
 
 describe("the ways out of the page", () => {
-  test("download links point at the extension bundle", () => {
+  test("every way in goes through the subscribe page, not straight to the store", () => {
+    // One funnel. These used to point at the zip with a `download` attribute;
+    // now they point at #/get, so the price is read before the install rather
+    // than discovered after it. A link straight to STORE_URL anywhere on the
+    // landing page would route around the one page that states the price.
     render(<Landing />);
-    const downloads = screen.getAllByRole("link", { name: /download for chrome/i });
-    expect(downloads.length).toBeGreaterThan(0);
-    for (const link of downloads) {
-      expect(link.getAttribute("href")).toBe(DOWNLOAD_URL);
-      // Without this the browser navigates to the zip instead of saving it.
-      expect(link.hasAttribute("download")).toBe(true);
+    const gets = screen.getAllByRole("link", { name: /get breezefill|subscribe/i });
+    expect(gets.length).toBeGreaterThan(0);
+    for (const link of gets) {
+      expect(link.getAttribute("href")).toBe(GET_ROUTE);
+      // A hash route is navigated to, never saved.
+      expect(link.hasAttribute("download")).toBe(false);
     }
+    const hrefs = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs).not.toContain(STORE_URL);
   });
 
   test("there is a route into the demo", () => {
@@ -231,16 +259,21 @@ describe("pricing", () => {
     expect(subscribeUrl()).toBe("");
     render(<Landing />);
     expect(screen.queryByRole("link", { name: /^subscribe$/i })).toBeNull();
-    expect(screen.getByText(/subscriptions open when/i)).toBeDefined();
+    expect(screen.getByText(/subscriptions are not open yet/i)).toBeDefined();
   });
 
-  test("once configured, Subscribe points at the payment link", () => {
+  test("once configured, Subscribe goes to the funnel rather than to Stripe", () => {
+    // Deliberately NOT straight to checkout. #/get is where the price, the
+    // install step and the paragraph about what a subscription does not do all
+    // live, and a card that jumped past it would take a doctor to a payment
+    // form having told them none of it. The Stripe link is reached from there
+    // — see the #/get tests.
     vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
     try {
       expect(subscribeUrl()).toBe("https://buy.stripe.com/test_123");
       render(<Landing />);
       const subscribe = screen.getByRole("link", { name: /^subscribe$/i });
-      expect(subscribe.getAttribute("href")).toBe("https://buy.stripe.com/test_123");
+      expect(subscribe.getAttribute("href")).toBe(GET_ROUTE);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -344,5 +377,115 @@ describe("the closing region", () => {
     const links = [...container.querySelectorAll(".footer-links a")];
     expect(links.map((a) => a.getAttribute("href"))).toEqual(["/privacy"]);
     expect(container.querySelector(".footer")!.textContent).not.toMatch(/terms/i);
+  });
+});
+
+/**
+ * The subscribe-then-install funnel.
+ *
+ * The tests that matter here are not about layout. They are about what the
+ * page CLAIMS, on the one screen where a doctor is deciding whether to hand
+ * over a card — and about the honesty of the arrangement, because the gate
+ * this page implies does not exist yet.
+ */
+describe("#/get", () => {
+  const at = (hash: string) => {
+    window.location.hash = hash;
+    return render(<Subscribe />);
+  };
+
+  test("reads a completed checkout off the hash, and nothing else", () => {
+    expect(checkoutDone("#/get?paid=1")).toBe(true);
+    expect(checkoutDone("#/get")).toBe(false);
+    expect(checkoutDone("")).toBe(false);
+    // Not a substring match: a route that merely mentions the word is not a
+    // payment, and this is the check standing between free and "subscribed".
+    expect(checkoutDone("#/get?unpaid=1")).toBe(false);
+  });
+
+  test("with no payment link, it does not pretend there is one", () => {
+    // The existing rule on the pricing card, applied to the page that now
+    // carries the actual button: no dead control on the one that takes money.
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
+    at("#/get");
+    expect(subscribeUrl()).toBe("");
+    expect(screen.queryByRole("link", { name: /^subscribe/i })).toBeNull();
+    expect(screen.getByText(/subscriptions are not open yet/i)).toBeDefined();
+    vi.unstubAllEnvs();
+  });
+
+  test("and the install step stays reachable anyway", () => {
+    // A step 2 gated behind a step 1 that cannot be taken would leave the page
+    // with no way out at all — and the extension is genuinely free right now,
+    // so refusing to link it would be a lie in the other direction.
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
+    at("#/get");
+    expect(
+      screen.getByRole("link", { name: /install from the chrome web store/i })
+        .getAttribute("href"),
+    ).toBe(STORE_URL);
+    vi.unstubAllEnvs();
+  });
+
+  test("with a payment link, the store link waits until checkout is done", () => {
+    // The funnel the owner asked for: subscribe first, install second.
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
+    at("#/get");
+    expect(
+      screen.getByRole("link", { name: /^subscribe/i }).getAttribute("href"),
+    ).toBe("https://buy.stripe.com/test_123");
+    expect(
+      screen.queryByRole("link", { name: /install from the chrome web store/i }),
+    ).toBeNull();
+    vi.unstubAllEnvs();
+  });
+
+  test("and appears once Stripe sends them back", () => {
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
+    at("#/get?paid=1");
+    expect(
+      screen.getByRole("link", { name: /install from the chrome web store/i })
+        .getAttribute("href"),
+    ).toBe(STORE_URL);
+    vi.unstubAllEnvs();
+  });
+
+  test("the store link opens safely in a new tab", () => {
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
+    at("#/get");
+    const store = screen.getByRole("link", {
+      name: /install from the chrome web store/i,
+    });
+    expect(store.getAttribute("target")).toBe("_blank");
+    // Without noopener the store page gets a handle on this window.
+    expect(store.getAttribute("rel")).toMatch(/noopener/);
+    vi.unstubAllEnvs();
+  });
+
+  test("it never claims a subscription unlocks the extension", () => {
+    // THE IMPORTANT ONE, and the reason it is a test rather than a comment.
+    //
+    // The listing is public, so anyone can install without paying, and the
+    // panel has no licence check yet — so today the extension works whether or
+    // not a doctor subscribes. A page that said otherwise would be taking SGD
+    // 200 a month for something the same doctor could have had free, which is
+    // worse than shipping no paywall at all.
+    //
+    // When the licence gate ships in the panel, this test is the thing that
+    // will fail and force the wording to be reconsidered deliberately.
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
+    at("#/get");
+    const body = document.body.textContent!;
+    expect(body).not.toMatch(/unlock|activate|licence key required|required to use/i);
+    expect(body).toMatch(/free to install today|the pilot stays free/i);
+    vi.unstubAllEnvs();
+  });
+
+  test("there is a way back to the page that explains the product", () => {
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
+    at("#/get");
+    const hrefs = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("#/");
+    vi.unstubAllEnvs();
   });
 });
