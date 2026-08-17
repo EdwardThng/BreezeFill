@@ -1525,6 +1525,39 @@ function updateReviewMeta() {
  * reset its scrollTop on every frame of a scroll, which is what made following
  * the rows stutter; now only a class moves.
  */
+/**
+ * Where a quote sits in the note, allowing only the WHITESPACE to differ.
+ *
+ * The pane rests on the model quoting verbatim, and a quote that is not in
+ * the note is refused rather than approximated — a fuzzy match would draw a
+ * highlight round a sentence the value did not come from, on the one screen
+ * whose job is showing where a value came from. That rule is unchanged here.
+ *
+ * What changes is that a line break is not a difference in the text. Notes
+ * wrap; a model quoting a sentence that spans a break hands it back with a
+ * space, and every character in it is still the doctor's own. Refusing that
+ * loses a correct citation, and a correct citation refused reads exactly like
+ * "this value came from nowhere" — which is the thing the doctor is checking.
+ *
+ * Whitespace runs match whitespace runs. They are not allowed to match
+ * NOTHING, so "acutetonsillitis" still fails against "acute tonsillitis"; the
+ * words themselves are compared character for character, punctuation
+ * included. Returns the span in the NOTE's coordinates, so what is marked is
+ * always what the note says rather than what the model returned.
+ */
+function locateQuote(text, src) {
+  const at = text.indexOf(src);
+  if (at >= 0) return { at, end: at + src.length };
+
+  const words = src.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const pattern = words
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const match = new RegExp(pattern).exec(text);
+  return match ? { at: match.index, end: match.index + match[0].length } : null;
+}
+
 function buildNote() {
   const pre = $("note-text");
   if (!pre) return;
@@ -1535,10 +1568,10 @@ function buildNote() {
   for (const row of state.rows) {
     const src = typeof row.source === "string" ? row.source.trim() : "";
     if (!src || seen.has(src)) continue;
-    const at = text.indexOf(src);
-    if (at < 0) continue;
+    const at = locateQuote(text, src);
+    if (!at) continue;
     seen.add(src);
-    spans.push({ at, end: at + src.length, src });
+    spans.push({ ...at, src });
   }
   spans.sort((a, b) => a.at - b.at);
 
@@ -1551,8 +1584,14 @@ function buildNote() {
     if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
     const el = document.createElement("span");
     el.className = "quote";
+    // Two strings, and they are not always the same one. `src` is the model's
+    // quote and is the key markNote matches a row against; `shown` is what the
+    // note itself says at that position, which is what the doctor reads and
+    // what setHit must rebuild from. Rendering the model's copy would let a
+    // requoted line rewrite the consultation on screen.
     el.dataset.src = span.src;
-    el.textContent = text.slice(span.at, span.end);
+    el.dataset.shown = text.slice(span.at, span.end);
+    el.textContent = el.dataset.shown;
     parts.push(el);
     cursor = span.end;
   }
@@ -1567,7 +1606,7 @@ function buildNote() {
  * one span's children and never the pane, so the scroll position is untouched.
  */
 function setHit(el, hit) {
-  const text = el.dataset.src;
+  const text = el.dataset.shown;
   const at = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
   if (at < 0) {
     el.textContent = text;
