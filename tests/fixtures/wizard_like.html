@@ -83,10 +83,20 @@
     tested; on screen it is one empty box next to another empty box, which
     reads as the product failing rather than refusing.
 
-  - Insurer arrives PRE-FILLED. `applyOne` is gated by `hasExistingAnswer`, so
-    BreezeFill leaves it exactly as found and reports it already answered — a
-    filled control was filled by the doctor or by the insurer, and writing over
-    it replaces a human decision after the review step has already passed.
+  - Insurer is EMPTY, and it is the only control on step 1 that the note does
+    not answer. `wizard_test_v1` declares `insurer: "AIA"` and `inferInsurer`
+    copies it into the panel's box on detection, so this one fills from the FORM
+    rather than from the paste. It was pre-filled with "AIA Singapore" until
+    2026-08-17; the hardcode made the inference impossible to observe, since
+    never-overwrite would have declined to write there regardless.
+
+  - The never-overwrite guard now sits on MC DAYS in step 2, pre-filled with a
+    value that DISAGREES with the note (7 against the note's 14). `applyOne` is
+    gated by `hasExistingAnswer`, so BreezeFill leaves it as found and reports
+    it already answered — a filled control was filled by the doctor or by the
+    insurer, and writing over it replaces a human decision after the review step
+    has already passed. Pre-filling with the value the note produces would have
+    made the guard unobservable; a refusal is not evidence of a working rule.
 
   - Date of birth is a NATIVE <input type="date">, and it is the only one in
     the repo. The control holds yyyy-mm-dd and silently EMPTIES ITSELF when
@@ -286,11 +296,18 @@
               <textarea id="patient-address" name="address"></textarea>
             </div>
 
-            <!-- PRE-FILLED BY THE INSURER. Never overwritten, and reported as
-                 already answered rather than as a skip with no reason. -->
+            <!-- EMPTY ON PURPOSE, and it is the one control here that is not
+                 answered from the note. `wizard_test_v1` declares
+                 `insurer: "AIA"`, and `inferInsurer` copies that into the
+                 panel's own box on detection — so this fills from the FORM
+                 rather than from the paste, which is the only demographic that
+                 does. It arrived pre-filled with "AIA Singapore" until
+                 2026-08-17; that hardcode made the inference unobservable,
+                 because never-overwrite is absolute and would have declined to
+                 write here whatever the panel worked out. -->
             <div class="q">
               <label for="insurer">Insurer</label>
-              <input type="text" id="insurer" name="insurer" value="AIA Singapore" />
+              <input type="text" id="insurer" name="insurer" />
             </div>
           </fieldset>
 
@@ -342,9 +359,27 @@
               <textarea id="treatment" name="treatment"></textarea>
             </div>
 
+            <!-- PRE-FILLED, and this is where the never-overwrite guard is
+                 exercised. `applyOne` is gated by `hasExistingAnswer`, so
+                 BreezeFill leaves it exactly as found and reports it already
+                 answered — a filled control was filled by the doctor or by the
+                 insurer, and writing over it replaces a human decision after
+                 the review step has already passed.
+
+                 The value DISAGREES with the note on purpose. The sample note
+                 says "MC 14 days"; this says 7. A guard that pre-fills with the
+                 same value the note produces cannot be seen working, because
+                 writing 14 over 14 is indistinguishable from refusing to write
+                 — and a refusal is not evidence of a working rule. If this box
+                 reads 14 after a fill, the guard is broken.
+
+                 It moved here from the Insurer field above on 2026-08-17,
+                 because that one now has to be free for the inference to fill.
+                 A clinical value is the stronger test anyway: BreezeFill has a
+                 competing answer for this box and must still decline. -->
             <div class="q">
               <label for="mc-days">Number of days of medical leave certified</label>
-              <input type="text" id="mc-days" name="mcDays" />
+              <input type="text" id="mc-days" name="mcDays" value="7" />
             </div>
 
             <fieldset class="opts">
