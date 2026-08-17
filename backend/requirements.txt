@@ -5,6 +5,9 @@ pydantic>=2.7
 pypdf>=5.0
 # Runtime, not just test: overlay_fill draws text onto flat scanned forms.
 reportlab>=4.0
+# Subscriptions. Stripe holds the subscriber list so this backend does not
+# have to hold one — see licensing.py.
+stripe>=10.0
 
 # dev/test
 pytest>=8.0

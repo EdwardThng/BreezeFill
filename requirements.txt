@@ -16,3 +16,4 @@ reportlab>=4.0
 
 # No uvicorn: Vercel provides the ASGI server. It stays in
 # backend/requirements.txt because local development runs `uvicorn main:app`.
+stripe>=10.0
