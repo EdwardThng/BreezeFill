@@ -152,6 +152,19 @@ Care ended 20/03/2026, no onward referral.
 Dr Tan Mei Ling, MCR M08842B, Family Physician.
 Braddell Family Clinic, 22 Braddell Road, Singapore 359915. Tel 62551234.`;
 
+// Whether to animate a scroll. Read once: the panel is not open long enough
+// for the setting to change under it, and asking per frame is wasteful.
+//
+// markNote is the only reader and it is the LAST expression in that function,
+// after the guard that returns early when the note fits its pane. jsdom gives
+// every element a scrollHeight and clientHeight of 0, so that guard always
+// fires in the tests and this line is never evaluated there — which is how
+// this constant went missing for two commits with 147 tests green and the
+// pane dead in the browser. If it is moved again, move the reader with it.
+const REDUCED_MOTION = globalThis.matchMedia
+  ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
+  : { matches: false };
+
 const state = {
   forms: [],
   /** field_id of the row the note pane is currently marking. */
