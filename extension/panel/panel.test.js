@@ -1270,6 +1270,108 @@ describe("a build the backend has disowned", () => {
 });
 
 
+
+describe("answers the note no longer supports", () => {
+  // Map a claim, then clear the paste box — or paste a DIFFERENT patient's
+  // note — and the previous mapping stayed on screen, still confirmable and
+  // still fillable. The demographic rows would have been written from
+  // whichever boxes were filled at that moment, so one patient's diagnosis
+  // and another's NRIC could have gone onto the same form.
+
+  const ANSWER = {
+    field_id: "diagnosis", pdf_field_name: "", field_type: "text", label: "Diagnosis",
+    help: null, value: "Acute appendicitis", status: "extracted",
+    source: "Acute appendicitis", needs_review: false, fill_from: null,
+    options: [], step: null,
+  };
+
+  async function mapped(panel) {
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields: [ANSWER] });
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Chua Beng Huat · S7211043C · 04/11/1972\n\nAcute appendicitis.";
+    // Parse first, the way the panel does, so the boxes have settled before
+    // the mapping records what it was derived from.
+    await panel.parsePaste();
+    await panel.onMap();
+    expect(panel.state.rows).toHaveLength(1);
+  }
+
+  async function retype(text) {
+    $("paste").value = text;
+    $("paste").dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(600);
+    await settle();
+  }
+
+  test("clearing the note drops the answers", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapped(panel);
+
+    await retype("");
+
+    expect(panel.state.rows).toHaveLength(0);
+    expect($("mapped").hidden).toBe(true);
+    expect(document.body.textContent).not.toContain("Acute appendicitis");
+  });
+
+  test("a different patient's note drops them too", async () => {
+    // The dangerous one. The answers stayed, and the demographic rows would
+    // have been refilled from the new patient's boxes.
+    const panel = loadPanel();
+    await settle();
+    await mapped(panel);
+
+    await retype("Different Person · S9999999Z\n\nSore throat.");
+
+    expect(panel.state.rows).toHaveLength(0);
+    expect(
+      `${$("map-status").textContent} ${$("prompt-why").textContent}`
+    ).toMatch(/note changed/i);
+  });
+
+  test("correcting a demographic drops them as well", async () => {
+    // Demographic rows are copied at map time, so a corrected NRIC afterwards
+    // would go onto the form as it was before the correction.
+    const panel = loadPanel();
+    await settle();
+    await mapped(panel);
+
+    $("nric").value = "S8888888A";
+    $("nric").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(panel.state.rows).toHaveLength(0);
+  });
+
+  test("confirming a row does not drop anything", async () => {
+    // The doctor agreeing with a value is not the note changing. This is the
+    // guard against the fix eating the work it is protecting.
+    const panel = loadPanel();
+    await settle();
+    await mapped(panel);
+
+    panel.state.confirmed.add("diagnosis");
+    expect(panel.discardIfStale()).toBe(false);
+    expect(panel.state.rows).toHaveLength(1);
+  });
+
+  test("retyping the note exactly as it was keeps them", async () => {
+    // Compared by content, not by "an input event happened" — a doctor who
+    // selects all and pastes the same text back has changed nothing.
+    const panel = loadPanel();
+    await settle();
+    await mapped(panel);
+    const same = $("paste").value;
+
+    await retype(same);
+
+    expect(panel.state.rows).toHaveLength(1);
+  });
+});
+
 describe("a mapping that answered nothing", () => {
   // "Mapped answers still showing when nothing is filled." Two shapes of the
   // same thing: a review block revealed over an empty list, and a review block

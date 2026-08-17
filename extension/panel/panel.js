@@ -180,6 +180,11 @@ const state = {
    * wizard, and the doctor has not gone backwards by pressing it.
    */
   filled: false,
+  /**
+   * The note and demographics the rows on screen were mapped from, or null
+   * when nothing has been mapped. Compared, never sent.
+   */
+  mappedFrom: null,
   /** Which step the panel is showing. Presentation only. */
   step: "name",
   /** field_id -> doctor's value, when they have changed one. */
@@ -556,6 +561,11 @@ const PARSE_DEBOUNCE_MS = 400;
 
 function scheduleParse() {
   clearTimeout(state.parseTimer);
+  // Immediately, not on the debounce, and before the empty-box return below.
+  // Answers stop being supported by the note the moment it changes, and
+  // clearing the box entirely — the case that started this — never reaches
+  // the parser at all.
+  discardIfStale();
   if (!pastedText()) {
     state.openedForMissing = false;
     return;
@@ -594,6 +604,7 @@ async function parsePaste() {
   }
   renderChoices(parsed.choices || {});
   updateFound();
+  discardIfStale();
 }
 
 /**
@@ -886,6 +897,70 @@ function localise(rows, map) {
   });
 }
 
+/**
+ * Everything the answers on screen were derived from.
+ *
+ * The note as pasted, and the demographics as checked. Not a hash — this is
+ * compared, never stored anywhere, and a few kilobytes in memory for the life
+ * of a claim is not worth being clever about.
+ */
+function claimSignature() {
+  return JSON.stringify([
+    pastedText(),
+    ...Object.keys(DEMOGRAPHIC_FIELDS).map((id) => $(id).value.trim()),
+  ]);
+}
+
+/**
+ * Throw away answers the note no longer supports.
+ *
+ * The failure this fixes: map a claim, then clear the paste box — or paste a
+ * DIFFERENT patient's note — and the previous mapping stayed on screen, still
+ * confirmable and still fillable. The demographic rows would have been written
+ * from whichever boxes were filled at that moment, so patient A's diagnosis
+ * and patient B's NRIC could have gone onto one form.
+ *
+ * Any change to the note or the demographics counts, because any of them can
+ * change what an answer means. Editing a row does not: the doctor correcting a
+ * value is agreeing with the mapping, not invalidating it.
+ *
+ * Discarded loudly, for the same reason onPageChanged says so: work vanishing
+ * with no account of itself is the one thing a review screen must never do.
+ */
+function discardIfStale() {
+  if (!state.rows.length || state.mappedFrom === null) return false;
+  if (claimSignature() === state.mappedFrom) return false;
+
+  state.rows = [];
+  state.edited.clear();
+  state.confirmed.clear();
+  state.mappedFrom = null;
+  renderRows();
+  $("mapped").hidden = true;
+  setStatus($("fill-status"), "");
+  $("fill-report").replaceChildren();
+  // Said on the prompt card, not the status line, for the same reason
+  // onPageChanged says it there: scanPage clears the status line on its way
+  // past, and two messages competing for one element is how the actionable
+  // one got destroyed the first time.
+  const announce = () => {
+    const why = $("prompt-why");
+    if (!$("map-prompt").hidden && why) {
+      why.textContent = `The note changed, so the last mapping was dropped. ${why.textContent}`;
+    } else {
+      setStatus(
+        $("map-status"),
+        "The note changed, so the answers from the last mapping were dropped.",
+        "error"
+      );
+    }
+  };
+
+  if (state.step === "page") scanPage().then(announce);
+  else announce();
+  return true;
+}
+
 async function onMap() {
   const status = $("map-status");
 
@@ -1026,6 +1101,9 @@ async function onMap() {
     // The offer is spent: these questions have been mapped, and the button
     // that offered them would now re-ask the model the same thing.
     $("map-prompt").hidden = true;
+    // What these answers were derived from. Anything that changes it makes
+    // them answers to a question nobody asked any more — see discardIfStale.
+    state.mappedFrom = claimSignature();
     // ...but only reveal the review when there is a review to read. An answer
     // list with nothing in it is a promise the panel has not kept, and it was
     // being shown in two different ways:
@@ -2267,6 +2345,10 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   $(id).addEventListener("input", () => {
     state.touched.add(id);
     updateFound();
+    // A corrected NRIC after mapping is the same problem as a replaced note:
+    // the demographic rows were copied at map time and would go onto the form
+    // as they were then.
+    discardIfStale();
   });
 
 }
@@ -2446,6 +2528,8 @@ globalThis.breezefillPanel = {
   readableDate,
   localise,
   loadPrivacy,
+  claimSignature,
+  discardIfStale,
   olderThan,
   checkVersion,
   state,
