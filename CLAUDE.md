@@ -2198,6 +2198,20 @@ asks about a hospital admission the panel's sample note cannot answer, on
 purpose — a demo where every box fills teaches the opposite of the product's
 bet, so the blanks are part of the shot.
 
+**The pre-filled control moved on 2026-08-17, and where it sits is the point.**
+It was `Insurer`, hardcoded to "AIA Singapore", and that made the insurer
+*inference* unobservable on the one page in the repo that could show it:
+never-overwrite is absolute, so the panel's value would have been declined
+whatever it worked out. Insurer is now empty and fills from the form, and the
+guard moved to **MC days in step 2, pre-filled with 7 against the note's 14** —
+deliberately disagreeing, because a pre-fill that matches what the note produces
+cannot demonstrate a refusal at all. If that box reads 14 after a fill, the guard
+is broken. A clinical value is also the stronger test: BreezeFill has a competing
+answer for it and must still decline. `wizard_test.json` now declares
+`insurer: "AIA"` — the canonical name `_normalised` writes — where it previously
+said "Test" while the page said "AIA Singapore", so the fixture and its schema
+were modelling two different insurers.
+
 **The step-1 labels are exact and must not be reworded casually.**
 `demographic_field_for_label` normalises to letters and strips only *patient*
 qualifiers, so `Contact No.` resolves and `Contact Number` does not; likewise
@@ -2271,9 +2285,30 @@ filled is answering a question nobody asked.
 Two properties to preserve. It **only ever fills a blank** — a doctor who typed
 an insurer has decided, and this is a fallback rather than a correction. And a
 **live schema carries no `insurer`**, so on the schema-free path the box stays
-blank and the doctor types one line; closing that would mean the panel sending
-the best-fitting schema's insurer alongside the page's controls, which is a
-change to the request shape and was not made.
+blank and the doctor types one line.
+
+**The extension never reached that fallback at all, and does now (2026-08-17).**
+The paragraph above only ever described `POST /map` and the PDF path. The panel
+calls `/map-redacted`, whose schema is built by `_live_schema` — which carries no
+`insurer` — so `assemble_claim`'s fallback was unreachable from the extension and
+the box came back blank on **every** claim, schema matched or not.
+
+`inferInsurer` in `panel.js` closes it, and the shape matters: this was recorded
+here as needing "the panel sending the best-fitting schema's insurer alongside
+the page's controls, which is a change to the request shape". **It is not.**
+`GET /forms` already returns each schema's `insurer`, the panel already holds the
+matched schema in `state.schema`, and demographics are already filled in the
+panel rather than on the server (`assemble_redacted` returns `fill_from` and no
+value). Nothing new goes on the wire.
+
+It writes into **the panel's own insurer box on detection**, not into the review
+row, and that is the load-bearing choice rather than a UI nicety: a demographic
+reaches the doctor already green — it skips both the model and the review confirm
+— so an inferred value has to be visible and editable in the details drawer
+*before* Map runs, instead of appearing for the first time as an answer nobody
+was asked about. Two further refusals: it never marks the field `touched`, so a
+note that names an insurer still wins; and it stands aside when `choices` is
+asking the doctor which of two insurers the note meant.
 
 The rejected alternative, so it is not re-opened: scanning the note for known
 insurer names. It puts world knowledge into a module that is otherwise pure
