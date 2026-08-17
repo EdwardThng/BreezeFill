@@ -2382,6 +2382,23 @@ describe("the note pane", () => {
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
   });
 
+  test("finds a quote the model rewrapped, and shows the note's own wrapping", async () => {
+    // A clinical note is wrapped, and a model quoting a sentence that spans a
+    // line break hands it back with a space. Every character in it is still
+    // the doctor's own — only the wrapping is the model's — so refusing it
+    // loses a correct citation, and a correct citation refused reads exactly
+    // like "this value came from nowhere". The rule below this one is
+    // unchanged for any difference that is not whitespace.
+    const wrapped = "Seen 02/08/2026. Dx acute\ntonsillitis. MC 2 days.";
+    await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis." }], wrapped);
+
+    $("rows").children[0].click();
+
+    // Marked as the doctor wrote it, not as the model requoted it.
+    expect(marked().textContent).toBe("Dx acute\ntonsillitis.");
+    expect($("note-text").textContent).toBe(wrapped);
+  });
+
   test("marks NOTHING when the quote is not in the note verbatim", async () => {
     // The rule this whole pane rests on. A fuzzy match would draw a highlight
     // around a sentence the value did not come from, on the one screen whose
