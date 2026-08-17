@@ -1,0 +1,68 @@
+{
+  "_comment": [
+    "The shapes an identifier takes, written once and read by both languages.",
+    "",
+    "This file exists because redaction is about to run in two places: in the",
+    "browser, where it keeps the patient's name off the network entirely, and on",
+    "the server, which redacts again as a backstop. Two implementations of the",
+    "same rules is the one real risk in that design \u2014 a pattern fixed in Python",
+    "and not in JavaScript is a leak that every test still passes.",
+    "",
+    "So neither language owns these. backend/redaction.py loads this file at",
+    "import and refuses to start without it; extension/privacy/redact.js fetches",
+    "it from the packaged extension and refuses to redact without it.",
+    "",
+    "It lives under extension/ because a Chrome extension can only read files",
+    "inside its own directory, and the backend has no such restriction.",
+    "",
+    "SYNTAX: every regex here must be valid in BOTH Python's re and JavaScript's",
+    "RegExp. That rules out named groups spelled differently, \\Z, and inline",
+    "flags. Lookbehind is fine \u2014 Python has always had it and V8 has since",
+    "Chrome 62, well under the extension's minimum of 114.",
+    "",
+    "TOKENS: `start` is the first counter value, and 1 versus 2 is not",
+    "arbitrary. [NRIC] and [PHONE] without a number are the patient's own, put",
+    "there by the dictionary pass; numbering the pattern pass from 2 keeps a",
+    "family member's NRIC from being handed back as the patient's on re-merge.",
+    "",
+    "SHIELDS are the opposite of patterns: spans held aside so the passes cannot",
+    "touch them, and restored afterwards. They are here for the same reason the",
+    "patterns are \u2014 an over-redaction bug fixed in one language and not the other",
+    "costs the form a field, quietly, in only one of the two places redaction runs."
+  ],
+  "version": 1,
+  "patterns": [
+    {
+      "field": "nric",
+      "regex": "\\b[STFGM]\\s?\\d{7}\\s?[A-Z]\\b",
+      "ignore_case": true,
+      "token": "NRIC",
+      "start": 2,
+      "note": "Singapore NRIC/FIN. A single optional space is tolerated either side of the digits, because a doctor typing from a card leaves them."
+    },
+    {
+      "field": "phone",
+      "regex": "(?<!\\d)(?:\\+65[ -]?)?[689]\\d{3}[ -]?\\d{4}(?!\\d)",
+      "ignore_case": false,
+      "token": "PHONE",
+      "start": 2,
+      "note": "Singapore mobile or landline. The lookaround stops a longer digit run \u2014 an invoice number, a policy number's tail \u2014 being read as a phone."
+    },
+    {
+      "field": "email",
+      "regex": "\\b[\\w.+-]+@[\\w-]+\\.[\\w.-]+\\b",
+      "ignore_case": false,
+      "token": "EMAIL",
+      "start": 1,
+      "note": "No form asks for one, so it is only ever removed, never returned."
+    }
+  ],
+  "shields": [
+    {
+      "name": "institution",
+      "regex": "\\b[A-Z][\\w'-]*(?:\\s+[A-Z][\\w'-]*){0,4}\\s+(?:Hospital|Polyclinic|Clinic|Medical\\s+Cent(?:re|er)|Specialist\\s+Cent(?:re|er))\\b",
+      "ignore_case": false,
+      "note": "An institution's name routinely contains somebody's surname \u2014 Tan Tock Seng Hospital, Ng Teng Fong General Hospital. Pass 1 redacts each part of the patient's name, so a patient surnamed Tan turned that hospital into '[PATIENT] Tock Seng Hospital' and the claim lost the field asking which hospital. These spans are held aside for the length of the passes and put back after. A facility is not a patient."
+    }
+  ]
+}

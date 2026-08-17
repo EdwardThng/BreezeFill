@@ -68,10 +68,28 @@
   --check-mark: #fdf3dc;
   /* The value itself, inside the sentence that carries it. */
   --check-hit: #f4dfa6;
-  /* A sentence a value was REASONED from rather than quoted out of. Marked,
-     because it is what the doctor has to read — just not as the answer. */
-  --check-faint: #fbf7ec;
   --missing: #6e6e73;
+
+  /* A sentence a value was REASONED from rather than quoted out of — marked,
+     because it is what the doctor has to read, just not as the answer.
+
+     A hue of its own rather than a paler amber, which is what it was. Two
+     different things were being said in one colour: amber is this panel's
+     word for "you have to check this", and that is equally true of a quoted
+     value and an inferred one. Whether the value is IN the sentence is a
+     different question, and answering it with the same amber four shades
+     lighter (#fbf7ec, on a #f5f5f4 ground) made the two marks read as
+     "highlighted" and "very slightly highlighted" rather than as two
+     relationships.
+
+     Violet because every other colour here is spoken for: green says settled,
+     amber says check this, red says nothing was found, and the blue belongs
+     to the Fill button alone. It asserts nothing about whether the value is
+     right — only that it was worked out rather than read off, which is
+     exactly the distinction the dashed rule was carrying by itself. */
+  --reason-mark: #ece7f6;
+  --reason-line: #6a54a3;
+  --reason-ink: #55408c;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
   --accent: #0071e3;
@@ -503,6 +521,15 @@ button.link:hover {
   min-height: 1em;
 }
 
+/* An empty one holds open a line plus the step's gap on either side — about
+   35px of nothing between the heading and the work, which is what the review
+   screen showed for the whole time no status was being reported. The reserved
+   line is there so text arriving does not shift the layout; a status arriving
+   is rare and worth noticing, and a permanent gap is not. */
+.status:empty {
+  display: none;
+}
+
 .status.error {
   color: var(--danger);
   background: var(--danger-bg);
@@ -644,6 +671,7 @@ details > *:not(summary) {
    browser window is — a fixed pixel height stops being a third the moment the
    doctor resizes anything. */
 .notepane {
+  position: relative;
   flex: 0 0 33%;
   display: flex;
   flex-direction: column;
@@ -697,7 +725,10 @@ details > *:not(summary) {
   flex: none;
   background: none;
   border: 0;
-  padding: 0;
+  /* The only control that folds the pane away, and it was a 15px-tall word.
+     Padded to the 24px target minimum without moving the text. */
+  min-height: 24px;
+  padding: 0 2px;
   font-size: 12px;
   color: var(--muted-strong);
   text-decoration: underline;
@@ -728,6 +759,25 @@ details > *:not(summary) {
   display: none;
 }
 
+/* The note runs out at the pane's bottom edge with nothing saying there is
+   more of it — at 320px the last visible line is cut mid-sentence and reads
+   as the end. A short fade says "scroll". It sits over blank ground when the
+   note is short enough to fit, so it costs nothing there. */
+.notepane::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 20px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(252, 252, 251, 0), var(--surface));
+}
+
+.notepane[data-folded="true"]::after {
+  display: none;
+}
+
 /* Every quotable sentence is a span from the first render and only a class
    moves. Rebuilding the note to redraw the mark reset the pane's scroll on
    every frame of a scroll, which is what made following it stutter. */
@@ -754,11 +804,16 @@ details > *:not(summary) {
 
 /* Still a highlight — it is the sentence the doctor has to read. What the
    dashed rule under it says is only that the value is not written in there. An
-   outline alone read as "nothing is marked". */
+   outline alone read as "nothing is marked".
+
+   And a different colour, not a fainter one. Two marks in the same hue
+   separated only by lightness put the whole weight of the distinction on the
+   dashed rule, which is four pixels of it; the fill is what the eye reads
+   first, and the fill was saying the same thing both times. */
 .quote.on.reasoned {
-  background: var(--check-faint);
+  background: var(--reason-mark);
   color: var(--text);
-  text-decoration: underline dashed var(--check);
+  text-decoration: underline dashed var(--reason-line);
   text-underline-offset: 4px;
 }
 
@@ -892,15 +947,216 @@ details > *:not(summary) {
   border-color: var(--check-line);
 }
 
+/* ------------------------------------------------- the check screen's card */
+
+/* The same card as a review row, still — same fill, same 10px radius, same
+   3px state rule. What comes out is the two things that made it 121px tall:
+   a badge line that four times out of six said what the doctor had already
+   assumed, and a permanent input box around a value that was already
+   readable.
+
+   What is left is the card's own rhythm, caption over content, at a third of
+   the height:
+
+       label          <- 11.5px, muted: the caption, not the content
+       badge          <- only on a row that has something to say
+       value          <- text at rest, an input the moment it is clicked
+                         and a green tick in the gutter beside it
+
+   The grid is named rather than ordered because the badge moves: on a
+   confirmed row it leaves the layout entirely and the two remaining rows
+   close up. */
+.review-row.detail {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  grid-template-areas:
+    "label   mark"
+    "note    mark"
+    "value   mark"
+    "choices choices";
+  gap: 2px 10px;
+  align-items: center;
+  padding: 7px 11px 8px 12px;
+  margin-bottom: 6px;
+}
+
+.review-row.detail.confirmed:hover {
+  background: var(--field);
+}
+
+.review-row.detail .label {
+  grid-area: label;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.review-row.detail .badge {
+  grid-area: note;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* NOT display:none. The sentence is the only thing that separates a value the
+   note produced from one the doctor typed — which is evidence about whether
+   it can be trusted, on the screen where these values become the dictionary
+   redaction scrubs the note with. A screen reader has no tick to look at, so
+   the line leaves the layout and stays in the accessibility tree. */
+.review-row.detail.confirmed .badge {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The value. An input at all times — every control in this panel stays in the
+   DOM so nothing is ever lost by moving between steps — but at rest it is
+   drawn as the text it holds. The 1.5px rule is present and transparent
+   rather than absent, so colouring it on hover and focus never moves the
+   value by half a pixel. */
+.review-row.detail > input {
+  grid-area: value;
+  width: 100%;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-bottom: 1.5px solid transparent;
+  border-radius: 0;
+  padding: 0;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+/* A value read back against a note is read character by character, and a
+   proportional face hides the transposed digit that a fixed grid shows. */
+.review-row.detail > input.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.review-row.detail:hover > input {
+  border-bottom-color: var(--line);
+}
+
+.review-row.detail > input:focus {
+  border-bottom-color: var(--focus-line);
+}
+
+/* The picker is a permanent 20px glyph on a row whose whole point is that it
+   is quiet. It comes back on hover and on focus, which is when it is wanted. */
+.review-row.detail > input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  padding: 0;
+  margin: 0;
+  transition: opacity 0.15s ease;
+}
+
+.review-row.detail:hover > input[type="date"]::-webkit-calendar-picker-indicator,
+.review-row.detail > input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+}
+
+/* The confirmed mark.
+
+   It was written as a reuse: a finished step wore a 15px filled green disc
+   (`.done-tick`), so a settled value wearing the same disc one size down said
+   the same thing the same way. That is no longer true — the finished step is
+   now a hairline row with a bare glyph (`.done-check`), changed on the
+   grounds that "the loudest mark in the panel was being spent on the least
+   urgent fact on the screen".
+
+   Which makes this disc the loudest mark in the panel, repeated up to six
+   times. Kept because it is what was asked for and because the fact is not
+   the least urgent one here — this row is where a value becomes the
+   dictionary redaction scrubs the note with. But the two marks now disagree
+   on purpose rather than by oversight, and if that reads wrong on screen the
+   fix is to match `.done-check`: drop the fill and the radius, keep the
+   colour, size the glyph at 11px. */
+.review-row.detail .tick {
+  grid-area: mark;
+  justify-self: end;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--confident);
+  color: #fff;
+  font-size: 8.5px;
+  line-height: 1;
+  display: none;
+  place-items: center;
+}
+
+.review-row.detail.confirmed .tick {
+  display: grid;
+}
+
+.review-row.detail .choices {
+  grid-area: choices;
+}
+
+.review-row.detail.pending {
+  background: var(--check-bg);
+  border-color: var(--check-line);
+}
+
+/* A field nothing answered says so, and is then typed into like any other.
+
+   What made the old card read as a form to fill was six inputs DRAWN AS
+   FIELDS — box, radius, hairline — around values that were already settled.
+   It was never the presence of somewhere to type. So this row keeps the same
+   borderless input as every other row and marks it: a red ground, the word
+   "Nothing found", and the caret's rule showing in --danger-line instead of
+   transparent, which is both the flag and the place to click.
+
+   The rule being visible at rest is the whole affordance, and it is why these
+   two declarations sit AFTER the hover and focus rules above rather than
+   beside their own kind — equal specificity, so order is what decides, and a
+   red row must not turn grey under the pointer. */
+.review-row.detail.missing {
+  background: var(--danger-bg);
+  border-color: var(--danger-line);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.review-row.detail.missing .badge {
+  color: var(--danger);
+}
+
+.review-row.detail.missing > input,
+.review-row.detail.missing:hover > input {
+  border-bottom-color: var(--danger-line);
+}
+
+.review-row.detail.missing > input:focus {
+  border-bottom-color: var(--danger);
+}
+
 /* The model's own sentence saying why an inferred value follows from the
    sentence marked in the note above. Said on the row, because the row is where
    the doctor signs off — the pane can only mark what the value was worked out
-   FROM, and that sentence does not contain the answer. */
+   FROM, and that sentence does not contain the answer.
+
+   It takes the mark's colour rather than the badge's. This sentence and that
+   highlight are one fact said in two places, and leaving an amber explanation
+   pointing at a violet mark makes the reader do the joining. The badge above
+   it stays amber: "check this" is a separate claim, and it is still true. */
 .derived {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--check);
+  color: var(--reason-ink);
 }
 
 .date-hint {
@@ -1085,6 +1341,8 @@ button.confirm:active:not(:disabled) {
 }
 
 button.choice {
+  /* 24px minimum target: this was 23, which fails SC 2.5.8 by a pixel. */
+  min-height: 24px;
   padding: 4px 10px;
   font-family: var(--mono);
   font-size: 11px;
@@ -1098,4 +1356,38 @@ button.choice {
 button.choice:hover {
   background: var(--surface);
   border-color: var(--check);
+}
+
+/* ------------------------------------------------- back to a live review */
+
+/* Not a card. It was one, with the same border, radius and surface as a
+   finished step, so it read as a fifth step sitting above the four — the one
+   thing it is not. A return is not a place in the flow, so it is a quiet line
+   above the work with a chevron pointing the way it goes. */
+.back-to-review {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  padding: 2px 0;
+  margin-bottom: 12px;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.back-to-review::before {
+  content: "\2039";
+  font-size: 15px;
+  line-height: 1;
+}
+
+.back-to-review:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
