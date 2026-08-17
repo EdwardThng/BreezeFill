@@ -1360,35 +1360,34 @@ button.choice:hover {
 
 /* ------------------------------------------------- back to a live review */
 
-/* Reads as a way back rather than an action: quiet, full width, and carrying
-   the same chevron the collapsed rows use, pointing the other way. It only
-   exists while a mapped review is standing behind it. */
+/* Not a card. It was one, with the same border, radius and surface as a
+   finished step, so it read as a fifth step sitting above the four — the one
+   thing it is not. A return is not a place in the flow, so it is a quiet line
+   above the work with a chevron pointing the way it goes. */
 .back-to-review {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 9px 12px;
-  margin-bottom: 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  gap: 5px;
+  width: auto;
+  padding: 2px 0;
+  margin-bottom: 12px;
+  background: none;
+  border: 0;
   font: inherit;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
   color: var(--muted-strong);
   text-align: left;
   cursor: pointer;
-  transition: background 0.18s ease;
 }
 
 .back-to-review::before {
-  content: "‹";
-  font-size: 17px;
+  content: "\2039";
+  font-size: 15px;
   line-height: 1;
-  color: var(--muted);
 }
 
 .back-to-review:hover {
-  background: #f7f7f6;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

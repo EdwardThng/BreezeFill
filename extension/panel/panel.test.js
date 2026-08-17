@@ -1129,6 +1129,34 @@ describe("looking back at a finished step", () => {
     expect($("back-to-review").hidden).toBe(true);
   });
 
+  test("a review with no answers on it is not worth going back to", async () => {
+    // The correction. Rows alone was the old test, and a mapping where every
+    // question came back `missing` has rows and nothing on them — so the
+    // button appeared over a screenful of empty boxes and promised something.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text",
+        help: null, value: null, status: "missing", needs_review: true },
+      { field_id: "icd", label: "ICD-10", field_type: "text",
+        help: null, value: "", status: "missing", needs_review: true },
+    ];
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(true);
+
+    // One answer is enough, and the label says how many so the promise can be
+    // checked before it is clicked.
+    panel.state.rows[0].value = "Acute appendicitis";
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(false);
+    expect($("back-to-review").textContent).toContain("1 mapped answer");
+
+    panel.state.rows[1].value = "K35.80";
+    panel.showStep("name");
+    expect($("back-to-review").textContent).toContain("2 mapped answers");
+  });
+
   test("rows discarded by a section change take the button with them", async () => {
     // A wizard step change throws the answers away on purpose. A button
     // leading to an empty review is worse than no button, so it is gated on

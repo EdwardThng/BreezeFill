@@ -1336,24 +1336,39 @@ function showStep(key) {
 }
 
 /**
- * Show the way back to the review, when there is a review to go back to.
+ * The way back to a mapped review, on the two conditions that make it useful.
  *
- * `showStep` hides every step ahead of the one being shown, which is the right
- * behaviour while a claim is being built: those steps have not happened yet.
- * Once a mapping has landed it is the wrong behaviour, because the answers
- * HAVE happened — they are in `state.rows` the whole time — and stepping back
- * to check a spelling took them off screen with no route back. Mapping again
- * was the only way, which costs a model call and throws away every confirm
- * click the doctor had already made.
+ * `showStep` hides every step ahead of the one being shown. That is right on
+ * the way through — those steps have not happened — and wrong once a mapping
+ * has landed, because the answers HAVE happened and sit in `state.rows` the
+ * whole time. Stepping back to check a spelling took them off screen.
  *
- * Gated on the rows rather than on a flag, so it disappears by itself when a
- * wizard step change discards them: there is then nothing behind the button,
- * and a button leading to an empty review is worse than no button.
+ * It exists when both of these hold, and the second one is the correction:
+ *
+ * 1. The doctor is not already looking at the review.
+ * 2. The review has at least one ANSWER on it — not merely rows. A mapping
+ *    that came back entirely `missing` produces a screenful of empty boxes,
+ *    and a button offering to take somebody back to that is offering nothing.
+ *    Rows alone were the old test, and they are why this appeared over a
+ *    review with nothing in it.
+ *
+ * Both are read from state at render time rather than latched, so the button
+ * leaves by itself when a wizard section change discards the answers. A route
+ * back to an empty review is worse than no route: the walk-forward buttons
+ * still reach that step, so nothing is unreachable without this.
+ *
+ * The count is in the label because it is the whole promise. "Back to the
+ * mapped fields" cannot be checked before clicking; "Back to 12 answers" can.
  */
 function updateBackToReview() {
   const button = $("back-to-review");
   if (!button) return;
-  button.hidden = !(state.rows.length && state.step !== "page");
+
+  const answers = state.rows.filter(hasValue).length;
+  button.hidden = !answers || state.step === "page";
+  if (!button.hidden) {
+    button.textContent = `Back to ${answers} mapped ${answers === 1 ? "answer" : "answers"}`;
+  }
 }
 
 

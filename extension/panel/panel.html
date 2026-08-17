@@ -108,19 +108,22 @@
 
     <div class="scroll" id="scroll">
       <!--
-        The way back to a review that is still standing.
+        The way back to a review that is still standing, and only then.
 
         Stepping back to a finished step hides everything ahead of it, which is
         right while a claim is being built and wrong once one has been mapped:
         the answers are still in memory and there was no route to them. A
         doctor who opened "Patient" to check a spelling lost a screen of
-        reviewed values with no way back to it but mapping again.
+        reviewed values with no way back but mapping again.
 
-        Shown only while there is something to go back TO, so it is absent on
-        the way through and appears the moment it would be useful.
+        Two conditions, both read at render time — see updateBackToReview. Not
+        on the review itself, and not unless the review carries an ANSWER: a
+        mapping that came back entirely missing is a screen of empty boxes, and
+        a route back to that promises something it does not have.
+
+        The label carries the count for the same reason. The walk-forward
+        buttons still reach this step, so nothing here is the only way through.
       -->
-      <button class="back-to-review" id="back-to-review" type="button" hidden>
-        Back to the mapped fields
       </button>
 
       <!-- Finished steps, one hairline row each. Moved under the work once
