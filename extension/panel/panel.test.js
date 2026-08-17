@@ -33,10 +33,10 @@ const PATTERNS = JSON.parse(readFileSync(resolve(HERE, "../privacy/patterns.json
 
 const FORMS = [
   {
-    form_id: "roboform_test_v1",
-    display_name: "RoboForm test page",
+    form_id: "demographics_test_v1",
+    display_name: "Demographics test form",
     insurer: "Test",
-    hosts: ["roboform.com"],
+    hosts: ["testforms.example"],
     // `source` is what /forms really returns, and it matters here: only llm
     // fields have an instruction to lend a control. Demographics are copied
     // deterministically and never reach the model.
@@ -206,7 +206,7 @@ beforeEach(() => {
     "/health": () => respond({ status: "ok", forms_loaded: 2, min_extension_version: "0.3.0" }),
     "/map-redacted": () => respond({ form_id: "__live__", fields: [] }),
     "/map-live": () => respond({ form_id: "__live__", fields: [] }),
-    "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
+    "/map": () => respond({ form_id: "demographics_test_v1", fields: [] }),
   };
   // A page nothing in the bank recognises, which is the interesting default:
   // it is what an insurer portal looks like on the first visit. It still has
@@ -457,7 +457,7 @@ describe("identifying the form", () => {
     // asked or whether they are.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
-      { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
+      { formId: "demographics_test_v1", matched: 0, intended: 3, matchRate: 0 },
     ]);
     const panel = loadPanel();
     await settle();
@@ -472,7 +472,7 @@ describe("identifying the form", () => {
     // different question than the one on screen.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
-      { formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 },
+      { formId: "demographics_test_v1", matched: 3, intended: 3, matchRate: 1 },
     ]);
     const panel = loadPanel();
     await settle();
@@ -500,11 +500,11 @@ describe("identifying the form", () => {
   });
 
   test("the host registered for a form wins when nothing scores", async () => {
-    page.survey = { ...page.survey, host: "roboform.com", candidates: [] };
+    page.survey = { ...page.survey, host: "testforms.example", candidates: [] };
     const panel = loadPanel();
     await settle();
 
-    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("demographics_test_v1");
   });
 
   test("schemas are scored by their own field labels", async () => {
@@ -517,7 +517,7 @@ describe("identifying the form", () => {
     // form that shows everything at once, which is all of them today.
     expect(message.candidates).toEqual([
       {
-        formId: "roboform_test_v1",
+        formId: "demographics_test_v1",
         fields: [
           { fieldId: "full_name", label: "Full Name", step: "" },
           { fieldId: "nric", label: "Social Security Number", step: "" },
@@ -824,7 +824,7 @@ describe("a form the bank does not have, end to end", () => {
       controlCount: 4,
       candidates: [
         // Both schemas in the bank score far too low to be this form.
-        { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
+        { formId: "demographics_test_v1", matched: 0, intended: 3, matchRate: 0 },
         { formId: "aia_ghs_claim", matched: 1, intended: 3, matchRate: 0.33 },
       ],
       report: { ...EMPTY_REPORT, unknownControls: CONTROLS },
@@ -883,16 +883,16 @@ describe("a form the bank does not have, end to end", () => {
   test("a form the bank already describes takes the same route", async () => {
     page.survey = {
       ok: true,
-      host: "roboform.com",
+      host: "testforms.example",
       controlCount: 39,
-      candidates: [{ formId: "roboform_test_v1", matched: 3, intended: 3, matchRate: 1 }],
+      candidates: [{ formId: "demographics_test_v1", matched: 3, intended: 3, matchRate: 1 }],
       report: EMPTY_REPORT,
       liveFields: LIVE_FIELDS,
     };
     const panel = loadPanel();
     await settle();
 
-    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("demographics_test_v1");
 
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
