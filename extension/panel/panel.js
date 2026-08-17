@@ -1026,8 +1026,29 @@ async function onMap() {
     // The offer is spent: these questions have been mapped, and the button
     // that offered them would now re-ask the model the same thing.
     $("map-prompt").hidden = true;
-    $("mapped").hidden = false;
-    setStatus(status, "");
+    // ...but only reveal the review when there is a review to read. An answer
+    // list with nothing in it is a promise the panel has not kept, and it was
+    // being shown in two different ways:
+    //
+    //   - no rows at all, which drew an empty box under the prompt;
+    //   - rows that every one of them came back unanswered, which read as a
+    //     mapped claim until the doctor got far enough down to notice that
+    //     every badge said "Not found".
+    //
+    // Both now say so in the status line and leave the block down. Nothing is
+    // lost by it: a row with no value is a question the doctor was always
+    // going to answer by hand, and the form on screen already asks it.
+    const answered = state.rows.filter(hasValue).length;
+    $("mapped").hidden = answered === 0;
+    setStatus(
+      status,
+      answered
+        ? ""
+        : state.rows.length
+          ? "Nothing in your note answers the questions on this page. They are yours to fill in."
+          : "The model returned no answers for this page.",
+      answered ? null : "error"
+    );
   } catch (error) {
     setStatus(status, messageFor(error), "error");
   } finally {

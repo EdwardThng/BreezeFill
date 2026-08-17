@@ -1269,6 +1269,63 @@ describe("a build the backend has disowned", () => {
   });
 });
 
+
+describe("a mapping that answered nothing", () => {
+  // "Mapped answers still showing when nothing is filled." Two shapes of the
+  // same thing: a review block revealed over an empty list, and a review block
+  // revealed over rows that every one of them came back unanswered. Both read
+  // as a mapped claim until you get far enough down to notice.
+
+  async function mapReturning(panel, fields) {
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Chua Beng Huat · S7211043C · 04/11/1972\n\nSeen 12/03/2026.";
+    await panel.onMap();
+  }
+
+  const unanswered = (id, label) => ({
+    field_id: id, pdf_field_name: "", field_type: "text", label, help: null,
+    value: null, status: "missing", source: null, needs_review: true,
+    fill_from: null, options: [], step: null,
+  });
+
+  test("every question unanswered leaves the review down, and says why", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, [unanswered("a", "Diagnosis"), unanswered("b", "Ward")]);
+
+    expect($("mapped").hidden).toBe(true);
+    expect($("map-status").textContent).toMatch(/nothing in your note answers/i);
+  });
+
+  test("no rows at all does not draw an empty box", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, []);
+
+    expect($("mapped").hidden).toBe(true);
+    expect($("map-status").textContent).toMatch(/no answers/i);
+  });
+
+  test("one answer among many unanswered is still a review", async () => {
+    // The guard is "nothing came back", not "not everything came back". A
+    // single value is worth reading, and the rest are what the doctor was
+    // always going to write by hand.
+    const panel = loadPanel();
+    await settle();
+    await mapReturning(panel, [
+      unanswered("a", "Ward"),
+      { ...unanswered("b", "Diagnosis"), value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ]);
+
+    expect($("mapped").hidden).toBe(false);
+    expect($("map-status").textContent).toBe("");
+  });
+});
+
 describe("what actually goes on the wire", () => {
   // The claim the product makes, asserted against the requests themselves
   // rather than against the code that builds them. Every test here reads what
