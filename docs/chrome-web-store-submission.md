@@ -280,16 +280,15 @@ No sign-in, no account, and no payment is needed. A synthetic sample note is bui
 2. Open https://www.roboform.com/filling-test-all-fields
    This is a public test form with no login. It stands in for an insurer's claim form.
 3. Click the BreezeFill icon in the toolbar WHILE THAT TAB IS OPEN. This click is what grants access to the page; the extension can do nothing before it.
-4. Step 1 — type any name, for example "Tan Wei Ling", then Continue.
-5. Step 2 — click "Use a sample note" to load the built-in synthetic consultation, then "Find patient details".
-6. Step 3 — leave "Anything else the form asks for?" empty and Continue.
-7. Step 4 — the patient details found by pattern matching are shown. Two fields (phone, policy number) will show two candidates each, because the sample note contains two of each and the extension refuses to guess between them. Click one of the offered buttons for each, then Continue.
-8. Step 5 — every proposed answer is listed. Confirm the ones you want.
-9. Step 6 — click "Check this page", then "Fill".
+4. Step 1, "Who is this claim for?" — type any name, for example "Tan Wei Ling", then "Continue".
+5. Step 2, "Paste the clinical note" — click "Use a sample note" to load the built-in synthetic consultation, then "Find patient details".
+6. Step 3, "Verify" — the patient details found by pattern matching are shown. Two fields (phone, policy number) will show two candidates each, because the sample note contains two of each and the extension refuses to guess between them. Click one of the offered buttons for each, then "Save and look at this page".
+7. Step 4, "Check the answers" — click "Map these questions". Every proposed answer is then listed; confirm the ones you want.
+8. Click "Fill". The values are written into the page.
 
 The confirmed values are written into the RoboForm page. Nothing is submitted: the form is left filled for the user to check and submit themselves.
 
-Note on network use: the extension sends the de-identified note and the page's question labels to https://api.breezefill.com for processing, and receives the proposed answers back. Patient identifiers are removed before that request is made. Nothing is stored server-side.
+Note on network use: the extension sends the de-identified note and the page's question labels to https://api.breezefill.com for processing, and receives the proposed answers back. As of this version, patient identifiers are found and removed in the browser, before the request leaves the tab, and the key that maps them back never leaves it either; the server checks again on arrival as a backstop. Nothing is stored server-side.
 ```
 
 ---
