@@ -2431,6 +2431,37 @@ describe("the note pane", () => {
     expect(marks.map((m) => m.textContent)).toEqual(["Dx acute tonsillitis."]);
   });
 
+  test("scrolls a mark that is off the bottom into view, with room to spare", async () => {
+    // The one test in this file that reaches the scroll at all.
+    //
+    // jsdom has no layout: every element reports scrollHeight and clientHeight
+    // of 0, so markNote's "a note that fits needs no moving" guard fires in
+    // every other test here and everything after it is dead code to the suite.
+    // A ReferenceError lived on the last line of that branch through two
+    // commits and 147 green tests, with the pane doing nothing at all in a
+    // real browser. Faking the four measurements is enough to run it.
+    const panel = await mapWithNote([QUOTED]);
+    const pre = $("note-text");
+    const mark = $("note-text").querySelector(".quote");
+
+    Object.defineProperty(pre, "scrollHeight", { value: 600, configurable: true });
+    Object.defineProperty(pre, "clientHeight", { value: 200, configurable: true });
+    pre.scrollTo = vi.fn();
+    pre.getBoundingClientRect = () => ({ top: 0, bottom: 200, height: 200 });
+    // Off the bottom of the pane by 320px.
+    mark.getBoundingClientRect = () => ({ top: 500, bottom: 520, height: 20 });
+
+    $("rows").children[0].click();
+
+    expect(pre.scrollTo).toHaveBeenCalled();
+    const { top } = pre.scrollTo.mock.calls[0][0];
+    // Past the mark, not level with it. 320 is the distance that puts the
+    // sentence exactly on the pane's edge — where the old 8px margin left it,
+    // descenders against the border. A line and a half clears it.
+    expect(top).toBeGreaterThan(320 + 8);
+    expect(panel).toBeTruthy();
+  });
+
   test("marks NOTHING when the quote is not in the note verbatim", async () => {
     // The rule this whole pane rests on. A fuzzy match would draw a highlight
     // around a sentence the value did not come from, on the one screen whose
