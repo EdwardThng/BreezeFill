@@ -51,6 +51,7 @@ from mapping import (
     FormSchema,
     MappingError,
     assemble_claim,
+    assemble_redacted,
     llm_sweep,
     load_form_schema,
     map_fields,
@@ -59,6 +60,7 @@ from mapping import (
 from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
 from redaction import PatientRecord, redact, scrub_patterns
+from redaction import _pass2_patterns, _pass3_llm_sweep
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = Path(__file__).resolve().parent / "schemas"
@@ -181,6 +183,26 @@ class LiveField(BaseModel):
     # Nothing here knows what the question is ABOUT. The mechanism is purely
     # structural and must stay that way: no clinical vocabulary belongs in it.
     instance: int | None = None
+
+
+class MapRedactedRequest(BaseModel):
+    """A page's questions, and a note this server was never trusted with.
+
+    The extension redacts in the browser now, so what arrives here is already
+    `[PATIENT] presents with…`. There is no PatientRecord on this request and
+    there is nowhere to put one: the name, NRIC, date of birth, phone, address
+    and policy number never leave the tab, and the map from token back to real
+    value never leaves it either.
+
+    What that costs the server is the ability to fill a demographic field or to
+    re-merge an answer, and both jobs move to the caller. What it buys is that
+    a log, a crash dump or a future misconfiguration here cannot contain a
+    patient's name, because one was never received.
+    """
+
+    fields: list[LiveField]
+    # Redacted before it was sent. Scrubbed again on arrival — see the route.
+    redacted_text: str
 
 
 class MapLiveRequest(BaseModel):
@@ -462,6 +484,63 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
             if field.label.strip()
         ],
     )
+
+
+@app.post("/map-redacted", response_model=MapResponse)
+def map_redacted(request: MapRedactedRequest) -> MapResponse:
+    """Map a note this server was never given the identifiers for.
+
+    The route the extension uses. The browser parsed the demographics, built
+    the redaction dictionary and applied it before sending, so what arrives is
+    already tokenised and there is no PatientRecord to accompany it.
+
+    THE SERVER REDACTS AGAIN ANYWAY, and the second pass is not ceremony. It
+    is the backstop for the one real risk in moving redaction into the browser:
+    a pattern the JavaScript copy misses. If that happens, the identifier
+    reaches this process — which is a bug — but it does not reach the model,
+    which is the difference between a defect and a disclosure. Both passes read
+    the same shapes out of extension/privacy/patterns.json, so the backstop can
+    only fail in the same way the browser did if somebody edits one file.
+
+    Nothing found by either pass is returned. The map built here is a local
+    variable for the length of one request; the caller's own map is the only
+    one that can turn a token back into a name, and it is in their tab.
+    """
+    schema = _live_schema(request.fields)
+    if not schema.fields:
+        raise HTTPException(status_code=422, detail="no labelled fields on this page")
+    if len(schema.fields) > MAX_LIVE_FIELDS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"too many fields to map in one call ({len(schema.fields)} > {MAX_LIVE_FIELDS})",
+        )
+
+    # Backstop, then the sweep. The map is deliberately discarded: an entry in
+    # it is an identifier the browser missed, and handing those back would put
+    # them on the wire a second time to no purpose.
+    backstop: dict[str, str] = {}
+    text = _pass2_patterns(request.redacted_text, backstop)
+    if not os.environ.get("FORMFILL_DISABLE_SWEEP"):
+        text = _pass3_llm_sweep(text, backstop, llm_sweep)
+
+    try:
+        answers = map_fields(schema, text)
+    except MappingError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (anthropic.APIError, anthropic.APIConnectionError) as exc:
+        raise HTTPException(status_code=502, detail="LLM call failed") from exc
+    except Exception as exc:
+        # Same reasoning as _review_rows: the type only, never the message,
+        # and always an HTTPException so the response keeps its CORS headers.
+        logger.error("mapping failed: %s", type(exc).__name__)
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="This server has no ANTHROPIC_API_KEY configured.",
+            ) from exc
+        raise HTTPException(status_code=502, detail="LLM call failed") from exc
+
+    return MapResponse(form_id=schema.form_id, fields=assemble_redacted(schema, answers))
 
 
 @app.post("/map-live", response_model=MapResponse)
