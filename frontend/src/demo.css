@@ -386,6 +386,22 @@
   font-weight: 560;
 }
 
+/* The brand blue is a FILL, not a surface for text to sit on.
+   White on #3aa0dc measures 2.90:1 — the exact number the panel redesign
+   notes record when they split the accent in two, and the reason the landing
+   page carries #1a6fb8 for anything that has to be read. The demo kept the
+   raw blue under white on its primary button, which is the one control the
+   walkthrough asks people to press. #1a6fb8 under white is 5.21:1. */
+.demo .demo-buttons .btn-primary {
+  background: #1a6fb8;
+  border-color: #1a6fb8;
+}
+
+.demo .demo-buttons .btn-primary:hover:not(:disabled) {
+  background: #175f9f;
+  border-color: #175f9f;
+}
+
 .demo-buttons .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;

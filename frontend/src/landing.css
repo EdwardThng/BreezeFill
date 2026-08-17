@@ -258,7 +258,7 @@
 .fineprint {
   margin-top: 16px;
   font-size: 13px;
-  color: var(--ink-faint);
+  color: var(--ink-quiet);
 }
 
 .fineprint code {
@@ -289,6 +289,23 @@
 @media (max-width: 720px) {
   .mock {
     grid-template-columns: 1fr;
+  }
+
+  /* The nav's own children are wider than a phone. Measured at 390px: the
+     "See the demo" button started at x=405 against a 390px viewport, so the
+     whole landing page scrolled sideways on every phone that opened it.
+
+     Wrapping rather than hiding the links: they are the only navigation the
+     page has, and a header that drops its CTA onto a second line costs ten
+     pixels of height against a page that cannot be read straight. */
+  .nav {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .nav-links {
+    gap: 18px;
+    font-size: 13.5px;
   }
 }
 
@@ -401,7 +418,7 @@
 .url {
   margin-left: 8px;
   font-size: 11px;
-  color: var(--ink-faint);
+  color: var(--ink-quiet);
 }
 
 .mock-field {
