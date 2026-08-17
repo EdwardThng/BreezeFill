@@ -1213,7 +1213,11 @@ function doneRow(step) {
 
   const check = document.createElement("span");
   check.className = "done-check";
-  check.textContent = "✓";
+  check.textContent = "\u2713";
+  // Decoration. Without this a screen reader reads the row as "tick Patient
+  // Tan Wei Ling chevron" — the glyphs are the visual form of "done" and "go
+  // back", and both are already said by the label below.
+  check.setAttribute("aria-hidden", "true");
 
   const name = document.createElement("span");
   name.className = "done-name";
@@ -1226,7 +1230,11 @@ function doneRow(step) {
   const go = document.createElement("span");
   go.className = "done-go";
   go.textContent = "\u203a";
+  go.setAttribute("aria-hidden", "true");
 
+  // Named outright, because the visible parts otherwise run together into
+  // "PatientTan Wei Ling" with nothing between them.
+  row.setAttribute("aria-label", `${step.title}: ${summaryOf(step.key)}. Go back to this step.`);
   row.append(check, name, value, go);
   row.addEventListener("click", () => showStep(step.key));
   return row;

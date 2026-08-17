@@ -91,7 +91,19 @@
           Hide
         </button>
       </div>
-      <pre class="notepane-text" id="note-text"></pre>
+      <!--
+        Focusable and named on purpose. Chrome already makes a scrolling box
+        keyboard-reachable so it can be scrolled with the arrow keys, but it
+        arrived in the tab order as an unnamed <pre> announcing the whole
+        consultation. Saying what it is costs one attribute.
+      -->
+      <pre
+        class="notepane-text"
+        id="note-text"
+        tabindex="0"
+        role="region"
+        aria-label="The consultation, with the sentence this value came from marked"
+      ></pre>
     </div>
 
     <div class="scroll" id="scroll">
