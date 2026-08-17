@@ -522,6 +522,107 @@ describe("identifying the form", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The insurer, from the form rather than from the note
+// ---------------------------------------------------------------------------
+
+// The one demographic where the page knows better than the paste. `/map-live`
+// and `/map-redacted` build their schema from `_live_schema`, which carries no
+// `insurer` — so `assemble_claim`'s server-side fallback never fired on the
+// path the extension actually uses, and the box came back blank every time.
+
+describe("the insurer comes from the form", () => {
+  const scored = (scores) => {
+    page.survey = { ...page.survey, candidates: scores };
+  };
+  const matchAia = () =>
+    scored([{ formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 }]);
+
+  test("the matched schema's insurer fills the box", async () => {
+    matchAia();
+    loadPanel();
+    await settle();
+
+    // Visible in the details drawer before Map runs, not appearing for the
+    // first time as an already-green review row.
+    expect($("insurer").value).toBe("AIA");
+  });
+
+  test("no matched schema leaves it blank, and that is the schema-free path", async () => {
+    // The page's own controls carry no insurer, so there is nothing to infer
+    // and the doctor types one line. The default survey matches nothing.
+    loadPanel();
+    await settle();
+
+    expect($("insurer").value).toBe("");
+  });
+
+  test("a value the doctor typed is never overwritten", async () => {
+    matchAia();
+    const panel = loadPanel();
+    await settle();
+
+    $("insurer").value = "Great Eastern";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    // A doctor who typed an insurer has decided. This is a fallback, not a
+    // correction.
+    expect($("insurer").value).toBe("Great Eastern");
+  });
+
+  test("an insurer the note named outranks the form's", async () => {
+    matchAia();
+    const panel = loadPanel();
+    await settle();
+
+    // After loadPanel, which stubs the parser itself.
+    stubParse({ ...PARSED, insurer: "Great Eastern" });
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("insurer").value).toBe("Great Eastern");
+  });
+
+  test("the inferred value is not `touched`, so a later parse can still win", async () => {
+    // The positive case for the rule above: nothing here pretends the doctor
+    // answered, so a note that turns out to name an insurer is free to replace
+    // it. Marking it touched would have frozen a guess.
+    matchAia();
+    const panel = loadPanel();
+    await settle();
+    expect($("insurer").value).toBe("AIA");
+
+    stubParse({ ...PARSED, insurer: "Great Eastern" });
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("insurer").value).toBe("Great Eastern");
+    expect(panel.state.touched.has("insurer")).toBe(false);
+  });
+
+  test("two insurers in the note keeps the question rather than answering it", async () => {
+    // The two-candidates refusal is rendered as buttons under the field.
+    // Filling it in from the form would answer a question already on screen,
+    // which is the one thing `choices` exists to prevent.
+    matchAia();
+    const panel = loadPanel();
+    await settle();
+
+    // After loadPanel, which stubs the parser itself. Detection has already
+    // put "AIA" in the box by this point, so this also asserts that a paste
+    // naming two insurers takes it back out rather than leaving a stale guess
+    // standing next to the question.
+    stubParse({ ...PARSED, insurer: null, choices: { insurer: ["AIA", "Great Eastern"] } });
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    expect($("insurer").value).toBe("");
+    expect($("choices-insurer").children.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The form nobody has a schema for
 // ---------------------------------------------------------------------------
 
