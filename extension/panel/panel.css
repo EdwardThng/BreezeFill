@@ -1020,9 +1020,22 @@ details > *:not(summary) {
   opacity: 0.5;
 }
 
-/* The confirmed mark, and deliberately not a new one: this is `.done-tick`'s
-   circle one size down. The panel already uses it to say a step is settled,
-   so a settled value says it the same way. */
+/* The confirmed mark.
+
+   It was written as a reuse: a finished step wore a 15px filled green disc
+   (`.done-tick`), so a settled value wearing the same disc one size down said
+   the same thing the same way. That is no longer true — the finished step is
+   now a hairline row with a bare glyph (`.done-check`), changed on the
+   grounds that "the loudest mark in the panel was being spent on the least
+   urgent fact on the screen".
+
+   Which makes this disc the loudest mark in the panel, repeated up to six
+   times. Kept because it is what was asked for and because the fact is not
+   the least urgent one here — this row is where a value becomes the
+   dictionary redaction scrubs the note with. But the two marks now disagree
+   on purpose rather than by oversight, and if that reads wrong on screen the
+   fix is to match `.done-check`: drop the fill and the radius, keep the
+   colour, size the glyph at 11px. */
 .review-row.detail .tick {
   grid-area: mark;
   justify-self: end;
