@@ -802,10 +802,19 @@ def create_checkout() -> CheckoutResponse:
             cancel_url=f"{SITE_ORIGIN}/#/get",
         )
     except Exception as exc:  # noqa: BLE001 - stripe raises a family of these
-        # Type only. A Stripe exception quotes the request, and the request
-        # carries the account's own identifiers.
-        logger.error("stripe checkout create failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="Could not open checkout.") from exc
+        # The TYPE travels, the message never does. A Stripe exception quotes
+        # the request and the request carries the account's own identifiers, so
+        # the message is unsafe — but the class name is not data, it is the
+        # single fact that separates "the key is wrong"
+        # (AuthenticationError) from "the price id is wrong"
+        # (InvalidRequestError) from "the dependency did not ship"
+        # (ModuleNotFoundError). Without it a misconfiguration is a 502 with
+        # nothing to act on, which is what this cost the first time.
+        kind = type(exc).__name__
+        logger.error("stripe checkout create failed: %s", kind)
+        raise HTTPException(
+            status_code=502, detail=f"Could not open checkout ({kind})."
+        ) from exc
     return CheckoutResponse(url=session.url)
 
 

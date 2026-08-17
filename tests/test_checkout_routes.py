@@ -213,3 +213,19 @@ def test_health_says_false_when_a_piece_is_missing(stripe, monkeypatch):
 def test_health_never_reveals_a_key(stripe):
     body = client.get("/health").text
     assert "sk_test" not in body and "price_test" not in body and SECRET not in body
+
+
+def test_the_failure_names_its_type_but_never_its_message(stripe):
+    # The type is the one fact that makes a 502 actionable — it separates a
+    # wrong key from a wrong price id from a dependency that did not ship — and
+    # a class name is not data. The message is still withheld, because a Stripe
+    # exception quotes the request that caused it.
+    class AuthenticationError(RuntimeError):
+        pass
+
+    stripe.create_raises = AuthenticationError("Invalid API Key sk_live_abc123")
+    response = client.post("/checkout")
+
+    assert response.status_code == 502
+    assert "AuthenticationError" in response.text
+    assert "sk_live_abc123" not in response.text
