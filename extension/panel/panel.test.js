@@ -2614,6 +2614,42 @@ describe("an inferred value's sentence", () => {
   });
 });
 
+describe("the field's own instruction", () => {
+  const HELP =
+    "The date the patient FIRST consulted this doctor for this condition, " +
+    "not the latest visit.";
+
+  test("is shown on a row that is being judged", async () => {
+    await mapWithNote([
+      { ...QUOTED, help: HELP, status: "inferred", needs_review: true,
+        value: "31/07/2026", label: "Date first consulted" },
+    ]);
+
+    expect($("rows").querySelector(".help").textContent).toBe(HELP);
+  });
+
+  test("is not repeated on a row the note answered outright", async () => {
+    // It is written for whoever is deciding whether an answer is right, and
+    // that is a question a settled row does not ask. Three lines of it per
+    // row down a list of twenty is how the text that CANNOT be skipped gets
+    // skipped too.
+    await mapWithNote([{ ...QUOTED, help: HELP, needs_review: false }]);
+
+    expect($("rows").querySelector(".help")).toBeNull();
+  });
+
+  test("is not shown on a blank row either", async () => {
+    // The one that looks wrong, and is the owner's call: it is the doctor's
+    // own form and their own patient, and the label already names the field.
+    await mapWithNote([
+      { ...QUOTED, help: HELP, value: null, status: "missing",
+        needs_review: false, label: "Date of consultation" },
+    ]);
+
+    expect($("rows").querySelector(".help")).toBeNull();
+  });
+});
+
 describe("where the consultation pane belongs", () => {
   test("it is up on the screen where the values are checked", async () => {
     await mapWithNote([QUOTED]);

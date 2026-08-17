@@ -1133,7 +1133,22 @@ function renderRow(row) {
   label.textContent = row.label;
   wrap.append(label);
 
-  if (row.help) {
+  // The field's own instruction, on the rows that are being judged and no
+  // others.
+  //
+  // It is written for whoever is deciding whether an answer is the right one
+  // — "the date the patient FIRST consulted this doctor for this condition,
+  // not the latest visit" — and that is a question only a held row asks. On a
+  // row the note answered outright it restates a label the doctor has already
+  // read, three lines at a time, down a list of twenty; and a screen where
+  // most of the text can be skipped is a screen where the text that cannot be
+  // skipped gets skipped too.
+  //
+  // A blank row loses it as well, which is the one that looks wrong. It is
+  // the doctor's own form and their own patient: they know what belongs in
+  // "Date of consultation", and if they do not, the instruction is one click
+  // away in the schema rather than in front of them on every claim.
+  if (row.help && row.needs_review) {
     const help = document.createElement("p");
     help.className = "help";
     help.textContent = row.help;
