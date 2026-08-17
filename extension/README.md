@@ -368,13 +368,16 @@ and what is deliberately left out. Read it before changing a label there.
   Watch two things a test cannot see: how many of a real page's controls come
   back unlabelled, and whether `MAX_LIVE_FIELDS = 50` is anywhere near right
   now that *every* control is mapped rather than only the unclaimed ones.
-- **A store listing.** Distribution is the live blocker: a zip plus Developer
-  Mode is not something a GP will do, and Chrome blocks self-hosted `.crx`
-  outside enterprise policy. **Everything the store asks for now exists** —
-  icons, privacy policy, screenshots, promo tile, the package at `0.2.1`, and
-  `optional_host_permissions` dropped on 2026-08-09 — and what is left is the
-  listing form itself. Every string to paste is in
-  `../docs/chrome-web-store-submission.md`; the state is in `../CLAUDE.md`.
+- **~~A store listing~~ — live and public since 2026-08-17, at `0.2.1`.** What is
+  left is an *update*: the repo is at `0.3.0`, and production's
+  `MIN_EXTENSION_VERSION` is `0.3.0` too, so the published 0.2.1 refuses to send
+  on every install. **The listing is live and currently non-functional**, and
+  uploading `breezefill-store-v0.3.0.zip` is what clears it. Until then `#/get`
+  step 2 downloads the current build instead of linking the store — a zip plus
+  Developer Mode is not something a GP will do, which is exactly why that is a
+  stopgap and not a plan. Every string to paste is in
+  `../docs/chrome-web-store-submission.md`; the version table is at the top of
+  Status in `../CLAUDE.md`.
 
 ## Assumptions that jsdom cannot test
 

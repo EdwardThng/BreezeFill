@@ -219,6 +219,16 @@ is acceptable. See **Working style** at the end of this file.
   `/var/folders/…/TemporaryItems/`, and dismissing it deletes rather than saves.
 - Regenerate site assets with `scripts/make_logo_assets.py` rather than copying
   by hand; it now writes `frontend/public/` too.
+- Never raise `MIN_EXTENSION_VERSION` above the version **published on the
+  store**, which is not the version in `extension/manifest.json`. The existing
+  test compares it to the manifest and so cannot catch this; doing it bricked
+  every public install for a day.
+- Read the store's published version from the listing before touching a version
+  number — the repo can be ahead of it, and "the latest version" means opposite
+  things depending on which one you mean.
+- Check whether a class name is already taken before adding a CSS rule for it:
+  `.get-steps` was the `#/get` funnel's own `<ol>`, and reusing it for a nested
+  list silently removed the numbers.
 
 ---
 
@@ -256,14 +266,37 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-16
+## Status as of 2026-08-17
 
-**560 tests pass**: 243 backend (1 skipped), 252 extension, 65 website.
+**Three versions, and they are not the same number.** Confusing them is what
+caused the live outage described below, so keep them apart:
 
-**Where the project is in one line: the package is uploaded and the listing is
-being filled in.** The extension is at `0.2.1`, every asset the store asks for
-exists, and the remaining work is the listing form itself plus the paid tier
-behind it.
+| Where | Version | What it means |
+|---|---|---|
+| `extension/manifest.json` | **0.3.0** | What the repo builds. First build where identifiers never leave the tab |
+| Chrome Web Store, published | **0.2.1** | What every real install is running. Published 2026-08-12 |
+| `MIN_EXTENSION_VERSION` (`backend/main.py`) | **0.3.0** | The oldest build production will answer. Live now |
+
+**THE LISTING IS PUBLIC AND CURRENTLY NON-FUNCTIONAL.** The floor is 0.3.0 and
+the store serves 0.2.1, so `onMap` refuses on every store install with *"This
+version of BreezeFill is out of date and will not send anything."* This has been
+true since `64bb88f` deployed on 2026-08-16.
+
+`test_the_shipped_extension_is_not_already_disowned` was written to prevent
+exactly this and does not, because it compares the floor against **the repo's
+manifest** (0.3.0 ≥ 0.3.0, green) when the version that matters is the one
+Chrome is serving. The test cannot see the store. **A `PUBLISHED_EXTENSION_VERSION`
+constant, updated when an upload goes live, is the fix and is not written yet.**
+
+The chosen resolution is to **publish 0.3.0**, not to lower the floor — 0.2.1 is
+the build that sends the patient's identifiers to the server and the floor was
+raised to disown it. Until the review clears, `#/get` step 2 downloads the
+current build from `/download` instead of linking the store; see the header of
+`DOWNLOAD_URL` in `Landing.tsx`, and **revert it the day the review clears.**
+
+**841 tests pass**: 412 backend (1 skipped), 449 extension, 77 website. The
+package to upload is `breezefill-store-v0.3.0.zip`, built and verified
+2026-08-17 — 22 files, 121 KB.
 
 Two threads now run in parallel, and they are independent: **the store
 submission** (below) and **charging for it** (see "Pricing, and the gate that
@@ -294,8 +327,8 @@ before anyone guesses at what to widen it to.
 | `optional_host_permissions` dropped | **Done 2026-08-09.** Never requested anywhere; the biggest single lever on review speed |
 | Privacy policy live and accurate | **Done.** `https://breezefill.com/privacy`, 200, `Last updated 9 August`, including the clause saying the third redaction pass is itself an AI call |
 | NRIC shape given to the sweep | **Done 2026-08-09.** Pass 3 is told the nine-character form; pass 2's regex stays tighter on purpose |
-| Version at `0.2.1` | **Bumped 2026-08-12.** `0.2.0` was built and its upload failed repeatedly with the package verified clean every time, so the version being already consumed is the leading explanation. Each attempt needs its own number, in `extension/manifest.json` **and** the zip filename |
-| Upload zip built | **Done 2026-08-12.** `breezefill-store-v0.2.1.zip`, 78 KB, 13 files, manifest at root, gitignored. `README.md` is now excluded — a `.crx` is a zip anyone who installs can read, and it has no runtime purpose. **Rebuild rather than reuse**; the command is in `docs/chrome-web-store-submission.md` |
+| Version at `0.3.0` | **Bumped 2026-08-16** by `64bb88f`, for the build where identifiers stop leaving the tab. `0.2.1` is what is *published*; `0.3.0` is what is waiting to be uploaded. `0.2.0` was built and its upload failed repeatedly with the package verified clean every time, so **a version is consumed by an upload attempt even when the review rejects it** — if `0.3.0` is refused as taken, cut `0.3.1` in `extension/manifest.json`, the zip filename **and** `MIN_EXTENSION_VERSION` together |
+| Upload zip built | **Rebuilt 2026-08-17 at `0.3.0`.** `breezefill-store-v0.3.0.zip`, 121 KB, 22 files, manifest at root, gitignored. Grew from 0.2.1's 78 KB / 13 files because `privacy/` ships now. Verified: no BOM on either JSON, every manifest- and runtime-referenced file present, four icons matching their declared sizes, `panel.html`'s references resolving, no test files, no README, no external URLs. `README.md` is now excluded — a `.crx` is a zip anyone who installs can read, and it has no runtime purpose. **Rebuild rather than reuse**; the command is in `docs/chrome-web-store-submission.md` |
 | Phase A — developer account, `privacy@breezefill.com` | **Done by the owner 2026-08-10.** The mailbox is live and tested both directions (2026-08-11), as is `support@breezefill.com` (2026-08-12) |
 | **Screenshots** | **Done 2026-08-11.** Four at exactly 1280×800 in `~/Documents/breezefill-store/`. Lead with the `3.45.53` one — it is the frame where the panel reports "4 of 7 found, 2 to choose" and offers both candidates, which is the product's argument in one image. Four traps met on the way; all four are in next steps item 1 |
 | 128×128 store icon, 440×280 promo tile | **Done 2026-08-11.** Both generated by `scripts/make_logo_assets.py`. The promo tile is **required** to submit and was not in this table until it nearly blocked the upload |
@@ -2202,13 +2235,21 @@ Protection**, so the extension cannot be pointed at a preview URL (its `fetch`
 testing against production works — turn protection off only if you want preview
 builds testable too.
 
-**2b. Get the extension onto the Chrome Web Store.** Now the distribution
-blocker, since the product targets many doctors and "download a zip, enable
-Developer Mode" is not something a GP will do. Chrome also blocks self-hosted
-`.crx` outside enterprise policy, so the store is effectively the only route.
-**Unlisted** is probably right: one-click install from a link, not publicly
-discoverable, same review either way. It also solves the stale-build problem in
-Traps, because the store auto-updates every install.
+**2b. ~~Get the extension onto the Chrome Web Store~~ — DONE, and it is public.**
+The listing went live on 2026-08-17 at version `0.2.1`. **Unlisted** is what this
+file recommended and is no longer what happened; the reasoning below is kept as
+the record of the decision, not as an instruction.
+
+The argument for the store still holds and is worth keeping, because the stopgap
+now on the site contradicts it: "download a zip, enable Developer Mode" is not
+something a GP will do, and Chrome blocks self-hosted `.crx` outside enterprise
+policy, so the store is the only real route. `#/get` step 2 points at
+`/download` anyway right now, because the published version does not run — a
+worse install that works beats a better one that does not. **It is temporary.
+Revert it when 0.3.0 is approved.**
+
+**The work now is the 0.3.0 upload**, which is an update to a live listing rather
+than a first submission. See the version table at the top of Status.
 
 **The owner's call, 2026-08-08: submit now and keep refining while the review
 runs.** Review takes weeks, so the queue time is free if the work continues in
@@ -2230,8 +2271,9 @@ What is left:
 
 1. **Finish the listing form and submit.** Long description, category,
    language, the four screenshots (lead with `3.45.53`), icon, promo tile, the
-   Privacy tab, and Distribution set to **Unlisted**. Name and short
-   description come from the manifest and cannot be edited there.
+   Privacy tab. Distribution is **public** as of 2026-08-17 — this line said
+   Unlisted, and that is not what shipped. Name and short description come from
+   the manifest and cannot be edited there.
 2. **If the upload fails again, get the exact error text.** The package has
    been verified clean offline every way available — root manifest, no BOM,
    valid JSON, every internal reference resolving, icons at their declared
