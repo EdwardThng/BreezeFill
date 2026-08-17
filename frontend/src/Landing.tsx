@@ -24,13 +24,26 @@ export const STORE_ID = "efkojikbkmdglnjljmadmoboifjbblkm";
 export const STORE_URL = `https://chromewebstore.google.com/detail/${STORE_ID}`;
 
 /**
- * The by-hand install, kept and no longer advertised.
+ * The by-hand install — advertised again, temporarily, and under protest.
  *
- * `GET /download/breezefill-extension.zip` still works and is still the route
- * a Chrome Web Store reviewer and anyone on an unmanaged browser can use. What
- * changed is that it is no longer what the buttons point at: a store install
- * auto-updates, and the stale-build trap in CLAUDE.md is the reason that
- * matters more than the convenience does.
+ * `GET /download/breezefill-extension.zip` zips `extension/` from the source
+ * tree on request, so it can never be older than the server serving it. That is
+ * why it is the stopgap: it is 0.3.0 today, and 0.3.0 is what production's
+ * `min_extension_version` requires.
+ *
+ * IT IS POINTED AT BY `#/get` STEP 2 UNTIL 0.3.0 IS APPROVED, and then it stops
+ * being. The published item is 0.2.1, the floor is 0.3.0, so a store install
+ * today refuses to send anything — sending a doctor to the store would hand them
+ * a dead panel. This is the lesser of two bad options, not a good one:
+ *
+ * - It needs Developer Mode and "Load unpacked", which is the friction the store
+ *   listing exists to remove and the thing a GP is least likely to finish.
+ * - It does NOT auto-update. That is the stale-build trap in CLAUDE.md, walked
+ *   into deliberately with a note on the page telling people to switch.
+ * - An unpacked install has no `update_url`, so the panel shows the developer
+ *   Advanced drawer to anyone who installs this way.
+ *
+ * Revert step 2 to STORE_URL the day the review clears.
  */
 export const DOWNLOAD_URL = "/download/breezefill-extension.zip";
 

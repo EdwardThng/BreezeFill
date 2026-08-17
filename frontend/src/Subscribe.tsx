@@ -1,4 +1,4 @@
-import { GET_ROUTE, PRICE, STORE_URL, subscribeUrl } from "./Landing";
+import { DOWNLOAD_URL, GET_ROUTE, PRICE, STORE_URL, subscribeUrl } from "./Landing";
 
 /**
  * The one way in: subscribe, then install.
@@ -129,9 +129,26 @@ export default function Subscribe() {
           )}
         </Step>
 
+        {/* STOPGAP, 2026-08-17. This step pointed at the Chrome Web Store, and
+            it will again the moment 0.3.0 is approved.
+
+            Why it cannot right now: the published item is 0.2.1, production
+            publishes `min_extension_version: "0.3.0"`, and so the panel on every
+            store install refuses to send before it does anything else. Sending a
+            doctor to the store today hands them an extension that cannot work.
+            The download below is the current build, zipped from the source tree
+            on request, so it is 0.3.0 and it passes the floor.
+
+            What this step must NOT do is keep the old label over the new
+            target. "Install from the Chrome Web Store" on a control that
+            downloads a zip is a lie to the person least able to check it, and
+            the by-hand install has real conditions attached — Developer Mode,
+            and no auto-update — which are exactly what the store install exists
+            to avoid. So the label changed and the conditions are stated. The
+            layout, the classes and the funnel are untouched. */}
         <Step
           index={2}
-          title="Install from the Chrome Web Store"
+          title="Install the current build"
           /* Shut only while there is something to complete first. With no
              payment link there is no step 1 to finish, and a step 2 that
              cannot be reached would leave the page with no way out at all. */
@@ -140,18 +157,36 @@ export default function Subscribe() {
           {paid || !stripe ? (
             <>
               <p>
-                One click, and Chrome keeps it up to date from here on. Open an
-                insurer's claim form, click the BreezeFill icon on that tab, and
-                paste the consultation into the panel.
+                The Chrome Web Store listing is one version behind while an
+                update is in review, and that older version will not run. This
+                downloads the current build instead. It takes a few more steps
+                than the store, and Chrome will not keep it up to date.
               </p>
-              <a
-                className="btn btn-primary btn-large"
-                href={STORE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Install from the Chrome Web Store
+              <a className="btn btn-primary btn-large" href={DOWNLOAD_URL}>
+                Download BreezeFill (.zip)
               </a>
+              <ol className="install-steps">
+                <li>Unzip it. You will get a <code>breezefill-extension</code> folder.</li>
+                <li>
+                  Open <code>chrome://extensions</code> and turn on{" "}
+                  <strong>Developer mode</strong>, top right.
+                </li>
+                <li>
+                  Click <strong>Load unpacked</strong> and select that folder.
+                </li>
+                <li>
+                  Open an insurer's claim form, click the BreezeFill icon on that
+                  tab, and paste the consultation into the panel.
+                </li>
+              </ol>
+              <p className="get-note">
+                Once the update is approved, install from{" "}
+                <a href={STORE_URL} target="_blank" rel="noopener noreferrer">
+                  the Chrome Web Store
+                </a>{" "}
+                instead and remove this copy — the store version updates itself,
+                and this one will not.
+              </p>
             </>
           ) : (
             <p className="get-note">

@@ -1417,6 +1417,38 @@
   gap: 16px;
 }
 
+/* The by-hand install instructions inside step 2, while 0.3.0 is in review.
+   NOT `.get-steps` — that is the funnel's own <ol> directly above, and it sets
+   `list-style: none` plus a flex column, which would take the numbers off the
+   one list on this page whose numbers are the instructions. Scoped under
+   `.landing` like everything else here, because styles.css is global and
+   already collides with this file on `.step` and `.pill`. */
+.landing .install-steps {
+  margin: 20px 0 0;
+  padding-left: 22px;
+  list-style: decimal;
+  display: block;
+  color: var(--ink-dim);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.landing .install-steps li {
+  margin: 0 0 8px;
+}
+
+.landing .install-steps code {
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  /* --bg-raise and --line are both defined in the light block AND the dark
+     one. A token defined in only one theme resolves to nothing in the other and
+     the declaration vanishes with no error, which is how --ink-quiet is already
+     light-only a few lines up. */
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+}
+
 .landing .get-step {
   display: flex;
   gap: 16px;
@@ -1470,6 +1502,19 @@
 .landing .get-note {
   margin: 0;
   color: var(--ink-quiet);
+}
+
+/* `.landing a { color: inherit; text-decoration: none }` is specificity 0,1,1
+   and outranks a bare `a`, so the store link inside this note would render as
+   plain grey text — a link nobody can see is the "switch to the store once it is
+   approved" instruction lost. Scoped to 0,2,1 to win. */
+.landing .get-note a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.landing .get-note a:hover {
+  color: var(--accent-hover);
 }
 
 /* The paragraph saying what a subscription does NOT do. Given a box of its

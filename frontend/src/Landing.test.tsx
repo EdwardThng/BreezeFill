@@ -15,6 +15,7 @@ import App, { routeOf } from "./App";
 import Landing, {
   DEMO_VIDEO,
   DEMO_VIDEO_POSTER,
+  DOWNLOAD_URL,
   GET_ROUTE,
   HERO_SHOT,
   STORE_URL,
@@ -418,12 +419,31 @@ describe("#/get", () => {
     // A step 2 gated behind a step 1 that cannot be taken would leave the page
     // with no way out at all — and the extension is genuinely free right now,
     // so refusing to link it would be a lie in the other direction.
+    //
+    // Points at the DOWNLOAD while 0.3.0 is in review: the published item is
+    // 0.2.1 and the backend floor is 0.3.0, so a store install refuses to send.
+    // Revert to STORE_URL when the review clears.
     vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
     at("#/get");
     expect(
-      screen.getByRole("link", { name: /install from the chrome web store/i })
+      screen.getByRole("link", { name: /download breezefill/i })
         .getAttribute("href"),
-    ).toBe(STORE_URL);
+    ).toBe(DOWNLOAD_URL);
+    vi.unstubAllEnvs();
+  });
+
+  test("the install step says what the by-hand install costs the doctor", () => {
+    // The stopgap's whole risk is a doctor downloading a zip and stopping
+    // there. Developer Mode and Load unpacked have to be on the page, and so
+    // does the fact that it will not update itself — otherwise this is a
+    // dead end dressed as an install button.
+    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
+    at("#/get");
+    const step = screen.getByRole("link", { name: /download breezefill/i })
+      .closest("li");
+    expect(step?.textContent).toMatch(/developer mode/i);
+    expect(step?.textContent).toMatch(/load unpacked/i);
+    expect(step?.textContent).toMatch(/will not|not keep it up to date/i);
     vi.unstubAllEnvs();
   });
 
@@ -444,18 +464,21 @@ describe("#/get", () => {
     vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
     at("#/get?paid=1");
     expect(
-      screen.getByRole("link", { name: /install from the chrome web store/i })
+      screen.getByRole("link", { name: /download breezefill/i })
         .getAttribute("href"),
-    ).toBe(STORE_URL);
+    ).toBe(DOWNLOAD_URL);
     vi.unstubAllEnvs();
   });
 
   test("the store link opens safely in a new tab", () => {
+    // Still on the page — as the thing to switch to once the review clears —
+    // just no longer the primary control.
     vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
     at("#/get");
     const store = screen.getByRole("link", {
-      name: /install from the chrome web store/i,
+      name: /the chrome web store/i,
     });
+    expect(store.getAttribute("href")).toBe(STORE_URL);
     expect(store.getAttribute("target")).toBe("_blank");
     // Without noopener the store page gets a handle on this window.
     expect(store.getAttribute("rel")).toMatch(/noopener/);
