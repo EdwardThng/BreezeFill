@@ -1,7 +1,7 @@
 {
   "form_id": "wizard_test_v1",
   "display_name": "Three-step wizard test page (testing only)",
-  "insurer": "Test",
+  "insurer": "AIA",
   "internal": true,
   "fill_mode": "web",
   "hosts": ["localhost"],
