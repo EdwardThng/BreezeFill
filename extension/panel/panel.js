@@ -182,7 +182,6 @@ const state = {
    * choice was wrong, and silently changing it back on the next step is the
    * kind of thing that gets noticed after the form is submitted.
    */
-  formChosenByHand: false,
   /**
    * The schema whose instructions sharpen this page's questions, or null.
    *
@@ -292,21 +291,6 @@ function hostMatches(host, patterns) {
   });
 }
 
-/**
- * Say what is going on, and open the picker.
- *
- * Only for the cases where something is genuinely wrong and a human choice
- * might help — not for "the bank does not describe this page", which is an
- * ordinary outcome handled by selectForm(null).
- */
-function showPicker(message) {
-  const detected = $("form-detected");
-  detected.textContent = message;
-  detected.classList.add("unknown");
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-}
-
 // Thresholds for *identifying* a form, which are deliberately looser than the
 // ones for filling it. A wizard shows one step at a time, so the right schema
 // may only find a third of its fields on the page in front of us — demanding
@@ -364,47 +348,17 @@ function bestCandidate(scores) {
 }
 
 /**
- * Record what will be used to sharpen this page's questions, and say so.
+ * Record which schema will sharpen this page's questions.
  *
- * `form` may be null, and that is a normal outcome rather than a failure
- * state: it means the page's own wording is the best instruction available.
- * Either way the panel is ready to map — nothing here disables anything.
+ * `form` may be null, and that is an ordinary outcome rather than a failure:
+ * it means the page's own wording is the best instruction available. Either
+ * way the panel maps. Nothing is shown for it, because nothing about it is a
+ * decision the doctor makes — it only ever changed how well each question was
+ * put, never which questions were asked or whether they were.
  */
-function describeSelection(form) {
-  const detected = $("form-detected");
-  // The picker is kept in step with the state rather than assumed to already
-  // agree with it. It disagrees in both directions otherwise: a select with
-  // nothing chosen shows its first option, and a doctor who picks one by hand
-  // leaves the sentence above it describing the previous answer.
-  $("form-id").value = form ? form.form_id : "";
-
-  if (form) {
-    detected.textContent = form.insurer
-      ? `${form.insurer} — ${form.display_name}`
-      : form.display_name;
-    detected.classList.remove("unknown");
-    return;
-  }
-
-  // Deliberately not phrased as a problem. Nothing is broken and there is
-  // nothing for the doctor to do: BreezeFill reads the questions on the page
-  // and answers those. Naming the host is the one useful detail, because it
-  // is how they would tell us which form to describe properly later.
-  detected.textContent = state.host
-    ? `Reading the questions on this page (${state.host})`
-    : "Reading the questions on this page";
-  detected.classList.add("unknown");
-}
-
 function selectForm(form, host) {
   state.schema = form || null;
   if (host) state.host = host;
-  describeSelection(state.schema);
-
-  // The picker stays reachable, never required. A doctor who knows the bank
-  // has a better description for this form than the page does can say so.
-  $("form-id").hidden = true;
-  $("form-override").hidden = false;
 }
 
 /**
@@ -442,11 +396,6 @@ function selectForm(form, host) {
  */
 async function detectForm() {
   if (!state.forms.length) return;
-  // A human already answered this question. Detection re-runs on every wizard
-  // step, and quietly overturning a doctor's choice between steps would change
-  // which form is being filled without anyone being told.
-  if (state.formChosenByHand) return;
-
   let response;
   try {
     response = await ask({
@@ -455,7 +404,9 @@ async function detectForm() {
       candidates: candidatesFor(state.forms),
     });
   } catch {
-    showPicker("Could not read this page — pick the form yourself, or click the BreezeFill icon on the tab you want to fill.");
+    // Nothing to say and nothing to ask. The doctor has not reached the page
+    // step yet, and when they do, scanPage reports what it can see there — one
+    // message about the page, in the place the page is discussed.
     return;
   }
 
@@ -478,7 +429,6 @@ async function detectForm() {
 }
 
 async function loadForms() {
-  const select = $("form-id");
   try {
     const response = await fetch(`${apiBase()}/forms`);
     if (!response.ok) throw new Error(String(response.status));
@@ -495,25 +445,6 @@ async function loadForms() {
     // the sharper instruction behind each one, not the fill. The mapping call
     // itself will report the backend properly if it is really unreachable.
     setStatus($("map-status"), UNREACHABLE, "error");
-    return;
-  }
-
-  select.replaceChildren();
-  // No form is a choice, not the absence of one, and it needs an entry to be
-  // choosable at all. A <select> has no empty state: without this its first
-  // option stands selected whether or not anyone picked it, so a doctor who
-  // opened the picker could name a form and never take one back — and the
-  // control claimed a schema was in use while `state.schema` was still null.
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "No form — use this page's own wording";
-  select.append(none);
-
-  for (const form of state.forms) {
-    const option = document.createElement("option");
-    option.value = form.form_id;
-    option.textContent = form.insurer ? `${form.insurer} — ${form.display_name}` : form.display_name;
-    select.append(option);
   }
 }
 
@@ -603,21 +534,22 @@ function scheduleParse() {
 async function parsePaste() {
   let parsed;
   try {
-    const response = await fetch(`${apiBase()}/parse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // The name goes with the paste. Step 1 asked for it before this box
-      // existed, so the parser never has to work out which piece of a header
-      // block is the patient — it checks, which cannot be wrong, and the
-      // piece beside it stays unclaimed instead of being read as a name.
-      body: JSON.stringify({ text: pastedText(), full_name: $("full-name").value.trim() }),
-    });
-    if (!response.ok) throw new Error(String(response.status));
-    parsed = await response.json();
+    // In this tab, and nowhere else. This used to be POST /parse, which sent
+    // the WHOLE pasted note — un-redacted, because finding the name is what
+    // has to happen before the name can be removed. So the raw note left the
+    // browser one request before redaction had anything to work with.
+    //
+    // The name goes with the paste. Step 1 asked for it before this box
+    // existed, so the parser never has to work out which piece of a header
+    // block is the patient — it checks, which cannot be wrong, and the piece
+    // beside it stays unclaimed instead of being read as a name.
+    parsed = breezefillParse.parseDemographics(pastedText(), $("full-name").value.trim());
   } catch {
     // Deliberately quiet. Parsing is an assist, not the path: the fields
-    // below are still typeable, and Map reports the backend being down in
-    // one place rather than two messages competing for the same line.
+    // below are still typeable, and Map reports the real problem in one
+    // place rather than two messages competing for the same line. The only
+    // way this throws now is the shared shapes failing to load, which Map
+    // refuses on outright.
     $("found-summary").textContent = "Patient details — could not read the paste, fill these in";
     $("found").open = true;
     return;
@@ -718,7 +650,10 @@ function badgeFor(id) {
   if ($(`choices-${id}`) && $(`choices-${id}`).querySelector("button")) {
     return ["inferred", "Needs checking"];
   }
-  if (!$(id).value.trim()) return ["missing", "Nothing found — fill by hand"];
+  // "— fill by hand" went when Add arrived: the row now carries the way in,
+  // so the badge saying it too was an instruction next to the button that
+  // carries it out.
+  if (!$(id).value.trim()) return ["missing", "Nothing found"];
   return state.touched.has(id)
     ? ["demographic", "You typed this"]
     : ["extracted", "Found in the note"];
@@ -737,9 +672,14 @@ function updateFound() {
     const [status, text] = badgeFor(id);
     badge.className = `badge ${status}`;
     badge.textContent = text;
-    $(`row-${id}`).className =
-      "review-row" +
-      (status === "inferred" ? " pending" : status === "missing" ? "" : " confirmed");
+    // Toggled rather than assigned. `detail` is in the markup and is what
+    // gives this row its whole layout, so writing the class list out in full
+    // here — which is what this used to do — deleted it on the first
+    // keystroke and left the card to fall back to the mapped row's.
+    const row = $(`row-${id}`);
+    row.classList.toggle("pending", status === "inferred");
+    row.classList.toggle("missing", status === "missing");
+    row.classList.toggle("confirmed", status !== "inferred" && status !== "missing");
   }
   // Said on the summary line, not only inside the drawer: the drawer can be
   // shut, and a question nobody sees is the blank box this replaced.
@@ -756,13 +696,29 @@ function updateFound() {
   }
 }
 
+// Where a doctor reports a failure, and the code they quote when they do.
+//
+// Every message below names one. A doctor cannot read a stack trace and
+// should not be asked to describe a fault in their own words — "it did not
+// work" is what actually arrives otherwise. A short code turns a support
+// email into a lookup: BF-503 is the key, BF-NET is the network, and the two
+// need completely different answers.
+const SUPPORT_EMAIL = "thngedward@gmail.com";
+
+/** A doctor-facing sentence, with the code that identifies it. */
+function reportable(sentence, code) {
+  return `${sentence} If this keeps happening, email ${SUPPORT_EMAIL} and quote ${code}.`;
+}
+
 // A network throw carries no status code — the request never reached a
 // server, or reached one whose 500 came out of Starlette's error handler,
 // which sits outside the CORS middleware and so answers with no
 // Access-Control headers at all. Either way the browser hands us a bare
 // TypeError: "Failed to fetch", which no doctor can act on.
-const UNREACHABLE =
-  "Could not reach the backend. Check it is running, then check the URL under Advanced.";
+const UNREACHABLE = reportable(
+  "Could not reach BreezeFill's server. Check your internet connection, then try again.",
+  "BF-NET"
+);
 
 function messageFor(error) {
   return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
@@ -818,6 +774,86 @@ function schemaFieldsOf(form) {
     }));
 }
 
+/**
+ * Put the patient back into the server's answers, in the panel.
+ *
+ * Two jobs the server can no longer do, because it was not given what they
+ * need:
+ *
+ * 1. A demographic row arrives blank with `fill_from` naming the value it
+ *    wants. The value is in the box the doctor checked two steps ago, and has
+ *    never left this tab.
+ * 2. Every other row arrives with the model's own tokens in it — "[PATIENT]
+ *    was admitted on [DOB]" — because the map stayed here.
+ *
+ * A token that survives the substitution is one the model invented. It is
+ * blanked and the row is held, which is the same rule the PDF path applies
+ * server-side: a raw token must never reach a form, and a doctor must never
+ * be shown a citation they cannot check rendered exactly like one they can.
+ */
+// The same sentence the server shows, because it is the same check. Kept
+// verbatim rather than reworded: two wordings for one instruction is two
+// things for a doctor to learn.
+const DATE_RECHECK =
+  "Check the day and month are the right way round — a date written 03/07 " +
+  "is 3 July here and 7 March elsewhere.";
+
+/** ISO, as an insurer's form wants it. */
+function asFormDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : String(iso || "");
+}
+
+/**
+ * Whether a date row has to be re-read, mirroring `_date_recheck`.
+ *
+ * Held only where both readings are possible, which is exactly where the day
+ * is 12 or under. `25/07` is 25 July however the writer thinks about date
+ * order, and a confirm click that is never the interesting one is how the
+ * clicks that are get skimmed past.
+ */
+function dateRecheck(type, value) {
+  if (type !== "date" || typeof value !== "string") return null;
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(value.trim());
+  if (!match || Number(match[1]) > 12) return null;
+  return DATE_RECHECK;
+}
+
+function localise(rows, map) {
+  const stillTokenised = (text) => typeof text === "string" && /\[[A-Z][A-Z0-9_]*\]/.test(text);
+
+  return rows.map((row) => {
+    if (row.fill_from) {
+      const id = Object.keys(DEMOGRAPHIC_FIELDS).find(
+        (key) => DEMOGRAPHIC_FIELDS[key] === row.fill_from
+      );
+      const raw = id ? $(id).value.trim() : "";
+      // The date input holds ISO; a form wants it the way a form wants it,
+      // which is what the server used to convert. Same conversion, same place
+      // the value already is.
+      const value = row.fill_from === "dob" ? asFormDate(raw) : raw;
+      // A date the parser resolved by RULE rather than by reading — Singapore
+      // writes day first, and a note that did not is misread silently and
+      // identically every time. Held for the same reason and with the same
+      // sentence the server uses, and only where both readings are possible.
+      const recheck = dateRecheck(row.field_type, value);
+      return { ...row, value: value || null, recheck, needs_review: Boolean(recheck) };
+    }
+
+    const value = breezefillRedact.remerge(row.value, map);
+    if (stillTokenised(value)) {
+      return { ...row, value: null, status: "missing", needs_review: true, source: null };
+    }
+    const source = breezefillRedact.remerge(row.source, map);
+    return {
+      ...row,
+      value,
+      source: stillTokenised(source) ? null : source,
+      reasoning: stillTokenised(row.reasoning) ? null : breezefillRedact.remerge(row.reasoning, map),
+    };
+  });
+}
+
 async function onMap() {
   const status = $("map-status");
 
@@ -834,11 +870,59 @@ async function onMap() {
     await detectForm();
   }
 
-  let patient;
+  if (await checkVersion()) {
+    setStatus(
+      status,
+      "This version of BreezeFill is out of date and will not send anything. " +
+        "Update it at chrome://extensions, then reopen this panel.",
+      "error"
+    );
+    return;
+  }
+
+  // Nothing is sent until the shapes are in. Awaited rather than checked, so
+  // a click that lands during the first hundred milliseconds waits instead of
+  // taking the "not loaded" branch.
+  await privacyReady;
+  if (!breezefillRedact.ready() || !breezefillParse.ready()) {
+    setStatus(
+      status,
+      reportable(
+        "BreezeFill cannot remove the patient's details from this note, so it will not send it. Reload the extension.",
+        "BF-SAFE"
+      ),
+      "error"
+    );
+    return;
+  }
+
+  // REDACTED HERE, AT SEND TIME, AND NOWHERE ELSE.
+  //
+  // Not at paste time and never cached. The doctor types after pasting — a
+  // correction to a misparsed name, another sentence at the bottom of the box
+  // — and text redacted against the dictionary as it stood ten seconds ago is
+  // text redacted against the wrong dictionary. Rebuilding it costs
+  // milliseconds; re-using it is how a name added after the parse goes out
+  // unmasked.
+  //
+  // And it FAILS CLOSED. Everything below is inside the same try, so anything
+  // that throws — patterns unloaded, no name, no date of birth — leaves
+  // through the catch with nothing sent. There is no branch in this function
+  // that posts the note as it was typed.
+  let redacted;
   try {
-    patient = patientRecord();
+    redacted = breezefillRedact.redact(patientRecord(), pastedText());
   } catch (error) {
+    // The refusal names a field, so take the doctor to it.
+    //
+    // Every value the redactor needs lives on the check step, and this
+    // refusal is raised on the page step — so "Still needed: date of birth"
+    // arrived on a screen with no date of birth on it and nothing pointing
+    // anywhere. The doctor had to already know the box was behind the Verify
+    // row in the ledger. Found by clearing the field and pressing Map in a
+    // real browser; the message was right and completely unactionable.
     setStatus(status, error.message, "error");
+    sendToMissingDemographic();
     return;
   }
 
@@ -848,13 +932,20 @@ async function onMap() {
   try {
     // One path now. The page in front of the doctor is always what gets
     // mapped; the bank only changes how well each of its questions is put.
-    const request = { fields: await liveFields(), patient };
+    //
+    // What goes on the wire is the questions and the tokenised note. No name,
+    // no NRIC, no date of birth, and not the map that could turn a token back
+    // into any of them.
+    const request = {
+      fields: await liveFields(),
+      redacted_text: redacted.redacted_text,
+    };
     if (!request.fields.length) {
       throw new Error(
         "No fillable questions found on this page. Click the BreezeFill icon on the tab with the form open."
       );
     }
-    const response = await fetch(`${apiBase()}/map-live`, {
+    const response = await fetch(`${apiBase()}/map-redacted`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -865,22 +956,34 @@ async function onMap() {
       // body would reintroduce it.
       throw new Error(
         {
-          502: "The model call failed.",
-          503: "The backend has no API key. Set ANTHROPIC_API_KEY in the terminal running it, then restart it.",
-          404: "The backend does not know this form. Restart it if you have just added one.",
+          // Plain sentences, not diagnoses. The old 503 told a GP to set
+          // ANTHROPIC_API_KEY in a terminal and restart it — a developer's
+          // note on a doctor's screen. The code carries that detail instead.
+          502: reportable("BreezeFill could not reach the service that reads notes.", "BF-502"),
+          503: reportable("BreezeFill's server is not set up to answer yet.", "BF-503"),
+          404: reportable("BreezeFill's server does not know this form.", "BF-404"),
           // Both of these used to arrive as a bare "Request failed (422)",
           // which is what a tester saw and could do nothing with. The backend
           // knew exactly what was wrong in each case; the panel was throwing
           // it away. Still keyed on the status and not the body — a 422 from
           // FastAPI's own validation quotes the input that failed, and the
           // input here carries the clinical text.
-          413: "This page has more questions than BreezeFill can map in one go. Try a page with fewer fields, or one step of the form at a time.",
-          422: "BreezeFill could not read any questions on this page. Its fields may have no labels, or the form may be inside a frame BreezeFill cannot see.",
-        }[response.status] || `Request failed (${response.status}).`
+          413: reportable(
+            "This page has more questions than BreezeFill can map at once. Try one section of the form at a time.",
+            "BF-413"
+          ),
+          422: reportable(
+            "BreezeFill could not read any questions on this page. Its fields may have no labels, or the form may sit inside a frame it cannot see.",
+            "BF-422"
+          ),
+        }[response.status] || reportable("BreezeFill's server refused the request.", `BF-${response.status}`)
       );
     }
     const body = await response.json();
-    state.rows = body.fields;
+    // The last step that touches a patient's details, and it happens here.
+    // The server answered in tokens because it was never given anything else;
+    // the map that turns them back is in this tab and goes no further.
+    state.rows = localise(body.fields, redacted.redaction_map);
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
@@ -1087,10 +1190,22 @@ function renderRow(row) {
       // click, and the doctor's place in a twenty-field claim was gone. The
       // row's own state is the only thing that changed, so it is the only
       // thing touched; the count, bar and Fill button follow underneath.
+      // Where this row sits on screen right now. Confirming changes both what
+      // is above it — the readiness line and bar leave when the last value is
+      // confirmed — and what is inside it, since the button goes. Either
+      // slides the whole list under the doctor mid-read, and when the content
+      // shrinks past the current scroll position the browser clamps and the
+      // panel jumps hundreds of pixels. Measured at 900 -> 285 in a real
+      // Chromium before this.
+      const scroll = $("scroll");
+      const anchor = wrap.getBoundingClientRect().top;
+
       wrap.classList.remove("pending");
       wrap.classList.add("confirmed");
       button.remove();
       updateReviewMeta();
+
+      if (scroll) scroll.scrollTop += wrap.getBoundingClientRect().top - anchor;
       focusAfterConfirm(wrap);
     });
     wrap.append(button);
@@ -1112,7 +1227,7 @@ const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
   { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
-  { key: "page", section: "step-page", title: "This page" },
+  { key: "page", section: "step-page", title: "Check the answers" },
 ];
 
 /** Show one step, collapse everything behind it, hide everything ahead. */
@@ -1141,6 +1256,8 @@ function showStep(key) {
   );
 
   placeLedger();
+  showNotePane();
+  updateBackToReview();
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
@@ -1148,6 +1265,43 @@ function showStep(key) {
   const scroll = $("scroll");
   if (scroll) scroll.scrollTop = 0;
 }
+
+/**
+ * The way back to a mapped review, on the two conditions that make it useful.
+ *
+ * `showStep` hides every step ahead of the one being shown. That is right on
+ * the way through — those steps have not happened — and wrong once a mapping
+ * has landed, because the answers HAVE happened and sit in `state.rows` the
+ * whole time. Stepping back to check a spelling took them off screen.
+ *
+ * It exists when both of these hold, and the second one is the correction:
+ *
+ * 1. The doctor is not already looking at the review.
+ * 2. The review has at least one ANSWER on it — not merely rows. A mapping
+ *    that came back entirely `missing` produces a screenful of empty boxes,
+ *    and a button offering to take somebody back to that is offering nothing.
+ *    Rows alone were the old test, and they are why this appeared over a
+ *    review with nothing in it.
+ *
+ * Both are read from state at render time rather than latched, so the button
+ * leaves by itself when a wizard section change discards the answers. A route
+ * back to an empty review is worse than no route: the walk-forward buttons
+ * still reach that step, so nothing is unreachable without this.
+ *
+ * The count is in the label because it is the whole promise. "Back to the
+ * mapped fields" cannot be checked before clicking; "Back to 12 answers" can.
+ */
+function updateBackToReview() {
+  const button = $("back-to-review");
+  if (!button) return;
+
+  const answers = state.rows.filter(hasValue).length;
+  button.hidden = !answers || state.step === "page";
+  if (!button.hidden) {
+    button.textContent = `Back to ${answers} mapped ${answers === 1 ? "answer" : "answers"}`;
+  }
+}
+
 
 /** A finished step in one line: what actually went into it. */
 function summaryOf(key) {
@@ -1193,7 +1347,11 @@ function doneRow(step) {
 
   const check = document.createElement("span");
   check.className = "done-check";
-  check.textContent = "✓";
+  check.textContent = "\u2713";
+  // Decoration. Without this a screen reader reads the row as "tick Patient
+  // Tan Wei Ling chevron" — the glyphs are the visual form of "done" and "go
+  // back", and both are already said by the label below.
+  check.setAttribute("aria-hidden", "true");
 
   const name = document.createElement("span");
   name.className = "done-name";
@@ -1206,7 +1364,11 @@ function doneRow(step) {
   const go = document.createElement("span");
   go.className = "done-go";
   go.textContent = "\u203a";
+  go.setAttribute("aria-hidden", "true");
 
+  // Named outright, because the visible parts otherwise run together into
+  // "PatientTan Wei Ling" with nothing between them.
+  row.setAttribute("aria-label", `${step.title}: ${summaryOf(step.key)}. Go back to this step.`);
   row.append(check, name, value, go);
   row.addEventListener("click", () => showStep(step.key));
   return row;
@@ -1294,6 +1456,105 @@ function updateReviewMeta() {
  * reset its scrollTop on every frame of a scroll, which is what made following
  * the rows stutter; now only a class moves.
  */
+/**
+ * Where a quote sits in the note, allowing only the WHITESPACE to differ.
+ *
+ * The pane rests on the model quoting verbatim, and a quote that is not in
+ * the note is refused rather than approximated — a fuzzy match would draw a
+ * highlight round a sentence the value did not come from, on the one screen
+ * whose job is showing where a value came from. That rule is unchanged here.
+ *
+ * What changes is that a line break is not a difference in the text. Notes
+ * wrap; a model quoting a sentence that spans a break hands it back with a
+ * space, and every character in it is still the doctor's own. Refusing that
+ * loses a correct citation, and a correct citation refused reads exactly like
+ * "this value came from nowhere" — which is the thing the doctor is checking.
+ *
+ * Whitespace runs match whitespace runs. They are not allowed to match
+ * NOTHING, so "acutetonsillitis" still fails against "acute tonsillitis"; the
+ * words themselves are compared character for character, punctuation
+ * included. Returns the span in the NOTE's coordinates, so what is marked is
+ * always what the note says rather than what the model returned.
+ */
+/** Every place this run appears, by the whitespace rule above. */
+function runsOf(text, src) {
+  const runs = [];
+  for (let from = 0; ; ) {
+    const at = text.indexOf(src, from);
+    if (at < 0) break;
+    runs.push({ at, end: at + src.length });
+    from = at + 1;
+  }
+  if (runs.length) return runs;
+
+  const words = src.split(/\s+/).filter(Boolean);
+  if (!words.length) return runs;
+  const pattern = words
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const wrapped = new RegExp(pattern, "g");
+  for (let match; (match = wrapped.exec(text)); ) {
+    runs.push({ at: match.index, end: match.index + match[0].length });
+    if (match.index === wrapped.lastIndex) wrapped.lastIndex++;
+  }
+  return runs;
+}
+
+function locateRun(text, src) {
+  const runs = runsOf(text, src);
+  return runs.length ? runs[0] : null;
+}
+
+// A single token is not a citation. "13/03/2026." is in four places in an
+// admission note, and lighting the first one because a quote happened to end
+// with it is the wrong-citation failure by a shorter route. Two words is
+// enough — clinical shorthand is short, and "MC 2 days." is a whole sentence
+// a doctor wrote.
+const QUOTE_MIN_WORDS = 2;
+
+/**
+ * Every place in the note this citation draws on. Zero, one, or several.
+ *
+ * One sentence is the ordinary case and is tried whole first. But a question
+ * like "what was done at this consultation" is answered from several lines at
+ * once, and the model cites all of them — joined with a semicolon, often
+ * reordered, sometimes across a paragraph. That string is nowhere in the note
+ * as one run, so the pane marked nothing at all on exactly the rows carrying
+ * the most.
+ *
+ * Split and locate each piece. Nothing is loosened by this: every piece still
+ * has to appear word for word, so what gets marked is text the doctor wrote,
+ * and a piece the model paraphrased is simply left unmarked rather than
+ * approximated onto a neighbour. What changes is that a citation is allowed
+ * to point at three sentences, because sometimes it does.
+ */
+function locateQuote(text, src) {
+  const whole = locateRun(text, src);
+  if (whole) return [whole];
+
+  const found = [];
+  // A full stop or a semicolon, and NOT a colon. Splitting on a colon turns
+  // "Diagnosis: acute tonsillitis" — a paraphrase of "Dx acute tonsillitis."
+  // — into a fragment that IS in the note, and the pane draws a highlight
+  // round two words of somebody else's sentence. That is the wrong citation
+  // this whole pane exists to avoid, reached by the back door; the test named
+  // "marks NOTHING when the quote is not in the note verbatim" caught it on
+  // the first run.
+  for (const piece of src.split(/(?<=[.;])\s+/)) {
+    const trimmed = piece.trim();
+    if (trimmed.split(/\s+/).filter(Boolean).length < QUOTE_MIN_WORDS) continue;
+    const runs = runsOf(text, trimmed);
+    // Exactly one, or none. A fragment appearing twice cannot say which of
+    // the two the model meant, and marking the first is a coin toss shown to
+    // the doctor as a fact — the same refusal the parser makes when a note
+    // offers two phone numbers. The whole-quote path above is left alone: a
+    // complete citation repeated word for word in one note is not a case
+    // anyone has met, and refusing it would lose a mark that works today.
+    if (runs.length === 1) found.push(runs[0]);
+  }
+  return found;
+}
+
 function buildNote() {
   const pre = $("note-text");
   if (!pre) return;
@@ -1304,10 +1565,13 @@ function buildNote() {
   for (const row of state.rows) {
     const src = typeof row.source === "string" ? row.source.trim() : "";
     if (!src || seen.has(src)) continue;
-    const at = text.indexOf(src);
-    if (at < 0) continue;
+    const found = locateQuote(text, src);
+    if (!found.length) continue;
     seen.add(src);
-    spans.push({ at, end: at + src.length, src });
+    // All of them carry the same key, so one row lights all of its own
+    // sentences at once — which is what a citation drawn from three lines
+    // actually is.
+    for (const at of found) spans.push({ ...at, src });
   }
   spans.sort((a, b) => a.at - b.at);
 
@@ -1320,8 +1584,14 @@ function buildNote() {
     if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
     const el = document.createElement("span");
     el.className = "quote";
+    // Two strings, and they are not always the same one. `src` is the model's
+    // quote and is the key markNote matches a row against; `shown` is what the
+    // note itself says at that position, which is what the doctor reads and
+    // what setHit must rebuild from. Rendering the model's copy would let a
+    // requoted line rewrite the consultation on screen.
     el.dataset.src = span.src;
-    el.textContent = text.slice(span.at, span.end);
+    el.dataset.shown = text.slice(span.at, span.end);
+    el.textContent = el.dataset.shown;
     parts.push(el);
     cursor = span.end;
   }
@@ -1336,7 +1606,7 @@ function buildNote() {
  * one span's children and never the pane, so the scroll position is untouched.
  */
 function setHit(el, hit) {
-  const text = el.dataset.src;
+  const text = el.dataset.shown;
   const at = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
   if (at < 0) {
     el.textContent = text;
@@ -1383,7 +1653,10 @@ function markNote(row) {
     // No hit for an inference: the value is not in there to emphasise, and
     // guessing which words produced it is the fuzzy match this refuses.
     setHit(el, on && !reasoned ? value : null);
-    if (on) target = el;
+    // The FIRST of them when a citation spans several sentences. Scrolling to
+    // the last would put the earlier ones off the top of the pane, which is
+    // the opposite of showing the doctor what the value came from.
+    if (on && !target) target = el;
   }
 
   // Three silent cases and they are not the same thing. Nothing is being read;
@@ -1400,13 +1673,70 @@ function markNote(row) {
         : row.label;
 
   if (!target) return;
-  // Only when there is somewhere to go. A note that fits needs no moving, and
-  // nudging it clipped the first line for nothing.
+  // Only when there is somewhere to go. A note that fits needs no moving.
   if (pre.scrollHeight <= pre.clientHeight) return;
+
+  // And only when the mark is not already in view. Centring it unconditionally
+  // scrolled the pane on arrival even though the sentence was visible, which
+  // hid the note's first line — the patient header — behind the top edge for
+  // no reason. Nearest, not centred: move the least that puts it on screen.
+  // A line and a half of the note left showing past the mark, rather than the
+  // 8px this used to leave. Eight pixels is under half a line: it satisfies
+  // "on screen" and produces a sentence pinned against the pane's edge with
+  // its descenders touching the border, which is both hard to read and hard
+  // to believe is deliberate. Derived from the line height so it stays a line
+  // and a half if the note pane's type ever changes.
+  const box = pre.getBoundingClientRect();
+  const mark = target.getBoundingClientRect();
+  const line = parseFloat(getComputedStyle(pre).lineHeight) || 18;
+  const MARGIN = Math.round(line * 1.5);
+  if (mark.top >= box.top + MARGIN && mark.bottom <= box.bottom - MARGIN) return;
+  const delta =
+    mark.top < box.top + MARGIN
+      ? mark.top - box.top - MARGIN
+      : mark.bottom - box.bottom + MARGIN;
   pre.scrollTo({
-    top: Math.max(0, target.offsetTop - pre.clientHeight / 2 + target.offsetHeight / 2),
+    top: Math.max(0, pre.scrollTop + delta),
     behavior: REDUCED_MOTION.matches ? "auto" : "smooth",
   });
+}
+
+/**
+ * The consultation is furniture on the screen where its values are checked,
+ * and nowhere else.
+ *
+ * Two conditions, and the second is the one that was missing: there have to be
+ * values to check it against, AND the doctor has to be on the screen holding
+ * them. Going back to the note step left the pane up beside the paste box, so
+ * the same consultation was on screen twice — once as the thing being edited
+ * and once as a read-only copy of it.
+ */
+function showNotePane() {
+  const pane = $("notepane");
+  if (pane) pane.hidden = state.rows.length === 0 || state.step !== "page";
+}
+
+/**
+ * Open the check step on the first value the redactor is missing.
+ *
+ * Only when something IS missing: a redaction failure with every demographic
+ * present is a different fault, and yanking the doctor off the page step to
+ * show them a complete form would be worse than saying nothing.
+ */
+function sendToMissingDemographic() {
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+  if (!missing.length) return;
+  showStep("check");
+  const field = $(missing[0]);
+  // Not focus() alone: the field sits mid-panel behind a step that has only
+  // just been shown, and a focus the doctor cannot see is not a destination.
+  if (field) {
+    // Optional: there is no layout to scroll in the test environment, and a
+    // panel that threw here would refuse to map for a reason unrelated to
+    // redaction.
+    field.scrollIntoView?.({ block: "center" });
+    field.focus();
+  }
 }
 
 /** Fold the note away without losing it. Session-only, like everything here. */
@@ -1445,6 +1775,9 @@ function followScroll() {
 }
 
 function renderRows() {
+  // Rows appearing and rows being discarded both come through here, and the
+  // way back to them has to appear and disappear with them.
+  updateBackToReview();
   const container = $("rows");
   // Which rows were already on screen before this render. A row that was here
   // has not entered, so it must not play an entrance: without this, every row
@@ -1458,13 +1791,14 @@ function renderRows() {
       return el;
     })
   );
-  // The pane exists once there are values to check against it.
-  const pane = $("notepane");
-  if (pane) pane.hidden = state.rows.length === 0;
+  showNotePane();
   buildNote();
-  // Already marked, on the first value that needs checking. Marking nothing
-  // until the doctor happened to click a row made the whole thing invisible.
-  const first = state.rows.find((r) => r.needs_review && hasValue(r)) || state.rows[0];
+  // Already marked, on the row at the top of the list — the same rule
+  // scrolling uses, so the mark always answers the row the doctor is looking
+  // at. Marking the first value NEEDING a check instead put the mark on a row
+  // further down while the top of the screen showed a different question, and
+  // a citation that does not match the visible row reads as a wrong citation.
+  const first = state.rows[0];
   state.reading = first ? first.field_id : null;
   markNote(first || null);
   // Mapped values on screen move the finished steps under them.
@@ -1536,11 +1870,16 @@ async function ask(message) {
     await chrome.scripting.executeScript({ target: { tabId }, files: INJECT_FILES });
   } catch {
     throw new Error(
-      "BreezeFill has no access to this tab. Click the BreezeFill icon in the toolbar while this page is open, then try again."
+      reportable(
+        "BreezeFill has no access to this tab. Click the BreezeFill icon in the toolbar while this page is open, then try again.",
+        "BF-TAB"
+      )
     );
   }
   const response = await chrome.tabs.sendMessage(tabId, { target: "breezefill-content", ...message });
-  if (!response || !response.ok) throw new Error("The page did not respond.");
+  if (!response || !response.ok) {
+    throw new Error(reportable("The insurer's page did not answer.", "BF-PAGE"));
+  }
   return response;
 }
 
@@ -1552,8 +1891,14 @@ function renderReport(response) {
   // from the doctor — what landed, what belongs to a later step, and what they
   // must write themselves — so each gets its own block rather than one flat
   // list where the important one scrolls past.
-  const written = (response.applied || []).filter((a) => a.status === "filled").length;
-  if (!response.refused) {
+  // The filler's own count is authoritative; `applied` is the per-field
+  // detail behind it and is not always sent. They disagreed silently before —
+  // the status line quoted one and the banner counted the other.
+  const written =
+    typeof response.filled === "number"
+      ? response.filled
+      : (response.applied || []).filter((a) => a.status === "filled").length;
+  if (!response.refused && written > 0) {
     const banner = document.createElement("div");
     banner.className = "report-block is-success";
     const heading = document.createElement("h3");
@@ -1564,6 +1909,21 @@ function renderReport(response) {
     body.textContent = "Check each one on the form, then submit it yourself.";
     banner.append(heading, body);
     container.append(banner);
+  } else if (!response.refused) {
+    // Nothing was written, and the success block is the wrong thing to say
+    // about that. It read "Filled 0 fields on this page." in confident green,
+    // over "Check each one on the form" — an instruction to check nothing.
+    // Every value was already answered, or belonged elsewhere; the list below
+    // says which, per field, and that is the whole of the news.
+    const none = document.createElement("div");
+    none.className = "report-block is-manual";
+    const heading = document.createElement("h3");
+    heading.textContent = "Nothing was written on this page.";
+    const body = document.createElement("p");
+    body.className = "note";
+    body.textContent = "Nothing was overwritten either. What happened to each field is below.";
+    none.append(heading, body);
+    container.append(none);
   }
 
   const list = document.createElement("ul");
@@ -1584,12 +1944,16 @@ function renderReport(response) {
     item.textContent = `${name} — ${outcome}${why}`;
     list.append(item);
   }
-  const detail = document.createElement("div");
-  detail.className = "report-block";
-  const detailHeading = document.createElement("h3");
-  detailHeading.textContent = "What happened to each field";
-  detail.append(detailHeading, list);
-  container.append(detail);
+  // Only when there is something in it. A refused fill reports no results at
+  // all, and the heading was rendering over an empty list.
+  if (list.children.length) {
+    const detail = document.createElement("div");
+    detail.className = "report-block";
+    const detailHeading = document.createElement("h3");
+    detailHeading.textContent = "What happened to each field";
+    detail.append(detailHeading, list);
+    container.append(detail);
+  }
 
   // Fields belonging to a step that is not rendered. Said plainly, because
   // otherwise they are indistinguishable from fields that failed — and the
@@ -1693,6 +2057,13 @@ async function onPageChanged() {
   // admission" is not an answer to whatever question happens to sit in the
   // same position here, and leaving them up would invite a fill that wrote
   // last section's answers into this one.
+  //
+  // Discarding them is right. Discarding them SILENTLY is not, and that is
+  // what happened: a doctor who had read four rows and confirmed one watched
+  // the whole review vanish, with an empty status line and a fresh prompt as
+  // the only sign anything had occurred. Work disappearing with no account of
+  // itself is the one thing a review screen must never do.
+  const discarded = state.rows.length;
   state.rows = [];
   state.edited.clear();
   state.confirmed.clear();
@@ -1702,6 +2073,18 @@ async function onPageChanged() {
   $("fill-report").replaceChildren();
 
   await scanPage();
+
+  // Said on the prompt card rather than the status line, because the card is
+  // amber and mid-panel and this is news. Prepended rather than replacing:
+  // scanPage has already said what is on the new section, and that is what
+  // the doctor does next.
+  if (discarded) {
+    const why = $("prompt-why");
+    why.textContent =
+      "The form moved on, so the answers for the last section were cleared — " +
+      "they are not answers to these questions. " +
+      why.textContent;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1788,7 +2171,9 @@ async function onFill() {
       // reviewing quickly, so nothing was written and nothing is retried.
       setStatus(status, `Nothing was filled: ${response.reason}`, "error");
     } else {
-      setStatus(status, `Filled ${response.filled} field${response.filled === 1 ? "" : "s"}. Check each one, then submit the form yourself.`);
+      // Said once. The report banner directly below carries this, and the two
+      // sat stacked saying the same thing in different words.
+      setStatus(status, "");
       // The form worked and nothing in the bank described it. Offer the
       // schema now, while the page that produced it is still in front of the
       // doctor — this is the only moment anyone can sanity-check the labels
@@ -1815,6 +2200,7 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
     state.touched.add(id);
     updateFound();
   });
+
 }
 // Advance only on an explicit click — never on typing, and never because the
 // insurer's page changed shape underneath.
@@ -1873,18 +2259,10 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // a doctor who took a schema back did so because it was the wrong one, and
 // re-detection putting it straight back on the next wizard step is the change
 // nobody would be told about.
-$("form-id").addEventListener("change", () => {
-  state.formChosenByHand = true;
-  state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
-  describeSelection(state.schema);
-});
-$("form-override").addEventListener("click", () => {
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-  // Reaching for the override is saying the automatic answer was wrong. From
-  // here on detection stops re-deciding, including on the next wizard step.
-  state.formChosenByHand = true;
-});
+// Straight back to the answers, with every confirm click still on them. The
+// review is never rebuilt from here — it was never taken down, only hidden.
+$("back-to-review").addEventListener("click", () => showStep("page"));
+
 
 // The injected script reports that the page changed shape — a wizard step
 // rendered. Registered unconditionally: a panel with no granted tab simply
@@ -1901,12 +2279,91 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
 updateFound();
 loadForms().then(detectForm);
 
+/**
+ * Hand the shared identifier shapes to both privacy modules.
+ *
+ * Packaged with the extension, not fetched from the backend: a redaction rule
+ * that arrives over the network is a redaction rule somebody else can replace
+ * with one that matches nothing.
+ *
+ * If this fails, mapping is refused outright. There is no degraded mode where
+ * the note goes out unredacted with a warning — a warning is a thing a busy
+ * doctor clicks past, and the note cannot be recalled afterwards.
+ */
+async function loadPrivacy() {
+  const url =
+    globalThis.chrome && chrome.runtime && chrome.runtime.getURL
+      ? chrome.runtime.getURL("privacy/patterns.json")
+      : "../privacy/patterns.json";
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`patterns.json: HTTP ${response.status}`);
+  const spec = await response.json();
+  breezefillParse.usePatterns(spec);
+  breezefillRedact.usePatterns(spec);
+}
+
+/**
+ * Whether this build is old enough that the backend refuses to talk to it.
+ *
+ * The one thing redacting in the browser cannot fix on its own: Chrome
+ * updates an extension on Chrome's schedule, and a Web Store review takes
+ * days. If a redaction bug ships there is no way to push a fix in minutes —
+ * but the server can refuse the old build, and a build that cannot map cannot
+ * send a note it redacted badly.
+ *
+ * Fails OPEN on a network error and CLOSED on an explicit answer. A backend
+ * that cannot be reached must not stop a doctor working — that is a support
+ * call, not a safety measure — but a backend that says "too old" is the
+ * authority on the question and is believed.
+ */
+function olderThan(installed, minimum) {
+  const parts = (value) => String(value || "0").split(".").map((n) => Number(n) || 0);
+  const a = parts(installed);
+  const b = parts(minimum);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+  }
+  return false;
+}
+
+async function checkVersion() {
+  const manifest =
+    globalThis.chrome && chrome.runtime && chrome.runtime.getManifest
+      ? chrome.runtime.getManifest()
+      : null;
+  if (!manifest) return false;
+  try {
+    const response = await fetch(`${apiBase()}/health`);
+    if (!response.ok) return false;
+    const body = await response.json();
+    return olderThan(manifest.version, body.min_extension_version);
+  } catch {
+    return false;
+  }
+}
+
+const privacyReady = loadPrivacy().catch((error) => {
+  // Named on the button the doctor would press next, not in a console nobody
+  // opens. `onMap` re-awaits this and refuses, so a panel in this state can
+  // still be typed into and can never send anything.
+  setStatus(
+    $("map-status"),
+    "BreezeFill cannot redact this note, so it will not send it. Reload the extension.",
+    "error"
+  );
+  console.error("privacy modules unavailable:", error.message);
+});
+
 // Exposed for the tests, which drive this file the way the panel does rather
 // than reimplementing it. Nothing else reads it, and it holds no patient data
 // — the claim lives in `state`, in this document, and is gone when the panel
 // closes.
 globalThis.breezefillPanel = {
   onMap,
+  showStep,
+  // Exported for the test that discards the rows and expects the way back to
+  // them to go with them, which is the one path no user gesture reaches.
+  renderRows,
   onFill,
   parsePaste,
   pastedText,
@@ -1919,5 +2376,9 @@ globalThis.breezefillPanel = {
   fillPlan,
   draftSchema,
   readableDate,
+  localise,
+  loadPrivacy,
+  olderThan,
+  checkVersion,
   state,
 };

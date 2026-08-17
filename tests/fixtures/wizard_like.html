@@ -577,13 +577,20 @@
         document.getElementById("back").addEventListener("click", function () {
           if (current > 0) { current -= 1; render(); }
         });
-        document.getElementById("mode-toggle").addEventListener("click", function () {
-          unmount = !unmount;
-          document.getElementById("mode-name").textContent = unmount
-            ? "unmount (inactive step removed from the DOM)"
-            : "hide (inactive step kept, display:none)";
-          render();
-        });
+        // Guarded because ?demo=1 removes the strip this lives in, and an
+        // unguarded listener threw "Cannot read properties of null" on every
+        // load of the very mode the demo video is shot in — a console error
+        // on camera, and one that stopped the script before render() ran.
+        var toggle = document.getElementById("mode-toggle");
+        if (toggle) {
+          toggle.addEventListener("click", function () {
+            unmount = !unmount;
+            document.getElementById("mode-name").textContent = unmount
+              ? "unmount (inactive step removed from the DOM)"
+              : "hide (inactive step kept, display:none)";
+            render();
+          });
+        }
 
         render();
       })();

@@ -1,0 +1,310 @@
+{
+ "_comment": [
+  "Parity corpus for the demographics parser. Every patient is invented.",
+  "",
+  "The parser runs in two languages now: backend/demographics.py, and",
+  "extension/privacy/parse.js, which is what keeps the raw note in the browser.",
+  "Both read THIS file and both must reproduce `expect` exactly. Neither",
+  "generates it — an expectation a parser writes for itself asserts nothing.",
+  "",
+  "WHY A PARSER NEEDS A PARITY CORPUS AT ALL, when a missed value only leaves a",
+  "blank: the values this finds are the dictionary the note is redacted",
+  "against. A name the browser's copy fails to find is a name the redactor is",
+  "never told to remove. The failure is one step removed from the leak, which",
+  "is exactly what makes it easy to miss in review.",
+  "",
+  "Each case is chosen for a rule rather than for coverage. Adding one means",
+  "naming the rule it pins in its id."
+ ],
+ "cases": [
+  {
+   "id": "pilot_header_wrapped",
+   "known_name": "Chua Beng Huat",
+   "note": "Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·\n18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902\nInsurance: AIA Singapore\n\n14/03/2026. Admitted Mount Elizabeth Hospital. Discharged 17/03/2026.\nBraddell Family Clinic, 22 Braddell Road, Singapore 359915. Tel 62551234.\n",
+   "expect": {
+    "full_name": "Chua Beng Huat",
+    "nric": "S7211043C",
+    "dob": "1972-11-04",
+    "phone": "91112233",
+    "address": "18 Toa Payoh Lorong 4, Singapore 310018",
+    "policy_number": "GHS-4471902",
+    "insurer": "AIA",
+    "sources": {
+     "nric": "patient-line",
+     "dob": "patient-line",
+     "phone": "patient-line",
+     "address": "patient-line",
+     "policy_number": "patient-line",
+     "full_name": "patient-line",
+     "insurer": "labelled"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "labelled_one_per_line",
+   "known_name": "Nurul Aisyah Binte Rahman",
+   "note": "Name: Nurul Aisyah Binte Rahman\nNRIC: S8830517D\nDOB: 17/05/1988\nMobile: 98765432\nAddress: 5 Tampines Street 21, Singapore 529391\nPolicy No: GE-88213\nInsurer: Great Eastern\n\n02/04/2026. 37F presents day 4 of fever.\n",
+   "expect": {
+    "full_name": "Nurul Aisyah Binte Rahman",
+    "nric": "S8830517D",
+    "dob": "1988-05-17",
+    "phone": "98765432",
+    "address": "5 Tampines Street 21, Singapore 529391",
+    "policy_number": "GE-88213",
+    "insurer": "Great Eastern",
+    "sources": {
+     "full_name": "labelled",
+     "nric": "labelled",
+     "dob": "labelled",
+     "phone": "labelled",
+     "address": "labelled",
+     "policy_number": "labelled",
+     "insurer": "labelled"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "prose_only_no_name_no_dob",
+   "known_name": "",
+   "note": "Seen 02/08/2026. 34F, S9012345A, contactable at 98765432, staying at\nBlk 5 Marine Terrace #12-34, Singapore 440005.\nReview 09/08/2026.\n",
+   "expect": {
+    "full_name": null,
+    "nric": "S9012345A",
+    "dob": null,
+    "phone": "98765432",
+    "address": "Blk 5 Marine Terrace #12-34, Singapore 440005.",
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "nric": "sole-match",
+     "phone": "sole-match",
+     "address": "sole-match"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "only_the_clinics_number",
+   "known_name": "Goh Siew Lan",
+   "note": "Patient: Goh Siew Lan\nSeen 11/08/2026 for review of diabetes.\nClinic address 9 Serangoon Road, Singapore 218000. Clinic tel 62221234.\n",
+   "expect": {
+    "full_name": "Goh Siew Lan",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "two_nrics_one_is_the_husband",
+   "known_name": "Goh Siew Lan",
+   "note": "Patient: Goh Siew Lan\nS6123456B, seen with her husband S6234567C.\nBlk 210 Ang Mo Kio Ave 3 #05-11, Singapore 560210\n",
+   "expect": {
+    "full_name": "Goh Siew Lan",
+    "nric": "S6123456B",
+    "dob": null,
+    "phone": null,
+    "address": "Blk 210 Ang Mo Kio Ave 3 #05-11, Singapore 560210",
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled",
+     "nric": "sole-match",
+     "address": "sole-match"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "policy_shaped_like_a_mobile",
+   "known_name": "Sivakumar s/o Raju",
+   "note": "Patient: Sivakumar s/o Raju\nDOB 14/03/78\nPolicy GHS-88213004 (AIA)\nSeen 05/08/2026 for review of hypertension.\n",
+   "expect": {
+    "full_name": "Sivakumar s/o Raju",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": "GHS-88213004",
+    "insurer": "AIA",
+    "sources": {
+     "full_name": "labelled",
+     "policy_number": "header-line",
+     "insurer": "header-line"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "one_phone_written_two_ways",
+   "known_name": "Tan Ah Kow",
+   "note": "Patient: Tan Ah Kow\nContactable at +65 9123 4567 or 9123-4567.\nSeen 02/08/2026.\n",
+   "expect": {
+    "full_name": "Tan Ah Kow",
+    "nric": null,
+    "dob": null,
+    "phone": "+65 9123 4567",
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled",
+     "phone": "sole-match"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "one_policy_written_two_ways",
+   "known_name": "Lim Hui Xian",
+   "note": "Name: Lim Hui Xian\nNRIC S8012345D  DOB 14/03/1978\nPolicy GHS-88213004 or GH-88213004 (AIA Singapore)\n",
+   "expect": {
+    "full_name": "Lim Hui Xian",
+    "nric": "S8012345D",
+    "dob": "1978-03-14",
+    "phone": null,
+    "address": null,
+    "policy_number": "GHS-88213004",
+    "insurer": "AIA",
+    "sources": {
+     "full_name": "labelled",
+     "nric": "header-line",
+     "dob": "header-line",
+     "policy_number": "labelled-inline",
+     "insurer": "sole-match"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "two_phones_are_a_question",
+   "known_name": "Lim Hui Xian",
+   "note": "Name: Lim Hui Xian\nHP 9123 4567 / 6123 4567\n",
+   "expect": {
+    "full_name": "Lim Hui Xian",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled"
+    },
+    "choices": {
+     "phone": [
+      "9123 4567",
+      "6123 4567"
+     ]
+    }
+   }
+  },
+  {
+   "id": "an_old_date_is_suggested",
+   "known_name": "Lim Ah Moi",
+   "note": "Patient: Lim Ah Moi\n68F, records go back to 12/05/1958. Seen 11/08/2026.\n",
+   "expect": {
+    "full_name": "Lim Ah Moi",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled"
+    },
+    "choices": {
+     "dob": [
+      "1958-05-12"
+     ]
+    }
+   }
+  },
+  {
+   "id": "no_year_is_never_a_birth_date",
+   "known_name": "Lim Ah Moi",
+   "note": "Patient: Lim Ah Moi\nSeen 2/8, review 9/8. MC from 15/3.\n",
+   "expect": {
+    "full_name": "Lim Ah Moi",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "plan_is_not_a_policy",
+   "known_name": "Ng Wei Jie",
+   "note": "Patient: Ng Wei Jie\nPlan: review 2/52 if no better\nEmployer name: Sunrise Logistics Pte Ltd\n",
+   "expect": {
+    "full_name": "Ng Wei Jie",
+    "nric": null,
+    "dob": null,
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "nric_inside_a_reference",
+   "known_name": "Rahmat bin Osman",
+   "note": "Patient: Rahmat bin Osman\nDate of Birth: 3 April 1971\nRef REF-S7123456J\nEmail rahmat.osman@example.com\n",
+   "expect": {
+    "full_name": "Rahmat bin Osman",
+    "nric": "S7123456J",
+    "dob": "1971-04-03",
+    "phone": null,
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "full_name": "labelled",
+     "dob": "labelled",
+     "nric": "sole-match"
+    },
+    "choices": {}
+   }
+  },
+  {
+   "id": "header_block_one_value_per_line",
+   "known_name": "Tan Wei Ling",
+   "note": "Tan Wei Ling\nS8012345D\n14/03/1978\n91234567\n\nSeen 02/08/2026. Sore throat.\n",
+   "expect": {
+    "full_name": "Tan Wei Ling",
+    "nric": "S8012345D",
+    "dob": "1978-03-14",
+    "phone": "91234567",
+    "address": null,
+    "policy_number": null,
+    "insurer": null,
+    "sources": {
+     "nric": "header-block",
+     "dob": "header-block",
+     "phone": "header-block",
+     "full_name": "header-block"
+    },
+    "choices": {}
+   }
+  }
+ ]
+}

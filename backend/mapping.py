@@ -77,6 +77,14 @@ Rules:
 detail, or a value you would have to reason towards are all "missing".
 - Use "extracted" only when the notes state the answer directly, and quote \
 that statement verbatim in source.
+- source is a QUOTE, for "inferred" exactly as much as for "extracted". Copy \
+it out of the notes character for character — never paraphrase it, never \
+describe it, never leave it empty because the value is not written in there. \
+An inferred value was worked out FROM a sentence, and that sentence is what \
+goes in source; what you worked out goes in reasoning. The doctor is shown \
+the note with your quote marked in it, so a quote that is not in the notes \
+word for word cannot be marked at all, and the value arrives looking as \
+though it came from nowhere.
 - Use "inferred" sparingly: only where a clinician reading these notes would \
 reach the same conclusion without hesitation (for example an ICD code for an \
 explicitly named diagnosis). If two reasonable clinicians might answer \
@@ -268,6 +276,11 @@ class MappedField(BaseModel):
     # wrote" above a Confirm button tells the doctor there is nothing to do.
     # None for every row whose status already explains itself.
     recheck: str | None = None
+    # Set only when the CALLER redacted the note itself and therefore holds the
+    # demographics. The server was never told the patient's name, so it cannot
+    # fill this row — it names the field the browser must copy in, and the
+    # browser is the only place that value exists.
+    fill_from: str | None = None
     # Copied from the schema so the review screen can offer the real choices
     # instead of a free-text box, and so a doctor correcting a value picks
     # something the control will accept rather than retyping the near-miss the
@@ -625,6 +638,69 @@ def _demographic_value(record: PatientRecord, attr: str) -> str | None:
         return f"{record.dob.day:02d}/{record.dob.month:02d}/{record.dob.year}"
     value = getattr(record, attr, None)
     return value if value is None or isinstance(value, str) else str(value)
+
+
+def assemble_redacted(
+    schema: FormSchema,
+    answers: dict[str, FieldAnswer],
+) -> list[MappedField]:
+    """Rows for a caller that redacted the note in its own browser.
+
+    Two things this does NOT do, and both are the point.
+
+    It does not fill a demographic field, because it was not given one. The
+    row comes back blank with `fill_from` naming the value the browser holds,
+    and the browser copies it in. That is the difference between a server that
+    is trusted with a patient's name and a server that never receives it.
+
+    It does not re-merge. Tokens travel back out exactly as the model wrote
+    them — "[PATIENT] was admitted on [DOB]" — because the map from token to
+    real value stayed in the panel. Substituting them is the last thing that
+    happens before a doctor reads the row, and it happens on their machine.
+
+    The unresolved-token rule therefore moves to the caller too. Anything that
+    still reads as a token after the panel has done its substitution is a token
+    the model invented, and must be blanked and held exactly as it is here.
+    """
+    rows: list[MappedField] = []
+    for field in schema.fields:
+        if field.source.startswith("demographics."):
+            rows.append(
+                MappedField(
+                    field_id=field.id,
+                    pdf_field_name=field.pdf_field_name,
+                    field_type=field.type,
+                    label=field.display_label,
+                    help=field.description,
+                    value=None,
+                    status="demographic",
+                    source=None,
+                    needs_review=False,
+                    fill_from=field.source.removeprefix("demographics."),
+                    options=field.options,
+                    step=field.step,
+                )
+            )
+            continue
+
+        answer = answers.get(field.id) or FieldAnswer(value=None, status="missing", source=None)
+        rows.append(
+            MappedField(
+                field_id=field.id,
+                pdf_field_name=field.pdf_field_name,
+                field_type=field.type,
+                label=field.display_label,
+                help=field.description,
+                value=answer.value,
+                status=answer.status,
+                source=answer.source,
+                reasoning=answer.reasoning if answer.status == "inferred" else None,
+                needs_review=answer.status != "extracted",
+                options=field.options,
+                step=field.step,
+            )
+        )
+    return rows
 
 
 def assemble_claim(

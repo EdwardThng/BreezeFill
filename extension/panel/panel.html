@@ -91,10 +91,43 @@
           Hide
         </button>
       </div>
-      <pre class="notepane-text" id="note-text"></pre>
+      <!--
+        Focusable and named on purpose. Chrome already makes a scrolling box
+        keyboard-reachable so it can be scrolled with the arrow keys, but it
+        arrived in the tab order as an unnamed <pre> announcing the whole
+        consultation. Saying what it is costs one attribute.
+      -->
+      <pre
+        class="notepane-text"
+        id="note-text"
+        tabindex="0"
+        role="region"
+        aria-label="The consultation, with the sentence this value came from marked"
+      ></pre>
     </div>
 
     <div class="scroll" id="scroll">
+      <!--
+        The way back to a review that is still standing, and only then.
+
+        Stepping back to a finished step hides everything ahead of it, which is
+        right while a claim is being built and wrong once one has been mapped:
+        the answers are still in memory and there was no route to them. A
+        doctor who opened "Patient" to check a spelling lost a screen of
+        reviewed values with no way back but mapping again.
+
+        Two conditions, both read at render time — see updateBackToReview. Not
+        on the review itself, and not unless the review carries an ANSWER: a
+        mapping that came back entirely missing is a screen of empty boxes, and
+        a route back to that promises something it does not have.
+
+        The label carries the count for the same reason. The walk-forward
+        buttons still reach this step, so nothing here is the only way through.
+      -->
+      <button class="back-to-review" id="back-to-review" type="button" hidden>
+        Back to the mapped answers
+      </button>
+
       <!-- Finished steps, one hairline row each. Moved under the work once
            there are mapped values on screen — see placeLedger. -->
       <div class="done-rows" id="done-rows"></div>
@@ -131,19 +164,14 @@
         </h2>
 
         <!--
-          What is being read, not a choice to make. BreezeFill answers the
-          questions on the page in front of the doctor either way; naming a
-          form here only means the bank has better instructions for some of
-          those questions than the page's own wording provides.
+          There is no form picker here any more, and identification did not go
+          with it. Which schema fits this page still decides how sharply each
+          of its questions is put to the model — a described control travels
+          under the schema's wording instead of the page's — but that is a
+          thing BreezeFill works out, not a thing to ask a doctor. It named a
+          form they had not chosen to fill, above a box for a note that had not
+          been pasted, and the answer changed nothing they could act on.
         -->
-        <div class="field">
-          <span>Insurer form</span>
-          <p class="detected" id="form-detected">Checking this page…</p>
-          <button class="link" id="form-override" type="button" hidden>
-            Choose a different form
-          </button>
-          <select id="form-id" hidden aria-label="Insurer form"></select>
-        </div>
 
         <label class="field">
           <span class="visually-hidden">Consultation note</span>
@@ -221,40 +249,72 @@
             birth, 2 found in the note — pick the patient's, 9123 4567, 6123
             4567". `for` names the question and nothing else.
           -->
-          <div class="review-row" id="row-nric">
-            <div class="badge" id="badge-nric"></div>
+          <!--
+            The order is the card's, not the reading order's: label, then the
+            state, then the value. The badge sits between them because the two
+            states that print anything — a question and a blank — are things to
+            know BEFORE reading what is in the box, and because a confirmed row
+            hides that line entirely and closes the gap.
+
+            A blank row says it is blank and then gets out of the way. There
+            was an Add button here that opened the box on request; it was one
+            click in front of the only thing the doctor can do on that row,
+            and the row already says "Nothing found" in words. The box is
+            simply there, marked red under the caret's rule rather than drawn
+            as an empty field.
+
+            The tick is last and empty of meaning on its own: it is what a
+            confirmed row shows INSTEAD of the badge's sentence, which is
+            moved out of the layout but kept in the accessibility tree. So
+            `aria-hidden` here is not an omission — the sentence is still
+            announced, from the element the eye no longer needs.
+
+            `class="mono"` marks the three values with a shape. An NRIC read
+            back against a note is read character by character, and a
+            proportional face hides a transposed digit that a fixed grid
+            shows. The address and the insurer are words and stay in the body
+            face.
+          -->
+          <div class="review-row detail" id="row-nric">
             <label class="label" for="nric">NRIC</label>
-            <input id="nric" type="text" autocomplete="off" />
+            <span class="badge" id="badge-nric"></span>
+            <input id="nric" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-nric"></div>
           </div>
-          <div class="review-row" id="row-dob">
-            <div class="badge" id="badge-dob"></div>
+          <div class="review-row detail" id="row-dob">
             <label class="label" for="dob">Date of birth</label>
-            <input id="dob" type="date" />
+            <span class="badge" id="badge-dob"></span>
+            <input id="dob" class="mono" type="date" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-dob"></div>
           </div>
-          <div class="review-row" id="row-phone">
-            <div class="badge" id="badge-phone"></div>
+          <div class="review-row detail" id="row-phone">
             <label class="label" for="phone">Phone</label>
-            <input id="phone" type="text" autocomplete="off" />
+            <span class="badge" id="badge-phone"></span>
+            <input id="phone" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-phone"></div>
           </div>
-          <div class="review-row" id="row-policy-number">
-            <div class="badge" id="badge-policy-number"></div>
+          <div class="review-row detail" id="row-policy-number">
             <label class="label" for="policy-number">Policy number</label>
-            <input id="policy-number" type="text" autocomplete="off" />
+            <span class="badge" id="badge-policy-number"></span>
+            <input id="policy-number" class="mono" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-policy-number"></div>
           </div>
-          <div class="review-row" id="row-insurer">
-            <div class="badge" id="badge-insurer"></div>
+          <div class="review-row detail" id="row-insurer">
             <label class="label" for="insurer">Insurer</label>
+            <span class="badge" id="badge-insurer"></span>
             <input id="insurer" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-insurer"></div>
           </div>
-          <div class="review-row" id="row-address">
-            <div class="badge" id="badge-address"></div>
+          <div class="review-row detail" id="row-address">
             <label class="label" for="address">Address</label>
+            <span class="badge" id="badge-address"></span>
             <input id="address" type="text" autocomplete="off" />
+            <span class="tick" aria-hidden="true">✓</span>
             <div class="choices" id="choices-address"></div>
           </div>
         </details>
@@ -288,7 +348,15 @@
         BreezeFill for anything.
       -->
       <section class="step" id="step-page" aria-labelledby="h-page" hidden>
-        <h2 id="h-page">This page</h2>
+        <!--
+          Named for what the doctor does here, not for what the screen used
+          to report. It began as a survey of the insurer's form — "7 questions
+          on this page", and a button to map them — and "This page" fitted
+          that. Then the review moved onto the same screen: press Map and the
+          survey box disappears, leaving the consultation, every mapped answer
+          and the Fill button under a heading still naming the form.
+        -->
+        <h2 id="h-page">Check the answers</h2>
 
         <!-- What was found, and the button that sends it. Hidden once mapped. -->
         <div class="prompt" id="map-prompt" hidden>
@@ -368,6 +436,15 @@
       </p>
     </details>
 
+    <!--
+      The privacy modules load FIRST, and panel.js will not map without them.
+      They are what keeps the patient's details in this tab: parse.js reads the
+      identifiers out of the paste, redact.js takes them back out of the note
+      before it is sent, and the map that could put them back never leaves this
+      document.
+    -->
+    <script src="../privacy/parse.js"></script>
+    <script src="../privacy/redact.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>

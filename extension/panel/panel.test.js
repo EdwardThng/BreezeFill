@@ -23,6 +23,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PANEL_HTML = readFileSync(resolve(HERE, "panel.html"), "utf8");
 const PANEL_JS = readFileSync(resolve(HERE, "panel.js"), "utf8");
+// The panel does not map without these, and that is the point of them: the
+// note is redacted in this document before anything is sent. They are loaded
+// here the way panel.html loads them rather than stubbed, so a test that
+// asserts what went on the wire is asserting about the real redactor.
+const PARSE_JS = readFileSync(resolve(HERE, "../privacy/parse.js"), "utf8");
+const REDACT_JS = readFileSync(resolve(HERE, "../privacy/redact.js"), "utf8");
+const PATTERNS = JSON.parse(readFileSync(resolve(HERE, "../privacy/patterns.json"), "utf8"));
 
 const FORMS = [
   {
@@ -101,6 +108,7 @@ function loadPanel() {
   // The panel never reads a tab's address, but it does ask the injected
   // script to survey the page. Nothing here grants it access.
   globalThis.chrome = {
+    runtime_manifest_version: undefined,
     tabs: {
       query: vi.fn().mockResolvedValue([{ id: 1 }]),
       sendMessage: vi.fn((_tabId, message) =>
@@ -119,12 +127,39 @@ function loadPanel() {
       },
     },
   };
-  // eslint-disable-next-line no-eval
+  /* eslint-disable no-eval */
+  (0, eval)(PARSE_JS);
+  (0, eval)(REDACT_JS);
+  globalThis.breezefillParse.usePatterns(PATTERNS);
+  globalThis.breezefillRedact.usePatterns(PATTERNS);
+  // Parsing is stubbed by default for the same reason the backend was: these
+  // tests are about what the panel does with a parse, and the parser has its
+  // own corpus in extension/privacy/parse.test.js.
+  stubParse(PARSED);
   (0, eval)(PANEL_JS);
+  /* eslint-enable no-eval */
   return globalThis.breezefillPanel;
 }
 
 const $ = (id) => document.getElementById(id);
+
+/** Every call the panel made to the local parser, with its arguments. */
+let parseCalls;
+
+/**
+ * Stand in for the local parser.
+ *
+ * Takes either a record to return or a function to run. It replaces the real
+ * `parseDemographics`, which used to be a stubbed HTTP route — the move from
+ * one to the other is exactly the change these tests exist to survive.
+ */
+function stubParse(result) {
+  globalThis.breezefillParse.parseDemographics = (...args) => {
+    parseCalls.push(args);
+    if (typeof result === "function") return result(...args);
+    return result;
+  };
+}
 
 /** Let the microtask queue drain, so an awaited fetch settles. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -149,9 +184,12 @@ function shutDrawer() {
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  parseCalls = [];
   routes = {
     "/forms": () => respond(FORMS),
-    "/parse": () => respond(PARSED),
+    "patterns.json": () => respond(PATTERNS),
+    "/health": () => respond({ status: "ok", forms_loaded: 2, min_extension_version: "0.3.0" }),
+    "/map-redacted": () => respond({ form_id: "__live__", fields: [] }),
     "/map-live": () => respond({ form_id: "__live__", fields: [] }),
     "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
   };
@@ -191,7 +229,7 @@ describe("when the backend is not running", () => {
     // no longer stops anything, since the page's own questions are still
     // answerable without the bank.
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
-    routes["/map-live"] = () => Promise.reject(new TypeError("Failed to fetch"));
+    routes["/map-redacted"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
 
@@ -205,7 +243,10 @@ describe("when the backend is not running", () => {
     // The browser's own wording is what the doctor saw last time, and there
     // is nothing they can do with it.
     expect($("map-status").textContent).not.toContain("Failed to fetch");
-    expect($("map-status").textContent).toContain("Could not reach the backend");
+    expect($("map-status").textContent).toContain("Could not reach BreezeFill's server");
+    // Every failure the doctor can see names a code, so a support email is a
+    // lookup rather than a description of what "did not work" felt like.
+    expect($("map-status").textContent).toContain("BF-NET");
   });
 
   test("a bank that will not load costs sharpness, not the fill", async () => {
@@ -223,7 +264,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(call).toBeTruthy();
     expect(JSON.parse(call[1].body).fields).toHaveLength(LIVE_FIELDS.length);
   });
@@ -235,7 +276,7 @@ describe("when the backend is not running", () => {
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
-    expect($("form-id").options).toHaveLength(0);
+    expect(panel.state.forms).toHaveLength(0);
 
     routes["/forms"] = () => respond(FORMS);
     $("paste").value = "Patient: Chua Beng Huat";
@@ -245,10 +286,9 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    // The bank, plus the standing "No form" entry.
-    expect($("form-id").options).toHaveLength(FORMS.length + 1);
+    expect(panel.state.forms).toHaveLength(FORMS.length);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/map-live"),
+      expect.stringContaining("/map-redacted"),
       expect.anything()
     );
   });
@@ -270,7 +310,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map-live"));
+    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map-redacted"));
     expect(mapped).toBe(false);
     expect($("map-status").textContent).toMatch(/no fillable questions/i);
     expect($("map-status").textContent).not.toContain("Could not reach");
@@ -279,9 +319,9 @@ describe("when the backend is not running", () => {
   test("a failed parse does not overwrite the Map status line", async () => {
     // Two messages competing for one element is how the actionable one got
     // destroyed. The parse reports itself in the drawer instead.
-    routes["/parse"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
+    stubParse(() => { throw new Error("parser unavailable"); });
 
     $("map-status").textContent = "something the doctor needs to read";
     $("paste").value = "Patient: Chua Beng Huat";
@@ -334,7 +374,7 @@ describe("reading the paste", () => {
     // Date of birth is required and this response has none: there is no
     // pattern rule for a bare date, so a missing one stays in the text sent
     // to the model. A name is the same case for the same reason.
-    routes["/parse"] = () => respond({ ...PARSED, dob: null });
+    stubParse({ ...PARSED, dob: null });
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
@@ -382,7 +422,7 @@ describe("reading the paste", () => {
 
     await vi.advanceTimersByTimeAsync(500);
 
-    const parses = globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/parse"));
+    const parses = parseCalls;
     expect(parses).toHaveLength(1);
   });
 });
@@ -396,17 +436,18 @@ describe("identifying the form", () => {
     page.survey = { ...page.survey, candidates: scores };
   };
 
-  test("the best-fitting schema is chosen and the picker stays out of the way", async () => {
+  test("the best-fitting schema is chosen, and nothing is shown for it", async () => {
+    // Identification survived the picker's removal, and stayed invisible: it
+    // decides how sharply each question is put, never which questions are
+    // asked or whether they are.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
       { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
     ]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-    expect($("form-id").hidden).toBe(true);
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("two schemas fitting equally well is not a winner", async () => {
@@ -422,9 +463,6 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    // ...and it is not reported as a failure, because nothing failed: the
-    // page's questions are still what gets answered.
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("a thin match still counts, because a wizard shows one step at a time", async () => {
@@ -432,10 +470,10 @@ describe("identifying the form", () => {
     // only find a third of its fields on the step in front of us. Whatever is
     // picked still has to clear the fill guards before anything is written.
     scored([{ formId: "aia_ghs_claim", matched: 3, intended: 7, matchRate: 0.43 }]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("a match too thin to mean anything does not count", async () => {
@@ -444,15 +482,14 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("the host registered for a form wins when nothing scores", async () => {
     page.survey = { ...page.survey, host: "roboform.com", candidates: [] };
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
   });
 
   test("schemas are scored by their own field labels", async () => {
@@ -508,7 +545,7 @@ describe("mapping the page in front of the doctor", () => {
     const panel = await readyPanel();
     await panel.onMap();
 
-    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(call).toBeTruthy();
     const sent = JSON.parse(call[1].body);
     expect(sent.fields).toEqual([
@@ -531,7 +568,7 @@ describe("mapping the page in front of the doctor", () => {
     await panel.onMap();
 
     const called = globalThis.fetch.mock.calls.map((c) => String(c[0]));
-    expect(called.some((u) => u.endsWith("/map-live"))).toBe(true);
+    expect(called.some((u) => u.endsWith("/map-redacted"))).toBe(true);
     expect(called.some((u) => u.endsWith("/map"))).toBe(false);
   });
 
@@ -574,7 +611,7 @@ describe("mapping the page in front of the doctor", () => {
       [413, /more questions than BreezeFill can map/i],
       [422, /could not read any questions/i],
     ]) {
-      routes["/map-live"] = () => respond({ detail: "..." }, false, status);
+      routes["/map-redacted"] = () => respond({ detail: "..." }, false, status);
       const panel = await readyPanel();
       await panel.onMap();
 
@@ -583,60 +620,17 @@ describe("mapping the page in front of the doctor", () => {
     }
   });
 
-  test("picking a schema by hand names the instructions to use", async () => {
-    const panel = await readyPanel();
-    expect(panel.state.schema).toBeNull();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-    // ...and detection stops overruling it from here on.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("a schema picked by hand can be taken back again", async () => {
-    // There was no way out of the picker: a <select> has no empty state, so
-    // once a doctor named a form the panel kept using its instructions for a
-    // page they had decided it did not describe. Answering from the page's own
-    // wording is a worse-informed fill, not a broken one, and it has to be
-    // reachable.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-
-    $("form-id").value = "";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
-    // Still a human decision, so re-detection on the next wizard step must not
-    // put the schema back.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("the sentence above the picker follows what was picked", async () => {
-    // It used to describe whatever detection last decided, so a doctor who
-    // overrode it read "Reading the questions on this page" above a select
-    // naming an insurer's form — two answers to one question.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-  });
-
-  test("no schema means the picker shows no schema", async () => {
-    // The control and the state have to agree. With the first form standing
-    // selected by default, the panel said a form was in use and mapped without
-    // one, and the disagreement is invisible until the answers come back thin.
+  test("no schema is an ordinary outcome, not a state to get out of", async () => {
+    // There used to be a picker here, and four tests about getting into and
+    // out of it. What it controlled was never whether the page gets filled —
+    // only how sharply each of its questions is put — so the panel works it
+    // out and says nothing. A doctor was being asked to name a form they had
+    // not chosen to fill, above a box for a note they had not pasted.
     const panel = await readyPanel();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-id").value).toBe("");
+    // Nothing is disabled by it, and Map is still the next thing to press.
+    expect($("map-status").textContent).not.toMatch(/pick|choose|select/i);
   });
 });
 
@@ -764,7 +758,7 @@ describe("a form the bank does not have, end to end", () => {
         description: null,
       })),
     };
-    routes["/map-live"] = () => respond({ form_id: "__live__", fields: ROWS });
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields: ROWS });
 
     const panel = loadPanel();
     await settle();
@@ -772,7 +766,6 @@ describe("a form the bank does not have, end to end", () => {
     // 1. The bank was consulted and had nothing that fits — which is not a
     //    stopping point, only the absence of sharper instructions.
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
 
     // 2. The details go in as one paste.
     $("paste").value = "Patient: Chua Beng Huat · S7211043C · 04/11/1972\n14/03/2026. RIF pain, appendicitis.";
@@ -783,7 +776,7 @@ describe("a form the bank does not have, end to end", () => {
 
     // 3. Mapping goes against the page, because there is no schema to use.
     await panel.onMap();
-    const mapCall = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const mapCall = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(JSON.parse(mapCall[1].body).fields.map((f) => f.label)).toEqual(
       CONTROLS.map((c) => c.label)
     );
@@ -804,7 +797,10 @@ describe("a form the bank does not have, end to end", () => {
     // 5. Fill the page.
     page.fill = { ok: true, refused: false, filled: 3, applied: [], report: EMPTY_REPORT };
     await panel.onFill();
-    expect($("fill-status").textContent).toMatch(/filled 3 field/i);
+    // Said once, in the report. The status line used to repeat it in
+    // different words directly above.
+    expect($("fill-report").textContent).toMatch(/filled 3 field/i);
+    expect($("fill-status").textContent).toBe("");
 
     // 6. And the form comes back as a schema for the bank.
     expect($("step-draft").hidden).toBe(false);
@@ -829,7 +825,6 @@ describe("a form the bank does not have, end to end", () => {
     const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
     expect(panel.state.schema.form_id).toBe("roboform_test_v1");
 
     $("paste").value = "Patient: Chua Beng Huat";
@@ -844,7 +839,7 @@ describe("a form the bank does not have, end to end", () => {
     // A recognised page is mapped the same way as any other — what the match
     // bought was the instructions, not a different route.
     const paths = globalThis.fetch.mock.calls.map((c) => String(c[0]));
-    expect(paths.some((p) => p.endsWith("/map-live"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/map-redacted"))).toBe(true);
     // No draft: the bank already describes this form, and a second schema for
     // it is how two descriptions of one form start disagreeing.
     expect($("step-draft").hidden).toBe(true);
@@ -929,7 +924,7 @@ describe("the check screen says what it knows about each value", () => {
   test("a field being asked about is marked as needing a check", async () => {
     const panel = loadPanel();
     await settle();
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -940,7 +935,7 @@ describe("the check screen says what it knows about each value", () => {
   test("picking a candidate settles the badge with it", async () => {
     const panel = loadPanel();
     await settle();
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -957,7 +952,71 @@ describe("the check screen says what it knows about each value", () => {
     await panel.parsePaste();
 
     expect($("badge-insurer").textContent).toContain("Nothing found");
-    expect($("row-insurer").className).toBe("review-row");
+    expect($("row-insurer").className).toContain("missing");
+    expect($("row-insurer").className).not.toContain("confirmed");
+  });
+
+  // The card stopped saying "Found in the note" and started showing a tick.
+  // These pin the two halves of that trade, because only one of them is
+  // visible and the invisible half is the one that carries the meaning.
+
+  test("a confirmed value is marked, and the mark is not the only record", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat · S7211043C";
+    await panel.parsePaste();
+
+    // The tick is what the eye gets. It is in every row's markup, so its
+    // presence proves nothing — the row's state is what turns it on.
+    expect($("row-nric").querySelector(".tick")).not.toBeNull();
+    expect($("row-nric").className).toContain("confirmed");
+
+    // ...and the sentence is still there, unshortened. A screen reader has no
+    // tick to look at, and "the note said this" and "you said this" are
+    // different claims about a value that is about to become the dictionary
+    // redaction scrubs the note with.
+    expect($("badge-nric").textContent).toBe("Found in the note");
+  });
+
+  test("a field nothing answered is typed into directly", async () => {
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    const row = $("row-insurer");
+    expect(row.className).toContain("missing");
+
+    // There is nothing to press first. A button here once opened the box on
+    // request; it stood in front of the only thing a doctor can do on this
+    // row, and the row says "Nothing found" in words already.
+    expect(row.querySelector(".add")).toBeNull();
+    expect(row.querySelector("input")).toBe($("insurer"));
+
+    $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(row.className).not.toContain("missing");
+    expect(row.className).toContain("confirmed");
+    expect($("badge-insurer").textContent).toBe("You typed this");
+  });
+
+  test("the row keeps its layout through a keystroke", async () => {
+    // updateFound runs on every one of them, and it used to write the class
+    // list out in full — which deleted `detail`, the class carrying the whole
+    // card layout, and dropped the row back to the mapped row's.
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    $("insurer").value = "A";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+    $("insurer").value = "";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect($("row-insurer").className).toContain("detail");
+    expect($("row-insurer").className).toContain("missing");
   });
 });
 
@@ -982,6 +1041,91 @@ describe("looking back at a finished step", () => {
     [...document.querySelectorAll(".done-row")].find((row) =>
       row.querySelector(".done-name").textContent.includes(title)
     );
+
+  test("stepping back from a mapped review offers the way back to it", async () => {
+    // showStep hides every step ahead of the one being shown, which is right
+    // while a claim is being built and wrong once one has been mapped: the
+    // answers are still in memory, and going back to check a spelling took
+    // them off screen with mapping again as the only route back — a model
+    // call, and every confirm click thrown away.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text", help: null,
+        value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ];
+    panel.showStep("page");
+    expect($("back-to-review").hidden).toBe(true);   // already there
+
+    doneRow("Patient").click();   // the row IS the button back
+    expect($("step-name").hidden).toBe(false);
+    expect($("step-page").hidden).toBe(true);
+    expect($("back-to-review").hidden).toBe(false);
+
+    $("back-to-review").click();
+    expect($("step-page").hidden).toBe(false);
+    // The review was hidden, never rebuilt: the row is the same one.
+    expect(panel.state.rows).toHaveLength(1);
+  });
+
+  test("no review, no way back to one", async () => {
+    // On the way through, the button would point at a screen that has not
+    // happened. It appears only once there is something behind it.
+    const panel = loadPanel();
+    await settle();
+    expect($("back-to-review").hidden).toBe(true);
+
+    panel.showStep("note");
+    expect($("back-to-review").hidden).toBe(true);
+  });
+
+  test("a review with no answers on it is not worth going back to", async () => {
+    // The correction. Rows alone was the old test, and a mapping where every
+    // question came back `missing` has rows and nothing on them — so the
+    // button appeared over a screenful of empty boxes and promised something.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text",
+        help: null, value: null, status: "missing", needs_review: true },
+      { field_id: "icd", label: "ICD-10", field_type: "text",
+        help: null, value: "", status: "missing", needs_review: true },
+    ];
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(true);
+
+    // One answer is enough, and the label says how many so the promise can be
+    // checked before it is clicked.
+    panel.state.rows[0].value = "Acute appendicitis";
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(false);
+    expect($("back-to-review").textContent).toContain("1 mapped answer");
+
+    panel.state.rows[1].value = "K35.80";
+    panel.showStep("name");
+    expect($("back-to-review").textContent).toContain("2 mapped answers");
+  });
+
+  test("rows discarded by a section change take the button with them", async () => {
+    // A wizard step change throws the answers away on purpose. A button
+    // leading to an empty review is worse than no button, so it is gated on
+    // the rows rather than on a flag saying a mapping once happened.
+    const panel = loadPanel();
+    await settle();
+    await toReview(panel);
+    panel.state.rows = [
+      { field_id: "diagnosis", label: "Diagnosis", field_type: "text", help: null,
+        value: "Acute appendicitis", status: "extracted", needs_review: false },
+    ];
+    panel.showStep("name");
+    expect($("back-to-review").hidden).toBe(false);
+
+    panel.state.rows = [];
+    panel.renderRows();
+    expect($("back-to-review").hidden).toBe(true);
+  });
 
   test("the row carries the value, so there is nothing to expand", async () => {
     const panel = loadPanel();
@@ -1013,7 +1157,7 @@ describe("looking back at a finished step", () => {
   test("the finished steps sit UNDER the values once there are any", async () => {
     // Arriving at the review used to mean arriving at a list of steps already
     // finished, with the values the doctor came for below the fold.
-    routes["/map-live"] = () =>
+    routes["/map-redacted"] = () =>
       respond({
         form_id: "__live__",
         fields: [
@@ -1053,6 +1197,316 @@ describe("looking back at a finished step", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Nothing identifying leaves this tab
+// ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// The kill switch
+// ---------------------------------------------------------------------------
+
+describe("a build the backend has disowned", () => {
+  // The gap redacting in the browser cannot close by itself: Chrome updates
+  // an extension on its own schedule and a store review takes days, so a
+  // redaction bug cannot be fixed in minutes the way a server one can. The
+  // server can still refuse the old build, and a panel that cannot map cannot
+  // send a note it redacted badly.
+
+  test("version comparison is numeric, not alphabetical", () => {
+    const panel = loadPanel();
+    expect(panel.olderThan("0.9.0", "0.10.0")).toBe(true);
+    expect(panel.olderThan("0.10.0", "0.9.0")).toBe(false);
+    expect(panel.olderThan("0.3.0", "0.3.0")).toBe(false);
+    expect(panel.olderThan("1.0", "0.3.0")).toBe(false);
+  });
+
+  test("an out-of-date panel refuses to send anything", async () => {
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.2.1" });
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+    expect($("map-status").textContent).toMatch(/out of date/i);
+  });
+
+  test("a current panel is not stopped", async () => {
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.3.0" });
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(1);
+  });
+
+  test("an unreachable backend does not stop a doctor working", async () => {
+    // Fails open on purpose. A blocked panel is the right answer to "that
+    // build puts names on the wire" and the wrong one to a flaky network.
+    const panel = loadPanel();
+    await settle();
+    chrome.runtime.getManifest = () => ({ version: "0.3.0" });
+    routes["/health"] = () => Promise.reject(new TypeError("Failed to fetch"));
+
+    expect(await panel.checkVersion()).toBe(false);
+  });
+});
+
+describe("what actually goes on the wire", () => {
+  // The claim the product makes, asserted against the requests themselves
+  // rather than against the code that builds them. Every test here reads what
+  // fetch was handed and looks for the patient in it.
+
+  const PATIENT = {
+    "full-name": "Chua Beng Huat",
+    nric: "S7211043C",
+    dob: "1972-11-04",
+    phone: "91112233",
+    "policy-number": "GHS-4471902",
+    insurer: "AIA",
+    address: "18 Toa Payoh Lorong 4, Singapore 310018",
+  };
+
+  const NOTE =
+    "Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233\n" +
+    "18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902\n\n" +
+    "14/03/2026. Mr Chua presents with RIF pain. Admitted Mount Elizabeth Hospital.";
+
+  /** Everything the panel sent, as one string to search. */
+  const everythingSent = () =>
+    globalThis.fetch.mock.calls
+      .map((call) => (call[1] && call[1].body ? String(call[1].body) : ""))
+      .join("\n");
+
+  async function mapWith(panel, note = NOTE) {
+    for (const [id, value] of Object.entries(PATIENT)) $(id).value = value;
+    $("paste").value = note;
+    await panel.onMap();
+  }
+
+  test("not one of the patient's identifiers is in any request", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    for (const identifier of [
+      "Chua Beng Huat", "Chua", "S7211043C", "04/11/1972", "91112233",
+      "GHS-4471902", "18 Toa Payoh",
+    ]) {
+      expect(sent, identifier).not.toContain(identifier);
+    }
+  });
+
+  test("the note is sent, tokenised — not withheld", async () => {
+    // The other half of the claim. Redaction that sent nothing would pass the
+    // test above and fill no forms.
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    expect(sent).toContain("[PATIENT]");
+    expect(sent).toContain("[NRIC]");
+    expect(sent).toContain("RIF pain");
+    // Not a patient identifier, and the claim needs it.
+    expect(sent).toContain("Mount Elizabeth Hospital");
+  });
+
+  test("the request carries no patient record at all", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    const body = JSON.parse(call[1].body);
+    expect(body.patient).toBeUndefined();
+    expect(Object.keys(body).sort()).toEqual(["fields", "redacted_text"]);
+  });
+
+  test("the map that could undo the tokens is never sent", async () => {
+    // It is the one thing that makes the tokens reversible. It stays here.
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    expect(sent).not.toContain("redaction_map");
+    expect(sent).not.toContain("[PATIENT]\":");
+  });
+});
+
+describe("it refuses rather than sending a note it could not redact", () => {
+  test("with the shapes unloaded, nothing is posted", async () => {
+    // The failure that must never degrade gracefully. A warning is a thing a
+    // busy doctor clicks past, and the note cannot be recalled afterwards.
+    const panel = loadPanel();
+    await settle();
+    globalThis.breezefillRedact.usePatterns = () => {};
+    globalThis.breezefillRedact.ready = () => false;
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Chua Beng Huat, seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+    expect($("map-status").textContent).toMatch(/will not send it/i);
+  });
+
+  test("a note with no name to redact against is refused", async () => {
+    // A name has no shape. Without one the patterns cannot find it, so a note
+    // that went out would look redacted and would still carry it.
+    const panel = loadPanel();
+    await settle();
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("paste").value = "Chua Beng Huat, seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+  });
+});
+
+describe("the note is redacted at send time, never cached", () => {
+  test("a name typed after the parse is still masked", async () => {
+    // Paste, parse, then keep typing. Text redacted against the dictionary as
+    // it stood ten seconds ago is text redacted against the wrong dictionary.
+    const panel = loadPanel();
+    await settle();
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    await panel.parsePaste();
+
+    // ...and now the doctor adds a sentence.
+    $("paste").value += "\nMr Chua also reports a cough. NRIC S7211043C confirmed.";
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    const body = JSON.parse(call[1].body);
+    expect(body.redacted_text).toContain("cough");
+    expect(body.redacted_text).not.toContain("Chua");
+    expect(body.redacted_text).not.toContain("S7211043C");
+  });
+});
+
+describe("the patient comes back in this tab", () => {
+  const ROWS = [
+    {
+      field_id: "patient_name", pdf_field_name: "", field_type: "text",
+      label: "Patient name", help: null, value: null, status: "demographic",
+      source: null, needs_review: false, fill_from: "full_name", options: [], step: null,
+    },
+    {
+      field_id: "dob", pdf_field_name: "", field_type: "date",
+      label: "Date of birth", help: null, value: null, status: "demographic",
+      source: null, needs_review: false, fill_from: "dob", options: [], step: null,
+    },
+    {
+      field_id: "diagnosis", pdf_field_name: "", field_type: "text",
+      label: "Diagnosis", help: null, value: "Acute appendicitis", status: "extracted",
+      source: "[PATIENT] presents with RIF pain", needs_review: false,
+      fill_from: null, options: [], step: null,
+    },
+    {
+      field_id: "invented", pdf_field_name: "", field_type: "text",
+      label: "Ward", help: null, value: "Admitted under [NRIC_9]", status: "extracted",
+      source: null, needs_review: false, fill_from: null, options: [], step: null,
+    },
+  ];
+
+  async function mapReturning(panel, rows) {
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields: rows });
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. RIF pain. Seen 14/03/2026.";
+    await panel.onMap();
+    return panel.state.rows;
+  }
+
+  test("a demographic row is filled from the box the doctor checked", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "patient_name").value).toBe("Chua Beng Huat");
+  });
+
+  test("a date is written the way a form wants it, not as the input holds it", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "dob").value).toBe("04/11/1972");
+  });
+
+  test("an ambiguous date is held for a second read", async () => {
+    // 04/11 could be 4 November or 11 April, and the form will read it one
+    // way. Same sentence the server shows, because it is the same check.
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    const dob = rows.find((r) => r.field_id === "dob");
+    expect(dob.needs_review).toBe(true);
+    expect(dob.recheck).toMatch(/right way round/i);
+  });
+
+  test("the model's tokens become the patient again, here", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "diagnosis").source).toBe(
+      "Chua Beng Huat presents with RIF pain"
+    );
+  });
+
+  test("a token the model invented is blanked and held, never written", async () => {
+    // [NRIC_9] is not in the map because nothing produced it. Letting it
+    // through would put a raw token on an insurer's form.
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    const invented = rows.find((r) => r.field_id === "invented");
+    expect(invented.value).toBe(null);
+    expect(invented.status).toBe("missing");
+    expect(invented.needs_review).toBe(true);
+  });
+});
+
 describe("everything pasted is one corpus", () => {
   // There used to be a second box, for the things a claim form asks about that
   // a consultation note does not hold — a ward class, an admission reference.
@@ -1087,9 +1541,7 @@ describe("everything pasted is one corpus", () => {
     $("paste").value = "Admitted 14/03/2026, ward B1.\nPatient: Chua Beng Huat · S7211043C";
     await panel.parsePaste();
 
-    const sent = JSON.parse(
-      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
-    );
+    const sent = { text: parseCalls[parseCalls.length - 1][0] };
     expect(sent.text).toContain("S7211043C");
   });
 
@@ -1105,10 +1557,9 @@ describe("everything pasted is one corpus", () => {
     $("paste").value = "Chua Beng Huat · Tan Wei Ling · S7211043C";
     await panel.parsePaste();
 
-    const sent = JSON.parse(
-      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
-    );
-    expect(sent.full_name).toBe("Chua Beng Huat");
+    const [text, knownName] = parseCalls[parseCalls.length - 1];
+    expect(knownName).toBe("Chua Beng Huat");
+    expect(text).toContain("Tan Wei Ling");
   });
 
   test("the text sent is exactly what was pasted", async () => {
@@ -1149,27 +1600,27 @@ describe("when a wizard step renders", () => {
     const panel = loadPanel();
     return settle()
       .then(() => {
-        expect($("form-id").value).not.toBe("aia_ghs_claim");
+        expect(panel.state.schema).toBeNull();
         page.survey = fits("aia_ghs_claim");
         return panel.onPageChanged();
       })
       .then(() => {
-        expect($("form-id").value).toBe("aia_ghs_claim");
+        expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
       });
   });
 
-  test("a form the doctor picked by hand is left alone", async () => {
+  test("re-detection follows the page, having nothing else to follow", async () => {
+    // This used to defer to a form the doctor had picked by hand, because
+    // overturning their choice between wizard steps would change which form
+    // was being filled without anyone being told. With the picker gone there
+    // is no choice to overturn, and the page is the only evidence there is.
     const panel = loadPanel();
     await settle();
-
-    // Reaching for the picker is saying the automatic answer was wrong.
-    $("form-id").value = "roboform_test_v1";
-    $("form-id").dispatchEvent(new Event("change"));
 
     page.survey = fits("aia_ghs_claim");
     await panel.onPageChanged();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("nothing is filled — the doctor still clicks", async () => {
@@ -1212,7 +1663,7 @@ describe("when a wizard step renders", () => {
     expect($("map-prompt").hidden).toBe(false);
     expect($("prompt-title").textContent).toContain("2 questions");
     expect(
-      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-live"))
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
     ).toHaveLength(0);
   });
 
@@ -1304,7 +1755,7 @@ const WARD_ROW = {
 
 async function mapWith(fields) {
   // One route now, whether or not the bank recognised the page.
-  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
+  routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
   const panel = loadPanel();
   await settle();
   $("paste").value = "Admitted to B1.";
@@ -1501,7 +1952,7 @@ describe("the sample note", () => {
     // button has to dispatch one or the debounce never runs.
     await vi.advanceTimersByTimeAsync(600);
     await settle();
-    expect(globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/parse"))).toBe(true);
+    expect(parseCalls.length).toBeGreaterThan(0);
   });
 
   test("it does not write the patient's name", async () => {
@@ -1549,7 +2000,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1565,7 +2016,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1580,8 +2031,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () =>
-      respond({ ...PARSED, dob: null, choices: { dob: ["2026-08-02"] } });
+    stubParse({ ...PARSED, dob: null, choices: { dob: ["2026-08-02"] } });
     $("paste").value = "Seen 02/08/2026. Sore throat, settling.";
     await panel.parsePaste();
 
@@ -1597,7 +2047,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1613,7 +2063,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
     $("choices-phone").querySelector("button").click();
@@ -1639,7 +2089,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1654,7 +2104,7 @@ describe("choosing between candidates", () => {
     await settle();
     shutDrawer();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1667,7 +2117,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond({ ...PARSED, choices: undefined });
+    stubParse({ ...PARSED, choices: undefined });
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
@@ -1777,7 +2227,7 @@ const QUOTED = {
 };
 
 async function mapWithNote(fields, note = NOTE) {
-  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
+  routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
   const panel = loadPanel();
   await settle();
   $("paste").value = note;
@@ -1798,18 +2248,21 @@ describe("the note pane", () => {
     expect($("note-text").textContent).toBe(NOTE);
   });
 
-  test("opens already marked, on the first value that needs checking", async () => {
-    // It used to mark nothing until the doctor happened to click a row, which
-    // made the whole pane look like it was not working. A mark is a pointer,
-    // not a claim that anything has been checked.
+  test("opens already marked, on the row at the top of the list", async () => {
+    // Two things at once. It used to mark nothing until the doctor happened to
+    // click a row, which made the pane look broken — and then it marked the
+    // first value NEEDING a check, which put the mark on a row further down
+    // while the top of the screen showed a different question. A citation that
+    // does not match the visible row reads as a wrong citation. The arrival
+    // mark now uses the same rule scrolling does.
     await mapWithNote([
-      { ...QUOTED, field_id: "settled", needs_review: false },
+      { ...QUOTED, field_id: "settled", label: "Diagnosis", needs_review: false },
       { ...QUOTED, field_id: "icd", label: "ICD-10 code", value: "J03.90",
         status: "inferred", needs_review: true },
     ]);
 
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
-    expect($("note-following").textContent).toBe("ICD-10 code — worked out from this");
+    expect($("note-following").textContent).toBe("Diagnosis");
   });
 
   test("marks the sentence a value came from, and names the row", async () => {
@@ -1878,6 +2331,85 @@ describe("the note pane", () => {
       .dispatchEvent(new window.Event("focusin", { bubbles: true }));
 
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
+  });
+
+  test("finds a quote the model rewrapped, and shows the note's own wrapping", async () => {
+    // A clinical note is wrapped, and a model quoting a sentence that spans a
+    // line break hands it back with a space. Every character in it is still
+    // the doctor's own — only the wrapping is the model's — so refusing it
+    // loses a correct citation, and a correct citation refused reads exactly
+    // like "this value came from nowhere". The rule below this one is
+    // unchanged for any difference that is not whitespace.
+    const wrapped = "Seen 02/08/2026. Dx acute\ntonsillitis. MC 2 days.";
+    await mapWithNote([{ ...QUOTED, source: "Dx acute tonsillitis." }], wrapped);
+
+    $("rows").children[0].click();
+
+    // Marked as the doctor wrote it, not as the model requoted it.
+    expect(marked().textContent).toBe("Dx acute\ntonsillitis.");
+    expect($("note-text").textContent).toBe(wrapped);
+  });
+
+  test("marks every sentence a citation draws on, not just the first", async () => {
+    // "What was done at this consultation" is answered from several lines at
+    // once, and the model cites all of them in one string joined with a
+    // semicolon. That string is nowhere in the note as one run, so the pane
+    // used to mark nothing at all on exactly the rows carrying the most.
+    const note =
+      "Seen 02/08/2026. Amoxicillin 500mg tds for 7 days. " +
+      "Dx acute tonsillitis. MC 2 days.";
+    await mapWithNote(
+      [
+        {
+          ...QUOTED,
+          label: "Treatment prescribed",
+          value: "Amoxicillin 500mg tds for 7 days; MC 2 days",
+          source: "Amoxicillin 500mg tds for 7 days. MC 2 days.",
+        },
+      ],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    expect(marks.map((m) => m.textContent)).toEqual([
+      "Amoxicillin 500mg tds for 7 days.",
+      "MC 2 days.",
+    ]);
+    // Still the doctor's own note, unchanged around the marks.
+    expect($("note-text").textContent).toBe(note);
+  });
+
+  test("a lone token is not a citation, however verbatim it is", async () => {
+    // "02/08/2026." is in the note, word for word. It is also in four places
+    // in a real admission note, and lighting the first because a quote
+    // happened to end with it is the wrong-citation failure by a shorter
+    // route. The other fragment here is a real attempt and is simply not in
+    // the note — the words are reordered — so nothing is marked at all.
+    await mapWithNote([{ ...QUOTED, source: "Dx tonsillitis, acute. 02/08/2026." }]);
+
+    $("rows").children[0].click();
+
+    expect(marked()).toBeNull();
+    expect($("note-following").textContent).toBe("quote not found in the note");
+  });
+
+  test("a fragment the note says twice marks neither", async () => {
+    // The same refusal the demographics parser makes over two phone numbers.
+    // Nothing here can say which of the two the model meant, and marking the
+    // first is a coin toss shown to the doctor as a fact.
+    const note = "MC 2 days. Dx acute tonsillitis. Reviewed 09/08/2026. MC 2 days.";
+    await mapWithNote(
+      [{ ...QUOTED, source: "Dx acute tonsillitis. MC 2 days." }],
+      note
+    );
+
+    $("rows").children[0].click();
+
+    const marks = [...$("note-text").querySelectorAll(".quote.on")];
+    // The unambiguous half still lights; the repeated half does not.
+    expect(marks.map((m) => m.textContent)).toEqual(["Dx acute tonsillitis."]);
   });
 
   test("marks NOTHING when the quote is not in the note verbatim", async () => {
@@ -1972,5 +2504,209 @@ describe("an inferred value's sentence", () => {
     expect(mark).not.toBeNull();
     expect(mark.textContent).toBe("Dx acute tonsillitis.");
     expect(mark.classList.contains("reasoned")).toBe(true);
+  });
+});
+
+describe("where the consultation pane belongs", () => {
+  test("it is up on the screen where the values are checked", async () => {
+    await mapWithNote([QUOTED]);
+
+    expect($("notepane").hidden).toBe(false);
+  });
+
+  test("and down on the step that holds the note itself", async () => {
+    // Going back to the paste box left the pane up beside it, so the same
+    // consultation was on screen twice — once as the thing being edited, once
+    // as a read-only copy of it.
+    const panel = await mapWithNote([QUOTED]);
+    panel.showStep("note");
+
+    expect($("notepane").hidden).toBe(true);
+  });
+});
+
+describe("a refusal that names a field", () => {
+  test("opens the step holding it, and puts the cursor there", async () => {
+    // The redactor's values live on the check step and the refusal is raised
+    // on the page step, so "Still needed: date of birth" arrived on a screen
+    // with no date of birth on it and nothing pointing anywhere. The doctor
+    // had to already know the box was behind the Verify row in the ledger.
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("dob").value = "";
+    panel.showStep("page");
+
+    await panel.onMap();
+
+    expect($("step-check").hidden).toBe(false);
+    expect($("step-page").hidden).toBe(true);
+    expect(document.activeElement).toBe($("dob"));
+  });
+
+  test("and stays put when nothing is actually missing", async () => {
+    // A redaction failure with every demographic present is a different
+    // fault; yanking the doctor off the page step to show them a complete
+    // form would be worse than saying nothing.
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("dob").value = "1972-11-04";
+    $("paste").value = "Patient: Chua Beng Huat";
+    panel.showStep("page");
+
+    await panel.onMap();
+
+    expect($("step-page").hidden).toBe(false);
+  });
+});
+
+describe("a fill that wrote nothing", () => {
+  const NOTHING = {
+    ok: true, refused: false, filled: 0, applied: [],
+    report: { results: [{ fieldId: "date_of_admission", status: "skipped", reason: "already answered" }],
+              unknownControls: [], deferred: 0, matched: 1, intended: 1, matchRate: 1, safeToFill: true },
+  };
+
+  test("does not congratulate the doctor in green", async () => {
+    // It read "Filled 0 fields on this page." in the success colour, over
+    // "Check each one on the form, then submit it yourself" — an instruction
+    // to check nothing, in the one place the panel is meant to be careful.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = NOTHING;
+    await panel.onFill();
+
+    expect($("fill-report").querySelector(".is-success")).toBeNull();
+    expect($("fill-report").textContent).toContain("Nothing was written on this page");
+    expect($("fill-report").textContent).not.toContain("Filled 0 field");
+  });
+
+  test("and still says nothing was overwritten", async () => {
+    // The other half of the news, and the one a doctor actually wants: their
+    // own answers are untouched.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = NOTHING;
+    await panel.onFill();
+
+    expect($("fill-report").textContent).toContain("Nothing was overwritten");
+  });
+
+  test("a refused fill grows no empty list", async () => {
+    // "What happened to each field" was rendering as a heading over nothing.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    page.fill = { ok: true, refused: true, reason: "only 1 of 3 fields matched this page",
+                  filled: 0, applied: [],
+                  report: { results: [], unknownControls: [], deferred: 0, matched: 1,
+                            intended: 3, matchRate: 0.33, safeToFill: false } };
+    await panel.onFill();
+
+    expect($("fill-report").textContent).not.toContain("What happened to each field");
+    expect($("fill-status").textContent).toContain("Nothing was filled");
+  });
+});
+
+describe("when the form moves to a different section", () => {
+  /** The message content/fill.js sends when the wizard re-renders. */
+  const pageChanged = () =>
+    pageListener({ target: "breezefill-panel", action: "page-changed" }, {}, () => {});
+
+  test("the review is cleared, and the doctor is told it was", async () => {
+    // Clearing is right: a value mapped for "date of admission" is not an
+    // answer to whatever question sits in the same place on the next section,
+    // and leaving it up invites a fill that writes the last section's answers
+    // into this one. Clearing it SILENTLY is the defect — a doctor who had
+    // read the rows and confirmed one watched the whole review vanish with an
+    // empty status line as the only sign anything had happened.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    expect($("rows").querySelectorAll(".review-row")).toHaveLength(1);
+
+    pageChanged();
+    await settle();
+    await settle();
+
+    expect(panel.state.rows).toHaveLength(0);
+    expect($("prompt-why").textContent).toContain("The form moved on");
+    expect($("prompt-why").textContent).toContain("not answers to these questions");
+  });
+
+  test("and says nothing about it when there was no review to lose", async () => {
+    const panel = loadPanel();
+    await settle();
+    panel.state.step = "page";
+
+    pageChanged();
+    await settle();
+    await settle();
+
+    expect($("prompt-why").textContent).not.toContain("The form moved on");
+  });
+});
+
+describe("a failure a doctor can report", () => {
+  // "It did not work" is what arrives otherwise. A doctor cannot read a stack
+  // trace and should not be asked to describe a fault in their own words, so
+  // every message they can see names a code: BF-503 is a key that was never
+  // set, BF-NET is their wifi, and the two need completely different answers.
+  const cases = [
+    [503, "BF-503"],
+    [502, "BF-502"],
+    [413, "BF-413"],
+    [422, "BF-422"],
+    [404, "BF-404"],
+    [418, "BF-418"], // anything unlisted still names itself
+  ];
+
+  for (const [status, code] of cases) {
+    test(`${status} is reportable as ${code}`, async () => {
+      routes["/map-redacted"] = () => respond({}, false, status);
+      routes["/map-live"] = () => respond({}, false, status);
+      const panel = loadPanel();
+      await settle();
+      $("paste").value = "Patient: Chua Beng Huat";
+      $("full-name").value = "Chua Beng Huat";
+      $("dob").value = "1972-11-04";
+      await panel.onMap();
+
+      const said = $("map-status").textContent;
+      expect(said).toContain(code);
+      expect(said).toContain("thngedward@gmail.com");
+    });
+  }
+
+  test("the developer's own instruction is gone from the doctor's screen", async () => {
+    // 503 used to read "Set ANTHROPIC_API_KEY in the terminal running it,
+    // then restart it." A GP has no terminal. The code carries that detail to
+    // the person who can act on it instead.
+    routes["/map-redacted"] = () => respond({}, false, 503);
+    routes["/map-live"] = () => respond({}, false, 503);
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("full-name").value = "Chua Beng Huat";
+    $("dob").value = "1972-11-04";
+    await panel.onMap();
+
+    expect($("map-status").textContent).not.toContain("ANTHROPIC_API_KEY");
+    expect($("map-status").textContent).not.toContain("terminal");
+  });
+});
+
+describe("the screen where answers are checked", () => {
+  test("is named for the checking, not for the survey it used to be", async () => {
+    // It began as a report on the insurer's form — "7 questions on this
+    // page" — and "This page" fitted. Then the review moved onto the same
+    // screen: pressing Map hides the survey box and leaves the consultation,
+    // every mapped answer and Fill under a heading still naming the form.
+    const panel = await mapWith([ADMISSION_DATE]);
+
+    expect($("h-page").textContent).toBe("Check the answers");
+    expect($("step-page").hidden).toBe(false);
+    expect($("mapped").hidden).toBe(false);
+    expect(panel.state.rows).toHaveLength(1);
   });
 });

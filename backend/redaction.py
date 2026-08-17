@@ -13,8 +13,10 @@ Design rules:
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
+from pathlib import Path
 from typing import Callable
 
 from pydantic import BaseModel
@@ -49,9 +51,33 @@ TOKEN_RE = re.compile(r"\[[A-Z][A-Z0-9_]*\]")
 
 # Pass 2 patterns: identifiers NOT in the dictionary (family members, other
 # patients). Single optional spaces tolerated inside NRICs.
-NRIC_PATTERN = re.compile(r"\b[STFGM]\s?\d{7}\s?[A-Z]\b", re.IGNORECASE)
-SG_PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+65[ -]?)?[689]\d{3}[ -]?\d{4}(?!\d)")
-EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+#
+# NOT WRITTEN HERE. They are loaded from a file the browser reads too, because
+# the same redaction is about to run in both places and two hand-maintained
+# copies of one regex is a leak waiting for somebody to fix only one of them.
+# The file lives under extension/ because a Chrome extension can read nothing
+# outside its own directory, and this process can read anything.
+#
+# No fallback, deliberately: a backend that cannot find its patterns must not
+# start. Redaction that silently degraded to "no patterns" would pass every
+# test that checks the pipeline runs, and remove nothing.
+PATTERN_FILE = Path(__file__).resolve().parents[1] / "extension" / "privacy" / "patterns.json"
+
+_SPEC = json.loads(PATTERN_FILE.read_text(encoding="utf-8"))
+
+# field -> (compiled, token base, first counter value)
+PATTERN_SPEC: dict[str, tuple[re.Pattern[str], str, int]] = {
+    entry["field"]: (
+        re.compile(entry["regex"], re.IGNORECASE if entry["ignore_case"] else 0),
+        entry["token"],
+        entry["start"],
+    )
+    for entry in _SPEC["patterns"]
+}
+
+NRIC_PATTERN = PATTERN_SPEC["nric"][0]
+SG_PHONE_PATTERN = PATTERN_SPEC["phone"][0]
+EMAIL_PATTERN = PATTERN_SPEC["email"][0]
 
 _MONTHS = [
     "January", "February", "March", "April", "May", "June",
@@ -169,11 +195,9 @@ def _pass1_known_identifiers(record: PatientRecord, text: str) -> tuple[str, dic
 
 
 def _pass2_patterns(text: str, redaction_map: dict[str, str]) -> str:
-    for pattern, base, start in (
-        (NRIC_PATTERN, "NRIC", 2),      # [NRIC] is the patient's own
-        (SG_PHONE_PATTERN, "PHONE", 2),
-        (EMAIL_PATTERN, "EMAIL", 1),
-    ):
+    # Order and numbering both come from the shared file, so the browser's
+    # copy cannot drift into tokenising the same text differently.
+    for pattern, base, start in PATTERN_SPEC.values():
         counter = start
         seen: dict[str, str] = {}  # verbatim value -> token, dedupe repeats
 
@@ -229,9 +253,13 @@ def _pass3_llm_sweep(text: str, redaction_map: dict[str, str], sweep: LlmSweep) 
 # hospital into "[PATIENT] Tock Seng Hospital" and the form lost the hospital
 # field. These spans are shielded for the duration of the passes and restored
 # afterwards. A facility name is not a patient identifier.
+#
+# Shared with the browser for the same reason the patterns are: this rule
+# prevents an over-redaction, and one fixed in Python alone would go on
+# costing the form a field in the copy that runs in the doctor's tab.
 _INSTITUTION_RE = re.compile(
-    r"\b[A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,4}\s+"
-    r"(?:Hospital|Polyclinic|Clinic|Medical\s+Cent(?:re|er)|Specialist\s+Cent(?:re|er))\b"
+    _SPEC["shields"][0]["regex"],
+    re.IGNORECASE if _SPEC["shields"][0]["ignore_case"] else 0,
 )
 _SHIELD = "\x00INST{}\x00"
 
