@@ -1476,7 +1476,7 @@ function updateReviewMeta() {
  * included. Returns the span in the NOTE's coordinates, so what is marked is
  * always what the note says rather than what the model returned.
  */
-function locateQuote(text, src) {
+function locateRun(text, src) {
   const at = text.indexOf(src);
   if (at >= 0) return { at, end: at + src.length };
 
@@ -1489,6 +1489,42 @@ function locateQuote(text, src) {
   return match ? { at: match.index, end: match.index + match[0].length } : null;
 }
 
+// A fragment shorter than this is not evidence of anything. "13/03/2026." is
+// in four places in an admission note, and marking the first one because a
+// citation happened to end with it is the wrong-citation failure by a shorter
+// route.
+const QUOTE_MIN_WORDS = 4;
+
+/**
+ * Every place in the note this citation draws on. Zero, one, or several.
+ *
+ * One sentence is the ordinary case and is tried whole first. But a question
+ * like "what was done at this consultation" is answered from several lines at
+ * once, and the model cites all of them — joined with a semicolon, often
+ * reordered, sometimes across a paragraph. That string is nowhere in the note
+ * as one run, so the pane marked nothing at all on exactly the rows carrying
+ * the most.
+ *
+ * Split and locate each piece. Nothing is loosened by this: every piece still
+ * has to appear word for word, so what gets marked is text the doctor wrote,
+ * and a piece the model paraphrased is simply left unmarked rather than
+ * approximated onto a neighbour. What changes is that a citation is allowed
+ * to point at three sentences, because sometimes it does.
+ */
+function locateQuote(text, src) {
+  const whole = locateRun(text, src);
+  if (whole) return [whole];
+
+  const found = [];
+  for (const piece of src.split(/(?<=[.;:])\s+/)) {
+    const trimmed = piece.trim();
+    if (trimmed.split(/\s+/).filter(Boolean).length < QUOTE_MIN_WORDS) continue;
+    const at = locateRun(text, trimmed);
+    if (at) found.push(at);
+  }
+  return found;
+}
+
 function buildNote() {
   const pre = $("note-text");
   if (!pre) return;
@@ -1499,10 +1535,13 @@ function buildNote() {
   for (const row of state.rows) {
     const src = typeof row.source === "string" ? row.source.trim() : "";
     if (!src || seen.has(src)) continue;
-    const at = locateQuote(text, src);
-    if (!at) continue;
+    const found = locateQuote(text, src);
+    if (!found.length) continue;
     seen.add(src);
-    spans.push({ ...at, src });
+    // All of them carry the same key, so one row lights all of its own
+    // sentences at once — which is what a citation drawn from three lines
+    // actually is.
+    for (const at of found) spans.push({ ...at, src });
   }
   spans.sort((a, b) => a.at - b.at);
 
@@ -1584,7 +1623,10 @@ function markNote(row) {
     // No hit for an inference: the value is not in there to emphasise, and
     // guessing which words produced it is the fuzzy match this refuses.
     setHit(el, on && !reasoned ? value : null);
-    if (on) target = el;
+    // The FIRST of them when a citation spans several sentences. Scrolling to
+    // the last would put the earlier ones off the top of the pane, which is
+    // the opposite of showing the doctor what the value came from.
+    if (on && !target) target = el;
   }
 
   // Three silent cases and they are not the same thing. Nothing is being read;
@@ -1608,9 +1650,16 @@ function markNote(row) {
   // scrolled the pane on arrival even though the sentence was visible, which
   // hid the note's first line — the patient header — behind the top edge for
   // no reason. Nearest, not centred: move the least that puts it on screen.
+  // A line and a half of the note left showing past the mark, rather than the
+  // 8px this used to leave. Eight pixels is under half a line: it satisfies
+  // "on screen" and produces a sentence pinned against the pane's edge with
+  // its descenders touching the border, which is both hard to read and hard
+  // to believe is deliberate. Derived from the line height so it stays a line
+  // and a half if the note pane's type ever changes.
   const box = pre.getBoundingClientRect();
   const mark = target.getBoundingClientRect();
-  const MARGIN = 8;
+  const line = parseFloat(getComputedStyle(pre).lineHeight) || 18;
+  const MARGIN = Math.round(line * 1.5);
   if (mark.top >= box.top + MARGIN && mark.bottom <= box.bottom - MARGIN) return;
   const delta =
     mark.top < box.top + MARGIN
