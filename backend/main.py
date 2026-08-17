@@ -37,9 +37,12 @@ from pathlib import Path
 
 import anthropic
 from fastapi import FastAPI, HTTPException, Response
+from fastapi import Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from licence import LicenceError, verify_licence
 
 from demographics import (
     ParsedDemographics,
@@ -326,7 +329,10 @@ def _review_rows(schema: FormSchema, patient: PatientRecord) -> list[MappedField
 
 
 @app.post("/map", response_model=MapResponse)
-def map_claim(request: CreateClaimRequest) -> MapResponse:
+def map_claim(
+    request: CreateClaimRequest,
+    authorization: str | None = Header(default=None),
+) -> MapResponse:
     """Stateless mapping, for the browser extension.
 
     The PDF path needs a server-side claim because the doctor reviews on one
@@ -339,6 +345,9 @@ def map_claim(request: CreateClaimRequest) -> MapResponse:
     and no window during which the server holds a half-finished claim. The
     request is handled and forgotten; retention is zero rather than one hour.
     """
+    # Gated with the other two model routes. A gate on one door is not a gate:
+    # this one spends exactly the same money, and `curl` reaches it identically.
+    _require_licence(authorization)
     schema = _get_schema(request.form_id)
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
@@ -348,6 +357,58 @@ def map_claim(request: CreateClaimRequest) -> MapResponse:
 # than truncated: a silently dropped field looks exactly like a field the model
 # had nothing to say about.
 MAX_LIVE_FIELDS = 50
+
+
+# ---------------------------------------------------------------------------
+# The licence gate
+# ---------------------------------------------------------------------------
+#
+# WHERE THE GATE HAD TO GO. The Chrome Web Store listing is public, so anyone can
+# install the extension — and gating the download is not available: Chrome blocks
+# self-hosted CRX outside enterprise policy, and an unlisted item is still
+# installable by anyone with the link. Worse, the extension is not the only
+# client: `curl` reaches this route just as well, and the CORS regex above says
+# in its own comment that it is not an access control. So the gate sits on the
+# calls that spend money on the model, which is the only place it cannot be
+# walked around.
+#
+# OFF BY DEFAULT, and that is not caution — it is a requirement. Every install
+# already in a doctor's browser is unlicensed by definition, and Chrome's terms
+# say you may not collect future charges from users for copies they were allowed
+# to download for free. So the flag stays unset until the paid tier exists, and
+# turning it on is a decision about grandfathering rather than a deploy step.
+
+
+def _require_licence(authorization: str | None) -> None:
+    """Refuse a request that carries no valid licence, when the gate is on.
+
+    Fails CLOSED in every direction. A missing header, a malformed token, an
+    expired one, a forged one and a deploy that forgot the signing secret all
+    reach the same 402 — because the alternative to failing closed on a
+    misconfiguration is a gate that looks installed and is not.
+    """
+    if not os.environ.get("FORMFILL_REQUIRE_LICENCE"):
+        return
+
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+
+    try:
+        verify_licence(token, os.environ.get("FORMFILL_LICENCE_SECRET", ""))
+    except LicenceError:
+        # One sentence, no cause, and never the token. A refusal detailed enough
+        # to debug a forgery is detailed enough to guide one, and an error body
+        # is the one place a credential gets pasted into a bug report. The owner
+        # looks the subscription up in Stripe; the doctor gets a code.
+        #
+        # NOT logged, for the same reason. `logger.error("bad licence %s", token)`
+        # is the obvious line to add here and it puts a live credential in a
+        # Vercel log.
+        raise HTTPException(
+            status_code=402,
+            detail="This copy of BreezeFill has no active subscription.",
+        ) from None
 
 
 def _slug(label: str, taken: set[str]) -> str:
@@ -487,7 +548,10 @@ def _live_schema(fields: list[LiveField]) -> FormSchema:
 
 
 @app.post("/map-redacted", response_model=MapResponse)
-def map_redacted(request: MapRedactedRequest) -> MapResponse:
+def map_redacted(
+    request: MapRedactedRequest,
+    authorization: str | None = Header(default=None),
+) -> MapResponse:
     """Map a note this server was never given the identifiers for.
 
     The route the extension uses. The browser parsed the demographics, built
@@ -506,6 +570,11 @@ def map_redacted(request: MapRedactedRequest) -> MapResponse:
     variable for the length of one request; the caller's own map is the only
     one that can turn a token back into a name, and it is in their tab.
     """
+    # Before anything else, and before any model call: this is the route that
+    # spends money, so it is the route the gate is on. Inert unless
+    # FORMFILL_REQUIRE_LICENCE is set.
+    _require_licence(authorization)
+
     schema = _live_schema(request.fields)
     if not schema.fields:
         raise HTTPException(status_code=422, detail="no labelled fields on this page")
@@ -544,7 +613,10 @@ def map_redacted(request: MapRedactedRequest) -> MapResponse:
 
 
 @app.post("/map-live", response_model=MapResponse)
-def map_live(request: MapLiveRequest) -> MapResponse:
+def map_live(
+    request: MapLiveRequest,
+    authorization: str | None = Header(default=None),
+) -> MapResponse:
     """Map against the page's own controls, with no schema at all.
 
     The fallback for a form the bank does not have. Same redaction, same review
@@ -559,6 +631,12 @@ def map_live(request: MapLiveRequest) -> MapResponse:
     exists so that an unknown form is fillable at all, and so that filling one
     produces the schema that replaces it.
     """
+    # The third model route, gated with the other two. No client calls this one
+    # any more — the panel moved to /map-redacted — but it is still reachable and
+    # still spends the same money, which makes it the door a gate on the other
+    # two would have left open.
+    _require_licence(authorization)
+
     schema = _live_schema(request.fields)
     if not schema.fields:
         raise HTTPException(status_code=422, detail="no labelled fields on this page")
