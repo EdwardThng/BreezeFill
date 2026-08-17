@@ -2409,6 +2409,55 @@ describe("the note pane", () => {
     expect(marked().textContent).toBe("Dx acute tonsillitis.");
   });
 
+  // Hovering is the rule, and the three tests below are the three ways it used
+  // to break. The pane was driven by clicks, focus AND a scroll listener that
+  // re-marked whichever row had crossed a line near the top of the list, so
+  // the same gesture produced different answers depending on where the list
+  // had stopped — a citation that changes by itself, on the pane whose whole
+  // job is saying where a value came from.
+  describe("follows the mouse, and only the mouse", () => {
+    const hover = (el) => el.dispatchEvent(new window.MouseEvent("mouseenter"));
+
+    const TWO = [
+      { ...QUOTED, field_id: "seen", label: "Date of consultation",
+        value: "02/08/2026", source: "Seen 02/08/2026." },
+      { ...QUOTED, field_id: "mc", label: "Days of MC",
+        value: "2", source: "MC 2 days." },
+    ];
+
+    test("hovering a row marks the sentence its value came from", async () => {
+      await mapWithNote(TWO);
+
+      hover($("rows").children[1]);
+
+      expect(marked().textContent).toBe("MC 2 days.");
+      expect($("note-following").textContent).toBe("Days of MC");
+    });
+
+    test("hovering another row moves the mark to that one", async () => {
+      await mapWithNote(TWO);
+
+      hover($("rows").children[1]);
+      hover($("rows").children[0]);
+
+      expect(marked().textContent).toBe("Seen 02/08/2026.");
+      expect($("note-following").textContent).toBe("Date of consultation");
+    });
+
+    test("scrolling the list leaves the mark where the mouse put it", async () => {
+      // The bug the doctor met: click into a filled field, the focus nudges
+      // the list, and the mark lands on whatever row is now at the top instead
+      // of the one they are reading. Nothing but the pointer may move it.
+      await mapWithNote(TWO);
+
+      hover($("rows").children[1]);
+      $("scroll").dispatchEvent(new window.Event("scroll", { bubbles: true }));
+
+      expect(marked().textContent).toBe("MC 2 days.");
+      expect($("note-following").textContent).toBe("Days of MC");
+    });
+  });
+
   test("finds a quote the model rewrapped, and shows the note's own wrapping", async () => {
     // A clinical note is wrapped, and a model quoting a sentence that spans a
     // line break hands it back with a space. Every character in it is still

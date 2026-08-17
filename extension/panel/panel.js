@@ -1113,13 +1113,40 @@ function renderRow(row) {
   wrap.dataset.fieldId = row.field_id;
 
   // Reading a row moves the note pane's highlight to the sentence that row's
-  // value came from. Both events, because both are how a doctor arrives at a
-  // row: the mouse, and the Tab key — and after a confirm click, focus lands
-  // on the next row's button, so the highlight follows the work by itself.
+  // value came from, and THE MOUSE IS THE RULE: whichever row the pointer is
+  // over is the row the pane answers, every time, with no second mechanism
+  // able to disagree with it.
+  //
+  // `mouseenter` is what makes that true rather than nearly true. The pane
+  // used to be driven by clicks, focus and a scroll listener that re-marked
+  // whichever row had crossed a line near the top of the list — so hovering
+  // did nothing on its own, and appeared to work only when a scroll had
+  // happened to leave the hovered row at the top. Same gesture, different
+  // answer depending on where the list had stopped, which is exactly what a
+  // citation must never be. Chrome recomputes what is under the pointer after
+  // a scroll and fires these events for it, so hovering also covers scrolling
+  // with the mouse over the list — the case the scroll listener was written
+  // for — without a second rule that can contradict the first.
+  //
+  // Click and focusin stay: the keyboard reaches a row without the mouse ever
+  // moving, and after a confirm click focus lands on the next row's button, so
+  // the highlight follows the work by itself.
+  //
   const read = () => {
     state.reading = row.field_id;
     markNote(row);
   };
+  // Hover alone is guarded on the row already being read. The pointer crosses
+  // a row's edge on the way to anywhere, and re-marking a row the pane is
+  // already answering would scroll the note back to the sentence every time —
+  // over the doctor's own reading of the lines around it. Clicking or tabbing
+  // into a row is not a crossing but a request, so it re-marks unconditionally
+  // and takes them back to the sentence, which is the whole point of pressing
+  // on the row you are already looking at.
+  wrap.addEventListener("mouseenter", () => {
+    if (state.reading === row.field_id) return;
+    read();
+  });
   wrap.addEventListener("click", read);
   wrap.addEventListener("focusin", read);
 
@@ -1818,29 +1845,27 @@ function toggleNote() {
   button.setAttribute("aria-expanded", String(showing));
 }
 
-/**
- * Follow the rows as the doctor scrolls them.
- *
- * The LAST row to have crossed the reading line, not the nearest one to it.
- * Nearest was wrong in a way that felt like a bug: the moment the doctor was
- * halfway down a row, the next row's top became the closer edge and took over,
- * so the mark ran a row ahead of the eye the whole way down the list.
- */
-function followScroll() {
-  const container = $("scroll");
-  const rows = $("rows");
-  if (!container || !rows || !rows.children.length) return;
-
-  const line = container.getBoundingClientRect().top + 28;
-  let best = rows.children[0];
-  for (const el of rows.children) {
-    if (el.getBoundingClientRect().top <= line) best = el;
-  }
-  const id = best.dataset.fieldId;
-  if (id === state.reading) return;
-  state.reading = id;
-  markNote(state.rows.find((r) => r.field_id === id) || null);
-}
+// There was a `followScroll` here, wired to the review list's scroll event: it
+// re-marked whichever row had last crossed a line 28px below the top of the
+// list. It is gone, and the deletion is the fix rather than a tidy-up.
+//
+// It was a SECOND authority over one highlight, and it silently outranked the
+// first. A doctor clicking into a filled field marked its sentence; the focus
+// nudged the list, the scroll listener fired, and the mark jumped to whatever
+// row happened to be at the top instead — so clicking a field highlighted its
+// source sometimes and something else's the rest of the time, with nothing on
+// screen to say which had happened. On the one pane whose whole job is showing
+// where a value came from, a citation that changes by itself is worse than no
+// citation.
+//
+// The mouse now carries it alone (see `read` in renderRow), including while
+// scrolling: Chrome re-resolves what is under the pointer after a scroll and
+// fires the boundary events for it. What that gives up on purpose is scrolling
+// with the pointer parked OUTSIDE the list — by scrollbar, or by trackpad over
+// the note pane. The mark then stays where it was put rather than following
+// the rows, which is the owner's call: a highlight that only ever moves when
+// the doctor points at something is one they can trust, and one that drifts on
+// its own is one they have to re-check.
 
 function renderRows() {
   // Rows appearing and rows being discarded both come through here, and the
@@ -1861,11 +1886,16 @@ function renderRows() {
   );
   showNotePane();
   buildNote();
-  // Already marked, on the row at the top of the list — the same rule
-  // scrolling uses, so the mark always answers the row the doctor is looking
-  // at. Marking the first value NEEDING a check instead put the mark on a row
-  // further down while the top of the screen showed a different question, and
-  // a citation that does not match the visible row reads as a wrong citation.
+  // Already marked, on the row at the top of the list — the only row the
+  // doctor is certainly looking at before they have pointed at anything, and
+  // the mouse takes over from here. Marking the first value NEEDING a check
+  // instead put the mark on a row further down while the top of the screen
+  // showed a different question, and a citation that does not match the
+  // visible row reads as a wrong citation.
+  //
+  // Set through `state.reading` directly rather than through a row's `read`,
+  // because this is an arrival rather than a hover: the doctor has pointed at
+  // nothing yet.
   const first = state.rows[0];
   state.reading = first ? first.field_id : null;
   markNote(first || null);
@@ -2316,8 +2346,6 @@ $("check-next").addEventListener("click", () => {
   scanPage();
 });
 $("note-toggle").addEventListener("click", toggleNote);
-// Passive: this only reads geometry and never cancels the scroll.
-$("scroll").addEventListener("scroll", followScroll, { passive: true });
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
