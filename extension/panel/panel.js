@@ -109,29 +109,48 @@ const REQUIRED_FIELDS = ["full-name", "dob"];
 // demonstrating it. Every identifier in it is invented — repo fixtures are
 // synthetic only, and this ships inside the extension.
 //
-// It is deliberately awkward rather than tidy, because a sample that parsed
-// cleanly would demonstrate the wrong thing. It carries two phone numbers, so
-// the sole-match rule in demographics.py has to refuse both rather than guess;
-// a policy number written two ways, which resolves rather than refusing,
-// because both renderings name one policy; and a first-consult date that is
-// not the consultation date, which is exactly the distinction a schema
-// description exists to draw.
-const SAMPLE_NOTE = `Tan Wei Ling, F, 47
-NRIC S8012345D  DOB 14/03/1978
-HP 9123 4567 / 6123 4567
-Policy GHS-88213004 or GH-88213004 (AIA Singapore)
-Blk 118 Bishan St 12 #07-21, S570118
+// It is a whole claim rather than a tidy fragment, because the things worth
+// showing are the ones a tidy fragment does not contain:
+//
+//   - A header with NO label on it. Nothing says "Patient:"; the block is
+//     recognised because six shapes sit in it, and the one gap between them
+//     is checked against the name the doctor typed rather than guessed at.
+//   - `Employer: Sunrise Logistics Pte Ltd`, which is a labelled line that
+//     must not become anything. "Employer name" is not a patient qualifier,
+//     so the label resolves to no field and the company is left where it is.
+//   - `Tan Tock Seng Hospital`, whose first word is somebody's surname. It
+//     survives redaction because institutions are held aside — and the claim
+//     needs it, since one of the questions is which hospital.
+//   - Two doctors, named in passing. Nobody typed them, so no dictionary
+//     entry exists and no shape finds them: they are the known hole, and
+//     what the server's sweep is for. The sample shows the limit rather than
+//     hiding it.
+//   - An operation code, a Medisave table and an Alvarado score — the things
+//     a claim form asks for that look enough like identifiers to be worth
+//     proving are not treated as any.
+//   - Eleven dates, exactly one of which is a birth date, and it is the only
+//     one in the header.
+const SAMPLE_NOTE = `Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
+18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902
+Insurance: AIA Singapore
+Employer: Sunrise Logistics Pte Ltd
 
-Seen 02/08/2026. 3 days sore throat, fever 38.4, odynophagia.
-O/E tonsils enlarged with exudate, tender cervical nodes.
-Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
-First consult for this episode 31/07/2026. MC 2 days.`;
+First seen 12/03/2026 with 2 days of periumbilical pain migrating to the right
+iliac fossa, anorexia and one episode of vomiting. Symptoms began 10/03/2026.
+No prior episodes of the same complaint.
 
-// Whether to animate a scroll. Read once: the panel is not open long enough
-// for the setting to change under it, and asking per frame is wasteful.
-const REDUCED_MOTION = globalThis.matchMedia
-  ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
-  : { matches: false };
+O/E T 38.1, tender RIF with rebound, Alvarado 8. CT abdomen 12/03/2026 showed
+acute appendicitis with no perforation.
+
+Admitted to Tan Tock Seng Hospital 12/03/2026, discharged 15/03/2026.
+Laparoscopic appendicectomy 13/03/2026 by Dr Ong Wei Sheng. Operation code
+SF849A, Medisave table 4B. Recovery uneventful, no complications.
+
+MC 14 days from 13/03/2026 to 26/03/2026. Reviewed 20/03/2026, wound clean.
+Care ended 20/03/2026, no onward referral.
+
+Dr Tan Mei Ling, MCR M08842B, Family Physician.
+Braddell Family Clinic, 22 Braddell Road, Singapore 359915. Tel 62551234.`;
 
 const state = {
   forms: [],

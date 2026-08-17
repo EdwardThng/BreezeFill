@@ -1947,7 +1947,7 @@ describe("the sample note", () => {
     await settle();
 
     $("sample-note").click();
-    expect($("paste").value).toContain("acute tonsillitis");
+    expect($("paste").value).toContain("acute appendicitis");
     // A programmatic assignment fires no input event of its own, so the
     // button has to dispatch one or the debounce never runs.
     await vi.advanceTimersByTimeAsync(600);
@@ -1966,13 +1966,32 @@ describe("the sample note", () => {
     expect($("full-name").value).toBe("");
   });
 
-  test("every identifier in it is synthetic", () => {
-    // It ships inside the extension, so it is held to the repo's rule that
-    // fixtures are synthetic only.
-    const panel = loadPanel();
+  test("every identifier in it is one the repo invented", () => {
+    // It ships inside the extension, so it is held to the rule that fixtures
+    // are synthetic only. Pinned by value rather than by shape: a real
+    // identifier arriving here would look exactly like these to any pattern,
+    // and would show up as a diff on this line instead.
+    loadPanel();
     $("sample-note").click();
-    expect($("paste").value).toContain("S8012345D");
-    expect($("paste").value).not.toContain("S7211043C"); // the test fixture's own
+    const note = $("paste").value;
+    for (const invented of [
+      "Chua Beng Huat", "S7211043C", "04/11/1972", "91112233", "GHS-4471902",
+    ]) {
+      expect(note, invented).toContain(invented);
+    }
+  });
+
+  test("it carries the things the redactor has to get right", () => {
+    // A sample that parsed cleanly out of four neat lines would demonstrate
+    // the wrong thing. These are the three that are easy to get wrong: an
+    // institution whose name is a surname, a labelled line that must resolve
+    // to no field at all, and a third party no dictionary can know about.
+    loadPanel();
+    $("sample-note").click();
+    const note = $("paste").value;
+    expect(note).toContain("Tan Tock Seng Hospital");
+    expect(note).toContain("Employer: Sunrise Logistics Pte Ltd");
+    expect(note).toContain("Dr Ong Wei Sheng");
   });
 });
 
