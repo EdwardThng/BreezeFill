@@ -963,7 +963,16 @@ async function onMap() {
   try {
     redacted = breezefillRedact.redact(patientRecord(), pastedText());
   } catch (error) {
+    // The refusal names a field, so take the doctor to it.
+    //
+    // Every value the redactor needs lives on the check step, and this
+    // refusal is raised on the page step — so "Still needed: date of birth"
+    // arrived on a screen with no date of birth on it and nothing pointing
+    // anywhere. The doctor had to already know the box was behind the Verify
+    // row in the ledger. Found by clearing the field and pressing Map in a
+    // real browser; the message was right and completely unactionable.
     setStatus(status, error.message, "error");
+    sendToMissingDemographic();
     return;
   }
 
@@ -1590,6 +1599,29 @@ function markNote(row) {
 function showNotePane() {
   const pane = $("notepane");
   if (pane) pane.hidden = state.rows.length === 0 || state.step !== "page";
+}
+
+/**
+ * Open the check step on the first value the redactor is missing.
+ *
+ * Only when something IS missing: a redaction failure with every demographic
+ * present is a different fault, and yanking the doctor off the page step to
+ * show them a complete form would be worse than saying nothing.
+ */
+function sendToMissingDemographic() {
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+  if (!missing.length) return;
+  showStep("check");
+  const field = $(missing[0]);
+  // Not focus() alone: the field sits mid-panel behind a step that has only
+  // just been shown, and a focus the doctor cannot see is not a destination.
+  if (field) {
+    // Optional: there is no layout to scroll in the test environment, and a
+    // panel that threw here would refuse to map for a reason unrelated to
+    // redaction.
+    field.scrollIntoView?.({ block: "center" });
+    field.focus();
+  }
 }
 
 /** Fold the note away without losing it. Session-only, like everything here. */

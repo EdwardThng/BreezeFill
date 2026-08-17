@@ -2402,3 +2402,40 @@ describe("where the consultation pane belongs", () => {
     expect($("notepane").hidden).toBe(true);
   });
 });
+
+describe("a refusal that names a field", () => {
+  test("opens the step holding it, and puts the cursor there", async () => {
+    // The redactor's values live on the check step and the refusal is raised
+    // on the page step, so "Still needed: date of birth" arrived on a screen
+    // with no date of birth on it and nothing pointing anywhere. The doctor
+    // had to already know the box was behind the Verify row in the ledger.
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("dob").value = "";
+    panel.showStep("page");
+
+    await panel.onMap();
+
+    expect($("step-check").hidden).toBe(false);
+    expect($("step-page").hidden).toBe(true);
+    expect(document.activeElement).toBe($("dob"));
+  });
+
+  test("and stays put when nothing is actually missing", async () => {
+    // A redaction failure with every demographic present is a different
+    // fault; yanking the doctor off the page step to show them a complete
+    // form would be worse than saying nothing.
+    const panel = loadPanel();
+    await settle();
+    $("full-name").value = "Chua Beng Huat";
+    $("dob").value = "1972-11-04";
+    $("paste").value = "Patient: Chua Beng Huat";
+    panel.showStep("page");
+
+    await panel.onMap();
+
+    expect($("step-page").hidden).toBe(false);
+  });
+});
