@@ -507,12 +507,6 @@ button.link:hover {
   color: var(--muted);
 }
 
-.detected {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--muted-strong);
-}
-
 .status {
   margin: 0;
   font-size: 11.5px;

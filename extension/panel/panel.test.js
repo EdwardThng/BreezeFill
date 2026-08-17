@@ -276,7 +276,7 @@ describe("when the backend is not running", () => {
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
-    expect($("form-id").options).toHaveLength(0);
+    expect(panel.state.forms).toHaveLength(0);
 
     routes["/forms"] = () => respond(FORMS);
     $("paste").value = "Patient: Chua Beng Huat";
@@ -286,8 +286,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    // The bank, plus the standing "No form" entry.
-    expect($("form-id").options).toHaveLength(FORMS.length + 1);
+    expect(panel.state.forms).toHaveLength(FORMS.length);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/map-redacted"),
       expect.anything()
@@ -437,17 +436,18 @@ describe("identifying the form", () => {
     page.survey = { ...page.survey, candidates: scores };
   };
 
-  test("the best-fitting schema is chosen and the picker stays out of the way", async () => {
+  test("the best-fitting schema is chosen, and nothing is shown for it", async () => {
+    // Identification survived the picker's removal, and stayed invisible: it
+    // decides how sharply each question is put, never which questions are
+    // asked or whether they are.
     scored([
       { formId: "aia_ghs_claim", matched: 3, intended: 3, matchRate: 1 },
       { formId: "roboform_test_v1", matched: 0, intended: 3, matchRate: 0 },
     ]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-    expect($("form-id").hidden).toBe(true);
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("two schemas fitting equally well is not a winner", async () => {
@@ -463,9 +463,6 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    // ...and it is not reported as a failure, because nothing failed: the
-    // page's questions are still what gets answered.
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("a thin match still counts, because a wizard shows one step at a time", async () => {
@@ -473,10 +470,10 @@ describe("identifying the form", () => {
     // only find a third of its fields on the step in front of us. Whatever is
     // picked still has to clear the fill guards before anything is written.
     scored([{ formId: "aia_ghs_claim", matched: 3, intended: 7, matchRate: 0.43 }]);
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("aia_ghs_claim");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("a match too thin to mean anything does not count", async () => {
@@ -485,15 +482,14 @@ describe("identifying the form", () => {
     await settle();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
   });
 
   test("the host registered for a form wins when nothing scores", async () => {
     page.survey = { ...page.survey, host: "roboform.com", candidates: [] };
-    loadPanel();
+    const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("roboform_test_v1");
   });
 
   test("schemas are scored by their own field labels", async () => {
@@ -624,60 +620,17 @@ describe("mapping the page in front of the doctor", () => {
     }
   });
 
-  test("picking a schema by hand names the instructions to use", async () => {
-    const panel = await readyPanel();
-    expect(panel.state.schema).toBeNull();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-    // ...and detection stops overruling it from here on.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("a schema picked by hand can be taken back again", async () => {
-    // There was no way out of the picker: a <select> has no empty state, so
-    // once a doctor named a form the panel kept using its instructions for a
-    // page they had decided it did not describe. Answering from the page's own
-    // wording is a worse-informed fill, not a broken one, and it has to be
-    // reachable.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
-
-    $("form-id").value = "";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
-    // Still a human decision, so re-detection on the next wizard step must not
-    // put the schema back.
-    expect(panel.state.formChosenByHand).toBe(true);
-  });
-
-  test("the sentence above the picker follows what was picked", async () => {
-    // It used to describe whatever detection last decided, so a doctor who
-    // overrode it read "Reading the questions on this page" above a select
-    // naming an insurer's form — two answers to one question.
-    const panel = await readyPanel();
-
-    $("form-id").value = "aia_ghs_claim";
-    $("form-id").dispatchEvent(new Event("change", { bubbles: true }));
-
-    expect($("form-detected").textContent).toContain("Group H&S claim");
-  });
-
-  test("no schema means the picker shows no schema", async () => {
-    // The control and the state have to agree. With the first form standing
-    // selected by default, the panel said a form was in use and mapped without
-    // one, and the disagreement is invisible until the answers come back thin.
+  test("no schema is an ordinary outcome, not a state to get out of", async () => {
+    // There used to be a picker here, and four tests about getting into and
+    // out of it. What it controlled was never whether the page gets filled —
+    // only how sharply each of its questions is put — so the panel works it
+    // out and says nothing. A doctor was being asked to name a form they had
+    // not chosen to fill, above a box for a note they had not pasted.
     const panel = await readyPanel();
 
     expect(panel.state.schema).toBeNull();
-    expect($("form-id").value).toBe("");
+    // Nothing is disabled by it, and Map is still the next thing to press.
+    expect($("map-status").textContent).not.toMatch(/pick|choose|select/i);
   });
 });
 
@@ -813,7 +766,6 @@ describe("a form the bank does not have, end to end", () => {
     // 1. The bank was consulted and had nothing that fits — which is not a
     //    stopping point, only the absence of sharper instructions.
     expect(panel.state.schema).toBeNull();
-    expect($("form-detected").textContent).toMatch(/reading the questions/i);
 
     // 2. The details go in as one paste.
     $("paste").value = "Patient: Chua Beng Huat · S7211043C · 04/11/1972\n14/03/2026. RIF pain, appendicitis.";
@@ -873,7 +825,6 @@ describe("a form the bank does not have, end to end", () => {
     const panel = loadPanel();
     await settle();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
     expect(panel.state.schema.form_id).toBe("roboform_test_v1");
 
     $("paste").value = "Patient: Chua Beng Huat";
@@ -1649,27 +1600,27 @@ describe("when a wizard step renders", () => {
     const panel = loadPanel();
     return settle()
       .then(() => {
-        expect($("form-id").value).not.toBe("aia_ghs_claim");
+        expect(panel.state.schema).toBeNull();
         page.survey = fits("aia_ghs_claim");
         return panel.onPageChanged();
       })
       .then(() => {
-        expect($("form-id").value).toBe("aia_ghs_claim");
+        expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
       });
   });
 
-  test("a form the doctor picked by hand is left alone", async () => {
+  test("re-detection follows the page, having nothing else to follow", async () => {
+    // This used to defer to a form the doctor had picked by hand, because
+    // overturning their choice between wizard steps would change which form
+    // was being filled without anyone being told. With the picker gone there
+    // is no choice to overturn, and the page is the only evidence there is.
     const panel = loadPanel();
     await settle();
-
-    // Reaching for the picker is saying the automatic answer was wrong.
-    $("form-id").value = "roboform_test_v1";
-    $("form-id").dispatchEvent(new Event("change"));
 
     page.survey = fits("aia_ghs_claim");
     await panel.onPageChanged();
 
-    expect($("form-id").value).toBe("roboform_test_v1");
+    expect(panel.state.schema.form_id).toBe("aia_ghs_claim");
   });
 
   test("nothing is filled — the doctor still clicks", async () => {

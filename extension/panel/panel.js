@@ -182,7 +182,6 @@ const state = {
    * choice was wrong, and silently changing it back on the next step is the
    * kind of thing that gets noticed after the form is submitted.
    */
-  formChosenByHand: false,
   /**
    * The schema whose instructions sharpen this page's questions, or null.
    *
@@ -292,21 +291,6 @@ function hostMatches(host, patterns) {
   });
 }
 
-/**
- * Say what is going on, and open the picker.
- *
- * Only for the cases where something is genuinely wrong and a human choice
- * might help — not for "the bank does not describe this page", which is an
- * ordinary outcome handled by selectForm(null).
- */
-function showPicker(message) {
-  const detected = $("form-detected");
-  detected.textContent = message;
-  detected.classList.add("unknown");
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-}
-
 // Thresholds for *identifying* a form, which are deliberately looser than the
 // ones for filling it. A wizard shows one step at a time, so the right schema
 // may only find a third of its fields on the page in front of us — demanding
@@ -364,47 +348,17 @@ function bestCandidate(scores) {
 }
 
 /**
- * Record what will be used to sharpen this page's questions, and say so.
+ * Record which schema will sharpen this page's questions.
  *
- * `form` may be null, and that is a normal outcome rather than a failure
- * state: it means the page's own wording is the best instruction available.
- * Either way the panel is ready to map — nothing here disables anything.
+ * `form` may be null, and that is an ordinary outcome rather than a failure:
+ * it means the page's own wording is the best instruction available. Either
+ * way the panel maps. Nothing is shown for it, because nothing about it is a
+ * decision the doctor makes — it only ever changed how well each question was
+ * put, never which questions were asked or whether they were.
  */
-function describeSelection(form) {
-  const detected = $("form-detected");
-  // The picker is kept in step with the state rather than assumed to already
-  // agree with it. It disagrees in both directions otherwise: a select with
-  // nothing chosen shows its first option, and a doctor who picks one by hand
-  // leaves the sentence above it describing the previous answer.
-  $("form-id").value = form ? form.form_id : "";
-
-  if (form) {
-    detected.textContent = form.insurer
-      ? `${form.insurer} — ${form.display_name}`
-      : form.display_name;
-    detected.classList.remove("unknown");
-    return;
-  }
-
-  // Deliberately not phrased as a problem. Nothing is broken and there is
-  // nothing for the doctor to do: BreezeFill reads the questions on the page
-  // and answers those. Naming the host is the one useful detail, because it
-  // is how they would tell us which form to describe properly later.
-  detected.textContent = state.host
-    ? `Reading the questions on this page (${state.host})`
-    : "Reading the questions on this page";
-  detected.classList.add("unknown");
-}
-
 function selectForm(form, host) {
   state.schema = form || null;
   if (host) state.host = host;
-  describeSelection(state.schema);
-
-  // The picker stays reachable, never required. A doctor who knows the bank
-  // has a better description for this form than the page does can say so.
-  $("form-id").hidden = true;
-  $("form-override").hidden = false;
 }
 
 /**
@@ -442,11 +396,6 @@ function selectForm(form, host) {
  */
 async function detectForm() {
   if (!state.forms.length) return;
-  // A human already answered this question. Detection re-runs on every wizard
-  // step, and quietly overturning a doctor's choice between steps would change
-  // which form is being filled without anyone being told.
-  if (state.formChosenByHand) return;
-
   let response;
   try {
     response = await ask({
@@ -455,7 +404,9 @@ async function detectForm() {
       candidates: candidatesFor(state.forms),
     });
   } catch {
-    showPicker("Could not read this page — pick the form yourself, or click the BreezeFill icon on the tab you want to fill.");
+    // Nothing to say and nothing to ask. The doctor has not reached the page
+    // step yet, and when they do, scanPage reports what it can see there — one
+    // message about the page, in the place the page is discussed.
     return;
   }
 
@@ -478,7 +429,6 @@ async function detectForm() {
 }
 
 async function loadForms() {
-  const select = $("form-id");
   try {
     const response = await fetch(`${apiBase()}/forms`);
     if (!response.ok) throw new Error(String(response.status));
@@ -495,25 +445,6 @@ async function loadForms() {
     // the sharper instruction behind each one, not the fill. The mapping call
     // itself will report the backend properly if it is really unreachable.
     setStatus($("map-status"), UNREACHABLE, "error");
-    return;
-  }
-
-  select.replaceChildren();
-  // No form is a choice, not the absence of one, and it needs an entry to be
-  // choosable at all. A <select> has no empty state: without this its first
-  // option stands selected whether or not anyone picked it, so a doctor who
-  // opened the picker could name a form and never take one back — and the
-  // control claimed a schema was in use while `state.schema` was still null.
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "No form — use this page's own wording";
-  select.append(none);
-
-  for (const form of state.forms) {
-    const option = document.createElement("option");
-    option.value = form.form_id;
-    option.textContent = form.insurer ? `${form.insurer} — ${form.display_name}` : form.display_name;
-    select.append(option);
   }
 }
 
@@ -2253,18 +2184,6 @@ $("draft-copy").addEventListener("click", onCopyDraft);
 // review is never rebuilt from here — it was never taken down, only hidden.
 $("back-to-review").addEventListener("click", () => showStep("page"));
 
-$("form-id").addEventListener("change", () => {
-  state.formChosenByHand = true;
-  state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
-  describeSelection(state.schema);
-});
-$("form-override").addEventListener("click", () => {
-  $("form-id").hidden = false;
-  $("form-override").hidden = true;
-  // Reaching for the override is saying the automatic answer was wrong. From
-  // here on detection stops re-deciding, including on the next wizard step.
-  state.formChosenByHand = true;
-});
 
 // The injected script reports that the page changed shape — a wizard step
 // rendered. Registered unconditionally: a panel with no granted tab simply
