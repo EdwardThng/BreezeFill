@@ -1095,10 +1095,22 @@ function renderRow(row) {
       // click, and the doctor's place in a twenty-field claim was gone. The
       // row's own state is the only thing that changed, so it is the only
       // thing touched; the count, bar and Fill button follow underneath.
+      // Where this row sits on screen right now. Confirming changes both what
+      // is above it — the readiness line and bar leave when the last value is
+      // confirmed — and what is inside it, since the button goes. Either
+      // slides the whole list under the doctor mid-read, and when the content
+      // shrinks past the current scroll position the browser clamps and the
+      // panel jumps hundreds of pixels. Measured at 900 -> 285 in a real
+      // Chromium before this.
+      const scroll = $("scroll");
+      const anchor = wrap.getBoundingClientRect().top;
+
       wrap.classList.remove("pending");
       wrap.classList.add("confirmed");
       button.remove();
       updateReviewMeta();
+
+      if (scroll) scroll.scrollTop += wrap.getBoundingClientRect().top - anchor;
       focusAfterConfirm(wrap);
     });
     wrap.append(button);
@@ -1408,11 +1420,23 @@ function markNote(row) {
         : row.label;
 
   if (!target) return;
-  // Only when there is somewhere to go. A note that fits needs no moving, and
-  // nudging it clipped the first line for nothing.
+  // Only when there is somewhere to go. A note that fits needs no moving.
   if (pre.scrollHeight <= pre.clientHeight) return;
+
+  // And only when the mark is not already in view. Centring it unconditionally
+  // scrolled the pane on arrival even though the sentence was visible, which
+  // hid the note's first line — the patient header — behind the top edge for
+  // no reason. Nearest, not centred: move the least that puts it on screen.
+  const box = pre.getBoundingClientRect();
+  const mark = target.getBoundingClientRect();
+  const MARGIN = 8;
+  if (mark.top >= box.top + MARGIN && mark.bottom <= box.bottom - MARGIN) return;
+  const delta =
+    mark.top < box.top + MARGIN
+      ? mark.top - box.top - MARGIN
+      : mark.bottom - box.bottom + MARGIN;
   pre.scrollTo({
-    top: Math.max(0, target.offsetTop - pre.clientHeight / 2 + target.offsetHeight / 2),
+    top: Math.max(0, pre.scrollTop + delta),
     behavior: REDUCED_MOTION.matches ? "auto" : "smooth",
   });
 }
@@ -1470,9 +1494,12 @@ function renderRows() {
   const pane = $("notepane");
   if (pane) pane.hidden = state.rows.length === 0;
   buildNote();
-  // Already marked, on the first value that needs checking. Marking nothing
-  // until the doctor happened to click a row made the whole thing invisible.
-  const first = state.rows.find((r) => r.needs_review && hasValue(r)) || state.rows[0];
+  // Already marked, on the row at the top of the list — the same rule
+  // scrolling uses, so the mark always answers the row the doctor is looking
+  // at. Marking the first value NEEDING a check instead put the mark on a row
+  // further down while the top of the screen showed a different question, and
+  // a citation that does not match the visible row reads as a wrong citation.
+  const first = state.rows[0];
   state.reading = first ? first.field_id : null;
   markNote(first || null);
   // Mapped values on screen move the finished steps under them.
