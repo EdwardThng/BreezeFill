@@ -15,9 +15,34 @@ block is the part that constrains what you may do.
 
 ## Hard invariants — never violate these without asking me first
 
-- **Redaction runs before anything leaves the backend.** Patient identifiers
-  must never reach the Claude API. If a change touches the request path to the
-  model, state explicitly in your summary how redaction is preserved.
+- **Redaction runs in the BROWSER, before anything leaves the tab.** Passes 1
+  and 2 are `extension/privacy/redact.js`, applied at send time in `onMap`; the
+  token→value map never leaves the panel. The server redacts again on arrival
+  as a backstop and throws its own map away. If a change touches the request
+  path to the model, state explicitly in your summary how redaction is
+  preserved.
+  <!-- This invariant read "runs before anything leaves the BACKEND" until
+  2026-08-17, and by then the code had said otherwise for some time: the
+  extension parses and redacts locally and posts to /map-redacted, which
+  receives no PatientRecord and has nowhere to put one. The old wording sent
+  the reader looking for the guarantee in the wrong process. -->
+- **Pass 3 IS an Anthropic call, so "nothing identifying reaches the model" is
+  not the claim to make.** `llm_sweep` (`mapping.py`) sends the pass-1+pass-2
+  redacted text to Anthropic to find what the patterns missed, and `/map` and
+  `/map-redacted` both run it before mapping. The defensible claim is that the
+  model **answering the form** never sees identifiers; the sweep is part of the
+  redaction mechanism rather than downstream of it, and `privacy.html`
+  discloses it. Do not write "identifiers never reach the Claude API" into
+  marketing copy, the store listing, or this file.
+
+  The sharp edge, and it is the reason this is a hard rule rather than a note:
+  **the server's backstop is pass 2 only, and pass 2 cannot catch a name.** A
+  name has no shape, pass 1 is the only pass that finds one, and pass 1 cannot
+  run on the server because the identifiers were deliberately never sent. So a
+  name the browser's pass 1 misses reaches Anthropic **in the sweep call**.
+  `tests/fixtures/redaction_corpus.json` tags those cases `sweep_only` and
+  `tests/test_redaction_corpus.py` skips them offline — a skipped case is the
+  honest record of a gap, not a gap in the tests.
 - **No PHI in logs, traces, error messages, or test fixtures.** Use synthetic
   data in tests. Never paste a real note into a fixture file.
 - **Demographic fields are deterministic, not inferred.** Name, NRIC, DOB,
@@ -59,12 +84,19 @@ extension/            MV3 extension. No content_scripts, no host permissions
   fill/apply.js       Writes values. Never overwrites, never submits
   learn/dump.js       Label resolution + scrubber. INJECTED AT RUNTIME — ships,
                       despite reading like a console tool
+  privacy/parse.js    Paste -> demographics, IN THE TAB. The browser's copy of
+                      demographics.py; what made local redaction possible
+  privacy/redact.js   Passes 1 and 2, in the tab. The map stays here
+  privacy/patterns.json  The shapes, read by BOTH languages. Edit once
   content/fill.js     The only code that touches the insurer's page
 backend/
-  main.py             Every route, all stateless. `_review_rows` is the shared
-                      redact -> map -> assemble middle
+  main.py             Every route, all stateless. `/map-redacted` is the
+                      extension's only mapping route and takes no
+                      PatientRecord; `_review_rows` is the redact -> map ->
+                      assemble middle the WEBSITE's PDF path still uses
   redaction.py        Three passes. Pass 1 needs the demographics FIRST — that
-                      ordering is the privacy model
+                      ordering is the privacy model. Pass 3 is an Anthropic
+                      call; see the hard rules
   demographics.py     Paste -> demographic fields, patterns only, never a model.
                       Also owns the label alias table both directions share
   mapping.py          Structured-output call, FormSchema/FormField, assembly
@@ -158,6 +190,15 @@ is acceptable. See **Working style** at the end of this file.
   every lifecycle event and the default is already correct.
 - Keep `redaction.py`'s patterns blunt and `demographics.py`'s strict — one
   blanks text, the other assigns a value to a field.
+- Never say "identifiers never reach the Claude API" — pass 3 (`llm_sweep`) is
+  itself a Claude call on the pass-1+2 output. Say the model that *answers the
+  form* never sees them.
+- Edit `extension/privacy/patterns.json`, never a regex in `redact.js` or
+  `redaction.py` — both languages read that file, and a shape changed in one
+  place only is a leak whose tests all still pass.
+- Check which surface you are reasoning about before citing the privacy model:
+  the extension redacts in the tab, the website's `#/app` still posts raw notes
+  to `POST /map`.
 - `frontend/src/styles.css` is the claim UI's and is **globally scoped**; it
   already collides with the landing on `.step` and `.pill`. Scope new landing
   rules under `.landing`, and set `display` explicitly rather than inheriting
@@ -271,9 +312,9 @@ rather than shipping into the queue.
 |---|---|
 | Pipeline: redact → LLM map → doctor review → PDF fill | Working. **Stateless as of 2026-08-04** — `POST /map` then `POST /forms/{id}/pdf`, no claim id, nothing held between them |
 | Extension UI | **Redesigned 2026-08-08** to `docs/design/breezefill-panel/`. Progressive: one step at a time (name → note → other notes → check details → review → fill), finished steps fold into a summary row that reopens them, only visibility moves so every input stays in the DOM. Design tokens, a grey "Use a sample note" strip, and a fill report split into success / detail / deferred / fill-these-yourself |
-| One paste box → demographics (`POST /parse`) | Working. Patterns only, no model — `backend/demographics.py`, 34 tests. Verified end to end against a live backend on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
+| One paste box → demographics | Working, **in the browser** (`extension/privacy/parse.js`) since redaction moved local. Patterns only, no model. `backend/demographics.py` is still the reference implementation behind `POST /parse` and still carries the 34 tests; the panel no longer calls it. Verified end to end on the pilot's own note format: all seven fields, and the clinic's phone number under the signature correctly not taken |
 | Second paste box: "Other notes" | Working, 5 tests. A claim form asks for things a consultation note does not hold (admission reference, ward class, billing codes). Both boxes join into **one corpus** via `pastedText()` — same parse, same redaction. Nothing reads `#paste` alone |
-| `POST /map` — mapping for the extension | Working, shares `_review_rows` with the PDF path |
+| `POST /map` — mapping for the **website's** PDF path | Working, shares `_review_rows`. **Not the extension's route** — that is `/map-redacted`, which takes no `PatientRecord`. `/map`, `/map-live` and `/parse` all still accept an unredacted note, and `frontend/src/api.ts` calls `/map`, so `#/app` sends raw notes to the server. Client-side redaction is a property of the EXTENSION, not of the product |
 | Logo and icons | **Done (2026-08-05).** One generated set in `assets/logo/`, named for where each file is used rather than by size; `scripts/make_logo_assets.py` rebuilds it from the master. The extension declares `icons` and `action.default_icon` at last — it shipped with none until now, so Chrome drew a puzzle piece where the doctor is told to click. 16px assets are framed tighter because the mark blurs at that size; `assets/logo/README.md` has the reasoning |
 | One path: always map the page | **Built and green (2026-08-05).** The bank stopped gating: every fillable control becomes a question, a matching schema lends its `description` to the controls it describes, and a miss costs sharpness rather than the fill. `POST /map` is no longer used by the extension — `/map-live` carries both kinds of field. See "the bank is no longer a gate" |
 | Wizard support (steps + options) | **Built 2026-08-04; first exercised 2026-08-06** against `tests/fixtures/wizard_like.html` and `wizard_test_v1`, the first schema to declare `step` and `options`. Re-measured 2026-08-15 on the three-step fixture: with one step in the DOM, whole-plan `locate` matches 8 of 20 and **refuses**, `locateSteps` matches 8 and fills — the failure the per-step guard was written for, reproduced again on the wider form. Still **never run on a real wizard**; the fixture is synthetic and modelled on a verbal description. See "The AIA form" |
@@ -305,10 +346,11 @@ possible at all, and it is a property to preserve rather than a Fly detail.
 
 | Path | What it is |
 |---|---|
-| `backend/main.py` | Every route. All stateless. `_review_rows` is the shared redact→map→assemble middle |
-| `backend/redaction.py` | Three passes. Pass 1 is dictionary-based and needs the demographics **first** — this ordering is the privacy model |
-| `backend/demographics.py` | One pasted block → demographic fields, **patterns only, never a model** |
-| `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly |
+| `backend/main.py` | Every route. All stateless. `/map-redacted` is the extension's (no `PatientRecord`, backstop-redacts, discards its map); `_review_rows` is the redact→map→assemble middle behind `/map` and the PDF path |
+| `backend/redaction.py` | Three passes. Pass 1 is dictionary-based and needs the demographics **first** — this ordering is the privacy model. Pass 1 CANNOT run on `/map-redacted`: the identifiers were never sent, which is the point |
+| `backend/demographics.py` | One pasted block → demographic fields, **patterns only, never a model**. The reference implementation; the panel runs `extension/privacy/parse.js` instead |
+| `backend/mapping.py` | The structured-output call, `FormSchema`/`FormField`, claim assembly — **and `llm_sweep`, which is pass 3 and is an Anthropic call** |
+| `extension/privacy/` | `parse.js` + `redact.js` + `patterns.json`. Where redaction actually happens now. `patterns.json` is read by the Python too — edit it once, never twice |
 | `backend/schemas/*.json` | The form bank. `fill_mode` is `acroform`, `overlay` or `web` |
 | `extension/panel/` | The doctor's surface. Holds the claim in memory; no storage permission exists. Progressive — `STEPS` and `showStep()` move visibility only, never the values |
 | `docs/design/breezefill-panel/` | The panel redesign: handoff, UI brief, logo mark, prototypes. Renamed from the working name it was authored under |
@@ -1196,10 +1238,33 @@ What did **not** change, and must not:
 - **The five PDF forms stay.** Not every insurer sends a link, and they work.
   What stops is *investment in the website*, not the acroform/overlay paths.
 
-Redaction stays server-side for now. Running it in the extension would mean
-demographics never leave the browser at all, which is strictly better — but it
-means `redaction.py` in two languages with two test suites, and any drift
-between them is a leak. That is a hardening task, not part of the pivot.
+~~Redaction stays server-side for now.~~ **Done — redaction moved into the
+browser, and this paragraph described the world until 2026-08-17.** What it
+called "strictly better" is what now happens: the demographics never leave the
+tab, `/map-redacted` receives no `PatientRecord`, and a log or a crash dump on
+the server cannot contain a patient's name because one was never sent.
+
+The objection it raised was the right one and was answered rather than
+accepted. Two implementations of one rule do drift, so:
+
+1. **The shapes are not written twice.** `extension/privacy/patterns.json` is
+   read by `redact.js` and by `redaction.py`. Editing one file changes both.
+2. **`tests/fixtures/redaction_corpus.json` runs against both** — 12
+   adversarial cases, same notes, same assertion that no identifier survives
+   and that the clinical content the mapping call needs does.
+3. **The server redacts again** on text the browser already redacted, and
+   discards its own map. A miss in the browser is then a bug rather than a
+   disclosure — *except for a name*, which pass 2 cannot catch. See the hard
+   rule about pass 3.
+
+What is genuinely duplicated is pass 1's regex construction (`nameRegexes`,
+`dobRegexes`), which is hand-ported. `redact.js` exports both for the tests
+that check the two languages agree; keep that export.
+
+The one thing browser redaction cannot fix is that an extension updates on
+Chrome's schedule. `MIN_EXTENSION_VERSION` in `main.py` is the answer — raise
+it and every older panel refuses to map *before* it redacts. Raise it only for
+a fault that makes the old build unsafe.
 
 **The extension holds no standing access to anything.** `manifest.json`
 declares no `content_scripts`, no default `host_permissions`, and — this is
@@ -1758,11 +1823,17 @@ omission to "fix".
 
 - Demographics never reach the LLM. They are copied onto the form
   deterministically and double as the redaction dictionary. **This extends to
-  finding them**: `POST /parse` splits the paste with patterns and no model,
-  because a model that split it would have read the name before the dictionary
-  that redacts the name existed. Do not "improve" the parser by handing the
-  block to Claude when a field comes back blank — a blank field is a doctor
-  typing one line.
+  finding them**: `extension/privacy/parse.js` splits the paste with patterns
+  and no model, **in the doctor's tab**, because a model that split it would
+  have read the name before the dictionary that redacts the name existed. Do
+  not "improve" the parser by handing the block to Claude when a field comes
+  back blank — a blank field is a doctor typing one line.
+
+  `POST /parse` still exists and still takes a raw paste; the extension stopped
+  calling it when parsing moved into the browser. It is reachable, so treat it
+  as a live route rather than dead code — but do not point the panel back at
+  it, because that request is the whole note one step before redaction has a
+  dictionary to work with.
 - **The server is stateless. Every route.** The token→value map lives only for
   the duration of one request, and there is no claim store, session or id
   behind any endpoint. Do not add one — a shared store would be a database
