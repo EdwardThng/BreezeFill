@@ -23,6 +23,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PANEL_HTML = readFileSync(resolve(HERE, "panel.html"), "utf8");
 const PANEL_JS = readFileSync(resolve(HERE, "panel.js"), "utf8");
+// The panel does not map without these, and that is the point of them: the
+// note is redacted in this document before anything is sent. They are loaded
+// here the way panel.html loads them rather than stubbed, so a test that
+// asserts what went on the wire is asserting about the real redactor.
+const PARSE_JS = readFileSync(resolve(HERE, "../privacy/parse.js"), "utf8");
+const REDACT_JS = readFileSync(resolve(HERE, "../privacy/redact.js"), "utf8");
+const PATTERNS = JSON.parse(readFileSync(resolve(HERE, "../privacy/patterns.json"), "utf8"));
 
 const FORMS = [
   {
@@ -119,12 +126,39 @@ function loadPanel() {
       },
     },
   };
-  // eslint-disable-next-line no-eval
+  /* eslint-disable no-eval */
+  (0, eval)(PARSE_JS);
+  (0, eval)(REDACT_JS);
+  globalThis.breezefillParse.usePatterns(PATTERNS);
+  globalThis.breezefillRedact.usePatterns(PATTERNS);
+  // Parsing is stubbed by default for the same reason the backend was: these
+  // tests are about what the panel does with a parse, and the parser has its
+  // own corpus in extension/privacy/parse.test.js.
+  stubParse(PARSED);
   (0, eval)(PANEL_JS);
+  /* eslint-enable no-eval */
   return globalThis.breezefillPanel;
 }
 
 const $ = (id) => document.getElementById(id);
+
+/** Every call the panel made to the local parser, with its arguments. */
+let parseCalls;
+
+/**
+ * Stand in for the local parser.
+ *
+ * Takes either a record to return or a function to run. It replaces the real
+ * `parseDemographics`, which used to be a stubbed HTTP route — the move from
+ * one to the other is exactly the change these tests exist to survive.
+ */
+function stubParse(result) {
+  globalThis.breezefillParse.parseDemographics = (...args) => {
+    parseCalls.push(args);
+    if (typeof result === "function") return result(...args);
+    return result;
+  };
+}
 
 /** Let the microtask queue drain, so an awaited fetch settles. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -149,9 +183,11 @@ function shutDrawer() {
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  parseCalls = [];
   routes = {
     "/forms": () => respond(FORMS),
-    "/parse": () => respond(PARSED),
+    "patterns.json": () => respond(PATTERNS),
+    "/map-redacted": () => respond({ form_id: "__live__", fields: [] }),
     "/map-live": () => respond({ form_id: "__live__", fields: [] }),
     "/map": () => respond({ form_id: "roboform_test_v1", fields: [] }),
   };
@@ -191,7 +227,7 @@ describe("when the backend is not running", () => {
     // no longer stops anything, since the page's own questions are still
     // answerable without the bank.
     routes["/forms"] = () => Promise.reject(new TypeError("Failed to fetch"));
-    routes["/map-live"] = () => Promise.reject(new TypeError("Failed to fetch"));
+    routes["/map-redacted"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
 
@@ -223,7 +259,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(call).toBeTruthy();
     expect(JSON.parse(call[1].body).fields).toHaveLength(LIVE_FIELDS.length);
   });
@@ -248,7 +284,7 @@ describe("when the backend is not running", () => {
     // The bank, plus the standing "No form" entry.
     expect($("form-id").options).toHaveLength(FORMS.length + 1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/map-live"),
+      expect.stringContaining("/map-redacted"),
       expect.anything()
     );
   });
@@ -270,7 +306,7 @@ describe("when the backend is not running", () => {
     $("insurer").value = "AIA";
     await panel.onMap();
 
-    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map-live"));
+    const mapped = globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/map-redacted"));
     expect(mapped).toBe(false);
     expect($("map-status").textContent).toMatch(/no fillable questions/i);
     expect($("map-status").textContent).not.toContain("Could not reach");
@@ -279,9 +315,9 @@ describe("when the backend is not running", () => {
   test("a failed parse does not overwrite the Map status line", async () => {
     // Two messages competing for one element is how the actionable one got
     // destroyed. The parse reports itself in the drawer instead.
-    routes["/parse"] = () => Promise.reject(new TypeError("Failed to fetch"));
     const panel = loadPanel();
     await settle();
+    stubParse(() => { throw new Error("parser unavailable"); });
 
     $("map-status").textContent = "something the doctor needs to read";
     $("paste").value = "Patient: Chua Beng Huat";
@@ -334,7 +370,7 @@ describe("reading the paste", () => {
     // Date of birth is required and this response has none: there is no
     // pattern rule for a bare date, so a missing one stays in the text sent
     // to the model. A name is the same case for the same reason.
-    routes["/parse"] = () => respond({ ...PARSED, dob: null });
+    stubParse({ ...PARSED, dob: null });
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
@@ -382,7 +418,7 @@ describe("reading the paste", () => {
 
     await vi.advanceTimersByTimeAsync(500);
 
-    const parses = globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/parse"));
+    const parses = parseCalls;
     expect(parses).toHaveLength(1);
   });
 });
@@ -508,7 +544,7 @@ describe("mapping the page in front of the doctor", () => {
     const panel = await readyPanel();
     await panel.onMap();
 
-    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(call).toBeTruthy();
     const sent = JSON.parse(call[1].body);
     expect(sent.fields).toEqual([
@@ -531,7 +567,7 @@ describe("mapping the page in front of the doctor", () => {
     await panel.onMap();
 
     const called = globalThis.fetch.mock.calls.map((c) => String(c[0]));
-    expect(called.some((u) => u.endsWith("/map-live"))).toBe(true);
+    expect(called.some((u) => u.endsWith("/map-redacted"))).toBe(true);
     expect(called.some((u) => u.endsWith("/map"))).toBe(false);
   });
 
@@ -574,7 +610,7 @@ describe("mapping the page in front of the doctor", () => {
       [413, /more questions than BreezeFill can map/i],
       [422, /could not read any questions/i],
     ]) {
-      routes["/map-live"] = () => respond({ detail: "..." }, false, status);
+      routes["/map-redacted"] = () => respond({ detail: "..." }, false, status);
       const panel = await readyPanel();
       await panel.onMap();
 
@@ -764,7 +800,7 @@ describe("a form the bank does not have, end to end", () => {
         description: null,
       })),
     };
-    routes["/map-live"] = () => respond({ form_id: "__live__", fields: ROWS });
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields: ROWS });
 
     const panel = loadPanel();
     await settle();
@@ -783,7 +819,7 @@ describe("a form the bank does not have, end to end", () => {
 
     // 3. Mapping goes against the page, because there is no schema to use.
     await panel.onMap();
-    const mapCall = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-live"));
+    const mapCall = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
     expect(JSON.parse(mapCall[1].body).fields.map((f) => f.label)).toEqual(
       CONTROLS.map((c) => c.label)
     );
@@ -844,7 +880,7 @@ describe("a form the bank does not have, end to end", () => {
     // A recognised page is mapped the same way as any other — what the match
     // bought was the instructions, not a different route.
     const paths = globalThis.fetch.mock.calls.map((c) => String(c[0]));
-    expect(paths.some((p) => p.endsWith("/map-live"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/map-redacted"))).toBe(true);
     // No draft: the bank already describes this form, and a second schema for
     // it is how two descriptions of one form start disagreeing.
     expect($("step-draft").hidden).toBe(true);
@@ -929,7 +965,7 @@ describe("the check screen says what it knows about each value", () => {
   test("a field being asked about is marked as needing a check", async () => {
     const panel = loadPanel();
     await settle();
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -940,7 +976,7 @@ describe("the check screen says what it knows about each value", () => {
   test("picking a candidate settles the badge with it", async () => {
     const panel = loadPanel();
     await settle();
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1076,7 +1112,7 @@ describe("looking back at a finished step", () => {
   test("the finished steps sit UNDER the values once there are any", async () => {
     // Arriving at the review used to mean arriving at a list of steps already
     // finished, with the values the doctor came for below the fold.
-    routes["/map-live"] = () =>
+    routes["/map-redacted"] = () =>
       respond({
         form_id: "__live__",
         fields: [
@@ -1116,6 +1152,248 @@ describe("looking back at a finished step", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Nothing identifying leaves this tab
+// ---------------------------------------------------------------------------
+
+describe("what actually goes on the wire", () => {
+  // The claim the product makes, asserted against the requests themselves
+  // rather than against the code that builds them. Every test here reads what
+  // fetch was handed and looks for the patient in it.
+
+  const PATIENT = {
+    "full-name": "Chua Beng Huat",
+    nric: "S7211043C",
+    dob: "1972-11-04",
+    phone: "91112233",
+    "policy-number": "GHS-4471902",
+    insurer: "AIA",
+    address: "18 Toa Payoh Lorong 4, Singapore 310018",
+  };
+
+  const NOTE =
+    "Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233\n" +
+    "18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902\n\n" +
+    "14/03/2026. Mr Chua presents with RIF pain. Admitted Mount Elizabeth Hospital.";
+
+  /** Everything the panel sent, as one string to search. */
+  const everythingSent = () =>
+    globalThis.fetch.mock.calls
+      .map((call) => (call[1] && call[1].body ? String(call[1].body) : ""))
+      .join("\n");
+
+  async function mapWith(panel, note = NOTE) {
+    for (const [id, value] of Object.entries(PATIENT)) $(id).value = value;
+    $("paste").value = note;
+    await panel.onMap();
+  }
+
+  test("not one of the patient's identifiers is in any request", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    for (const identifier of [
+      "Chua Beng Huat", "Chua", "S7211043C", "04/11/1972", "91112233",
+      "GHS-4471902", "18 Toa Payoh",
+    ]) {
+      expect(sent, identifier).not.toContain(identifier);
+    }
+  });
+
+  test("the note is sent, tokenised — not withheld", async () => {
+    // The other half of the claim. Redaction that sent nothing would pass the
+    // test above and fill no forms.
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    expect(sent).toContain("[PATIENT]");
+    expect(sent).toContain("[NRIC]");
+    expect(sent).toContain("RIF pain");
+    // Not a patient identifier, and the claim needs it.
+    expect(sent).toContain("Mount Elizabeth Hospital");
+  });
+
+  test("the request carries no patient record at all", async () => {
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    const body = JSON.parse(call[1].body);
+    expect(body.patient).toBeUndefined();
+    expect(Object.keys(body).sort()).toEqual(["fields", "redacted_text"]);
+  });
+
+  test("the map that could undo the tokens is never sent", async () => {
+    // It is the one thing that makes the tokens reversible. It stays here.
+    const panel = loadPanel();
+    await settle();
+    await mapWith(panel);
+
+    const sent = everythingSent();
+    expect(sent).not.toContain("redaction_map");
+    expect(sent).not.toContain("[PATIENT]\":");
+  });
+});
+
+describe("it refuses rather than sending a note it could not redact", () => {
+  test("with the shapes unloaded, nothing is posted", async () => {
+    // The failure that must never degrade gracefully. A warning is a thing a
+    // busy doctor clicks past, and the note cannot be recalled afterwards.
+    const panel = loadPanel();
+    await settle();
+    globalThis.breezefillRedact.usePatterns = () => {};
+    globalThis.breezefillRedact.ready = () => false;
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Chua Beng Huat, seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+    expect($("map-status").textContent).toMatch(/will not send it/i);
+  });
+
+  test("a note with no name to redact against is refused", async () => {
+    // A name has no shape. Without one the patterns cannot find it, so a note
+    // that went out would look redacted and would still carry it.
+    const panel = loadPanel();
+    await settle();
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("paste").value = "Chua Beng Huat, seen today.";
+    globalThis.fetch.mockClear();
+    await panel.onMap();
+
+    expect(
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
+    ).toHaveLength(0);
+  });
+});
+
+describe("the note is redacted at send time, never cached", () => {
+  test("a name typed after the parse is still masked", async () => {
+    // Paste, parse, then keep typing. Text redacted against the dictionary as
+    // it stood ten seconds ago is text redacted against the wrong dictionary.
+    const panel = loadPanel();
+    await settle();
+
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. Seen today.";
+    await panel.parsePaste();
+
+    // ...and now the doctor adds a sentence.
+    $("paste").value += "\nMr Chua also reports a cough. NRIC S7211043C confirmed.";
+    await panel.onMap();
+
+    const call = globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/map-redacted"));
+    const body = JSON.parse(call[1].body);
+    expect(body.redacted_text).toContain("cough");
+    expect(body.redacted_text).not.toContain("Chua");
+    expect(body.redacted_text).not.toContain("S7211043C");
+  });
+});
+
+describe("the patient comes back in this tab", () => {
+  const ROWS = [
+    {
+      field_id: "patient_name", pdf_field_name: "", field_type: "text",
+      label: "Patient name", help: null, value: null, status: "demographic",
+      source: null, needs_review: false, fill_from: "full_name", options: [], step: null,
+    },
+    {
+      field_id: "dob", pdf_field_name: "", field_type: "date",
+      label: "Date of birth", help: null, value: null, status: "demographic",
+      source: null, needs_review: false, fill_from: "dob", options: [], step: null,
+    },
+    {
+      field_id: "diagnosis", pdf_field_name: "", field_type: "text",
+      label: "Diagnosis", help: null, value: "Acute appendicitis", status: "extracted",
+      source: "[PATIENT] presents with RIF pain", needs_review: false,
+      fill_from: null, options: [], step: null,
+    },
+    {
+      field_id: "invented", pdf_field_name: "", field_type: "text",
+      label: "Ward", help: null, value: "Admitted under [NRIC_9]", status: "extracted",
+      source: null, needs_review: false, fill_from: null, options: [], step: null,
+    },
+  ];
+
+  async function mapReturning(panel, rows) {
+    routes["/map-redacted"] = () => respond({ form_id: "__live__", fields: rows });
+    $("full-name").value = "Chua Beng Huat";
+    $("nric").value = "S7211043C";
+    $("dob").value = "1972-11-04";
+    $("insurer").value = "AIA";
+    $("paste").value = "Patient: Chua Beng Huat. RIF pain. Seen 14/03/2026.";
+    await panel.onMap();
+    return panel.state.rows;
+  }
+
+  test("a demographic row is filled from the box the doctor checked", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "patient_name").value).toBe("Chua Beng Huat");
+  });
+
+  test("a date is written the way a form wants it, not as the input holds it", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "dob").value).toBe("04/11/1972");
+  });
+
+  test("an ambiguous date is held for a second read", async () => {
+    // 04/11 could be 4 November or 11 April, and the form will read it one
+    // way. Same sentence the server shows, because it is the same check.
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    const dob = rows.find((r) => r.field_id === "dob");
+    expect(dob.needs_review).toBe(true);
+    expect(dob.recheck).toMatch(/right way round/i);
+  });
+
+  test("the model's tokens become the patient again, here", async () => {
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    expect(rows.find((r) => r.field_id === "diagnosis").source).toBe(
+      "Chua Beng Huat presents with RIF pain"
+    );
+  });
+
+  test("a token the model invented is blanked and held, never written", async () => {
+    // [NRIC_9] is not in the map because nothing produced it. Letting it
+    // through would put a raw token on an insurer's form.
+    const panel = loadPanel();
+    await settle();
+    const rows = await mapReturning(panel, ROWS);
+
+    const invented = rows.find((r) => r.field_id === "invented");
+    expect(invented.value).toBe(null);
+    expect(invented.status).toBe("missing");
+    expect(invented.needs_review).toBe(true);
+  });
+});
+
 describe("everything pasted is one corpus", () => {
   // There used to be a second box, for the things a claim form asks about that
   // a consultation note does not hold — a ward class, an admission reference.
@@ -1150,9 +1428,7 @@ describe("everything pasted is one corpus", () => {
     $("paste").value = "Admitted 14/03/2026, ward B1.\nPatient: Chua Beng Huat · S7211043C";
     await panel.parsePaste();
 
-    const sent = JSON.parse(
-      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
-    );
+    const sent = { text: parseCalls[parseCalls.length - 1][0] };
     expect(sent.text).toContain("S7211043C");
   });
 
@@ -1168,10 +1444,9 @@ describe("everything pasted is one corpus", () => {
     $("paste").value = "Chua Beng Huat · Tan Wei Ling · S7211043C";
     await panel.parsePaste();
 
-    const sent = JSON.parse(
-      globalThis.fetch.mock.calls.find((c) => String(c[0]).endsWith("/parse"))[1].body,
-    );
-    expect(sent.full_name).toBe("Chua Beng Huat");
+    const [text, knownName] = parseCalls[parseCalls.length - 1];
+    expect(knownName).toBe("Chua Beng Huat");
+    expect(text).toContain("Tan Wei Ling");
   });
 
   test("the text sent is exactly what was pasted", async () => {
@@ -1275,7 +1550,7 @@ describe("when a wizard step renders", () => {
     expect($("map-prompt").hidden).toBe(false);
     expect($("prompt-title").textContent).toContain("2 questions");
     expect(
-      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-live"))
+      globalThis.fetch.mock.calls.filter((c) => String(c[0]).endsWith("/map-redacted"))
     ).toHaveLength(0);
   });
 
@@ -1367,7 +1642,7 @@ const WARD_ROW = {
 
 async function mapWith(fields) {
   // One route now, whether or not the bank recognised the page.
-  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
+  routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
   const panel = loadPanel();
   await settle();
   $("paste").value = "Admitted to B1.";
@@ -1564,7 +1839,7 @@ describe("the sample note", () => {
     // button has to dispatch one or the debounce never runs.
     await vi.advanceTimersByTimeAsync(600);
     await settle();
-    expect(globalThis.fetch.mock.calls.some((c) => String(c[0]).endsWith("/parse"))).toBe(true);
+    expect(parseCalls.length).toBeGreaterThan(0);
   });
 
   test("it does not write the patient's name", async () => {
@@ -1612,7 +1887,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1628,7 +1903,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1643,8 +1918,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () =>
-      respond({ ...PARSED, dob: null, choices: { dob: ["2026-08-02"] } });
+    stubParse({ ...PARSED, dob: null, choices: { dob: ["2026-08-02"] } });
     $("paste").value = "Seen 02/08/2026. Sore throat, settling.";
     await panel.parsePaste();
 
@@ -1660,7 +1934,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1676,7 +1950,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
     $("choices-phone").querySelector("button").click();
@@ -1702,7 +1976,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1717,7 +1991,7 @@ describe("choosing between candidates", () => {
     await settle();
     shutDrawer();
 
-    routes["/parse"] = () => respond(TWO_OF_EACH);
+    stubParse(TWO_OF_EACH);
     $("paste").value = "HP 9123 4567 / 6123 4567";
     await panel.parsePaste();
 
@@ -1730,7 +2004,7 @@ describe("choosing between candidates", () => {
     const panel = loadPanel();
     await settle();
 
-    routes["/parse"] = () => respond({ ...PARSED, choices: undefined });
+    stubParse({ ...PARSED, choices: undefined });
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
@@ -1840,7 +2114,7 @@ const QUOTED = {
 };
 
 async function mapWithNote(fields, note = NOTE) {
-  routes["/map-live"] = () => respond({ form_id: "__live__", fields });
+  routes["/map-redacted"] = () => respond({ form_id: "__live__", fields });
   const panel = loadPanel();
   await settle();
   $("paste").value = note;

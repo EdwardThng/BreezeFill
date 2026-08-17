@@ -603,21 +603,22 @@ function scheduleParse() {
 async function parsePaste() {
   let parsed;
   try {
-    const response = await fetch(`${apiBase()}/parse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // The name goes with the paste. Step 1 asked for it before this box
-      // existed, so the parser never has to work out which piece of a header
-      // block is the patient — it checks, which cannot be wrong, and the
-      // piece beside it stays unclaimed instead of being read as a name.
-      body: JSON.stringify({ text: pastedText(), full_name: $("full-name").value.trim() }),
-    });
-    if (!response.ok) throw new Error(String(response.status));
-    parsed = await response.json();
+    // In this tab, and nowhere else. This used to be POST /parse, which sent
+    // the WHOLE pasted note — un-redacted, because finding the name is what
+    // has to happen before the name can be removed. So the raw note left the
+    // browser one request before redaction had anything to work with.
+    //
+    // The name goes with the paste. Step 1 asked for it before this box
+    // existed, so the parser never has to work out which piece of a header
+    // block is the patient — it checks, which cannot be wrong, and the piece
+    // beside it stays unclaimed instead of being read as a name.
+    parsed = breezefillParse.parseDemographics(pastedText(), $("full-name").value.trim());
   } catch {
     // Deliberately quiet. Parsing is an assist, not the path: the fields
-    // below are still typeable, and Map reports the backend being down in
-    // one place rather than two messages competing for the same line.
+    // below are still typeable, and Map reports the real problem in one
+    // place rather than two messages competing for the same line. The only
+    // way this throws now is the shared shapes failing to load, which Map
+    // refuses on outright.
     $("found-summary").textContent = "Patient details — could not read the paste, fill these in";
     $("found").open = true;
     return;
@@ -826,6 +827,86 @@ function schemaFieldsOf(form) {
     }));
 }
 
+/**
+ * Put the patient back into the server's answers, in the panel.
+ *
+ * Two jobs the server can no longer do, because it was not given what they
+ * need:
+ *
+ * 1. A demographic row arrives blank with `fill_from` naming the value it
+ *    wants. The value is in the box the doctor checked two steps ago, and has
+ *    never left this tab.
+ * 2. Every other row arrives with the model's own tokens in it — "[PATIENT]
+ *    was admitted on [DOB]" — because the map stayed here.
+ *
+ * A token that survives the substitution is one the model invented. It is
+ * blanked and the row is held, which is the same rule the PDF path applies
+ * server-side: a raw token must never reach a form, and a doctor must never
+ * be shown a citation they cannot check rendered exactly like one they can.
+ */
+// The same sentence the server shows, because it is the same check. Kept
+// verbatim rather than reworded: two wordings for one instruction is two
+// things for a doctor to learn.
+const DATE_RECHECK =
+  "Check the day and month are the right way round — a date written 03/07 " +
+  "is 3 July here and 7 March elsewhere.";
+
+/** ISO, as an insurer's form wants it. */
+function asFormDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : String(iso || "");
+}
+
+/**
+ * Whether a date row has to be re-read, mirroring `_date_recheck`.
+ *
+ * Held only where both readings are possible, which is exactly where the day
+ * is 12 or under. `25/07` is 25 July however the writer thinks about date
+ * order, and a confirm click that is never the interesting one is how the
+ * clicks that are get skimmed past.
+ */
+function dateRecheck(type, value) {
+  if (type !== "date" || typeof value !== "string") return null;
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(value.trim());
+  if (!match || Number(match[1]) > 12) return null;
+  return DATE_RECHECK;
+}
+
+function localise(rows, map) {
+  const stillTokenised = (text) => typeof text === "string" && /\[[A-Z][A-Z0-9_]*\]/.test(text);
+
+  return rows.map((row) => {
+    if (row.fill_from) {
+      const id = Object.keys(DEMOGRAPHIC_FIELDS).find(
+        (key) => DEMOGRAPHIC_FIELDS[key] === row.fill_from
+      );
+      const raw = id ? $(id).value.trim() : "";
+      // The date input holds ISO; a form wants it the way a form wants it,
+      // which is what the server used to convert. Same conversion, same place
+      // the value already is.
+      const value = row.fill_from === "dob" ? asFormDate(raw) : raw;
+      // A date the parser resolved by RULE rather than by reading — Singapore
+      // writes day first, and a note that did not is misread silently and
+      // identically every time. Held for the same reason and with the same
+      // sentence the server uses, and only where both readings are possible.
+      const recheck = dateRecheck(row.field_type, value);
+      return { ...row, value: value || null, recheck, needs_review: Boolean(recheck) };
+    }
+
+    const value = breezefillRedact.remerge(row.value, map);
+    if (stillTokenised(value)) {
+      return { ...row, value: null, status: "missing", needs_review: true, source: null };
+    }
+    const source = breezefillRedact.remerge(row.source, map);
+    return {
+      ...row,
+      value,
+      source: stillTokenised(source) ? null : source,
+      reasoning: stillTokenised(row.reasoning) ? null : breezefillRedact.remerge(row.reasoning, map),
+    };
+  });
+}
+
 async function onMap() {
   const status = $("map-status");
 
@@ -842,9 +923,35 @@ async function onMap() {
     await detectForm();
   }
 
-  let patient;
+  // Nothing is sent until the shapes are in. Awaited rather than checked, so
+  // a click that lands during the first hundred milliseconds waits instead of
+  // taking the "not loaded" branch.
+  await privacyReady;
+  if (!breezefillRedact.ready() || !breezefillParse.ready()) {
+    setStatus(
+      status,
+      "BreezeFill cannot redact this note, so it will not send it. Reload the extension.",
+      "error"
+    );
+    return;
+  }
+
+  // REDACTED HERE, AT SEND TIME, AND NOWHERE ELSE.
+  //
+  // Not at paste time and never cached. The doctor types after pasting — a
+  // correction to a misparsed name, another sentence at the bottom of the box
+  // — and text redacted against the dictionary as it stood ten seconds ago is
+  // text redacted against the wrong dictionary. Rebuilding it costs
+  // milliseconds; re-using it is how a name added after the parse goes out
+  // unmasked.
+  //
+  // And it FAILS CLOSED. Everything below is inside the same try, so anything
+  // that throws — patterns unloaded, no name, no date of birth — leaves
+  // through the catch with nothing sent. There is no branch in this function
+  // that posts the note as it was typed.
+  let redacted;
   try {
-    patient = patientRecord();
+    redacted = breezefillRedact.redact(patientRecord(), pastedText());
   } catch (error) {
     setStatus(status, error.message, "error");
     return;
@@ -856,13 +963,20 @@ async function onMap() {
   try {
     // One path now. The page in front of the doctor is always what gets
     // mapped; the bank only changes how well each of its questions is put.
-    const request = { fields: await liveFields(), patient };
+    //
+    // What goes on the wire is the questions and the tokenised note. No name,
+    // no NRIC, no date of birth, and not the map that could turn a token back
+    // into any of them.
+    const request = {
+      fields: await liveFields(),
+      redacted_text: redacted.redacted_text,
+    };
     if (!request.fields.length) {
       throw new Error(
         "No fillable questions found on this page. Click the BreezeFill icon on the tab with the form open."
       );
     }
-    const response = await fetch(`${apiBase()}/map-live`, {
+    const response = await fetch(`${apiBase()}/map-redacted`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -888,7 +1002,10 @@ async function onMap() {
       );
     }
     const body = await response.json();
-    state.rows = body.fields;
+    // The last step that touches a patient's details, and it happens here.
+    // The server answered in tokens because it was never given anything else;
+    // the map that turns them back is in this tab and goes no further.
+    state.rows = localise(body.fields, redacted.redaction_map);
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
@@ -1960,6 +2077,41 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
 updateFound();
 loadForms().then(detectForm);
 
+/**
+ * Hand the shared identifier shapes to both privacy modules.
+ *
+ * Packaged with the extension, not fetched from the backend: a redaction rule
+ * that arrives over the network is a redaction rule somebody else can replace
+ * with one that matches nothing.
+ *
+ * If this fails, mapping is refused outright. There is no degraded mode where
+ * the note goes out unredacted with a warning — a warning is a thing a busy
+ * doctor clicks past, and the note cannot be recalled afterwards.
+ */
+async function loadPrivacy() {
+  const url =
+    globalThis.chrome && chrome.runtime && chrome.runtime.getURL
+      ? chrome.runtime.getURL("privacy/patterns.json")
+      : "../privacy/patterns.json";
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`patterns.json: HTTP ${response.status}`);
+  const spec = await response.json();
+  breezefillParse.usePatterns(spec);
+  breezefillRedact.usePatterns(spec);
+}
+
+const privacyReady = loadPrivacy().catch((error) => {
+  // Named on the button the doctor would press next, not in a console nobody
+  // opens. `onMap` re-awaits this and refuses, so a panel in this state can
+  // still be typed into and can never send anything.
+  setStatus(
+    $("map-status"),
+    "BreezeFill cannot redact this note, so it will not send it. Reload the extension.",
+    "error"
+  );
+  console.error("privacy modules unavailable:", error.message);
+});
+
 // Exposed for the tests, which drive this file the way the panel does rather
 // than reimplementing it. Nothing else reads it, and it holds no patient data
 // — the claim lives in `state`, in this document, and is gone when the panel
@@ -1978,5 +2130,7 @@ globalThis.breezefillPanel = {
   fillPlan,
   draftSchema,
   readableDate,
+  localise,
+  loadPrivacy,
   state,
 };

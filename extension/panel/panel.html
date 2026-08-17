@@ -423,6 +423,15 @@
       </p>
     </details>
 
+    <!--
+      The privacy modules load FIRST, and panel.js will not map without them.
+      They are what keeps the patient's details in this tab: parse.js reads the
+      identifiers out of the paste, redact.js takes them back out of the note
+      before it is sent, and the map that could put them back never leaves this
+      document.
+    -->
+    <script src="../privacy/parse.js"></script>
+    <script src="../privacy/redact.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>
