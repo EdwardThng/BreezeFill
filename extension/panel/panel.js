@@ -741,10 +741,10 @@ function updateFound() {
     const [status, text] = badgeFor(id);
     badge.className = `badge ${status}`;
     badge.textContent = text;
-    // Toggled rather than assigned. `adding` is the doctor's decision to open
-    // a box on a row that had none, and rewriting the class list would shut
-    // it again on the next keystroke — which is every keystroke, since typing
-    // into that box is what this runs on.
+    // Toggled rather than assigned. `detail` is in the markup and is what
+    // gives this row its whole layout, so writing the class list out in full
+    // here — which is what this used to do — deleted it on the first
+    // keystroke and left the card to fall back to the mapped row's.
     const row = $(`row-${id}`);
     row.classList.toggle("pending", status === "inferred");
     row.classList.toggle("missing", status === "missing");
@@ -765,13 +765,29 @@ function updateFound() {
   }
 }
 
+// Where a doctor reports a failure, and the code they quote when they do.
+//
+// Every message below names one. A doctor cannot read a stack trace and
+// should not be asked to describe a fault in their own words — "it did not
+// work" is what actually arrives otherwise. A short code turns a support
+// email into a lookup: BF-503 is the key, BF-NET is the network, and the two
+// need completely different answers.
+const SUPPORT_EMAIL = "thngedward@gmail.com";
+
+/** A doctor-facing sentence, with the code that identifies it. */
+function reportable(sentence, code) {
+  return `${sentence} If this keeps happening, email ${SUPPORT_EMAIL} and quote ${code}.`;
+}
+
 // A network throw carries no status code — the request never reached a
 // server, or reached one whose 500 came out of Starlette's error handler,
 // which sits outside the CORS middleware and so answers with no
 // Access-Control headers at all. Either way the browser hands us a bare
 // TypeError: "Failed to fetch", which no doctor can act on.
-const UNREACHABLE =
-  "Could not reach the backend. Check it is running, then check the URL under Advanced.";
+const UNREACHABLE = reportable(
+  "Could not reach BreezeFill's server. Check your internet connection, then try again.",
+  "BF-NET"
+);
 
 function messageFor(error) {
   return error instanceof TypeError ? UNREACHABLE : error.message || "Mapping failed.";
@@ -940,7 +956,10 @@ async function onMap() {
   if (!breezefillRedact.ready() || !breezefillParse.ready()) {
     setStatus(
       status,
-      "BreezeFill cannot redact this note, so it will not send it. Reload the extension.",
+      reportable(
+        "BreezeFill cannot remove the patient's details from this note, so it will not send it. Reload the extension.",
+        "BF-SAFE"
+      ),
       "error"
     );
     return;
@@ -1006,18 +1025,27 @@ async function onMap() {
       // body would reintroduce it.
       throw new Error(
         {
-          502: "The model call failed.",
-          503: "The backend has no API key. Set ANTHROPIC_API_KEY in the terminal running it, then restart it.",
-          404: "The backend does not know this form. Restart it if you have just added one.",
+          // Plain sentences, not diagnoses. The old 503 told a GP to set
+          // ANTHROPIC_API_KEY in a terminal and restart it — a developer's
+          // note on a doctor's screen. The code carries that detail instead.
+          502: reportable("BreezeFill could not reach the service that reads notes.", "BF-502"),
+          503: reportable("BreezeFill's server is not set up to answer yet.", "BF-503"),
+          404: reportable("BreezeFill's server does not know this form.", "BF-404"),
           // Both of these used to arrive as a bare "Request failed (422)",
           // which is what a tester saw and could do nothing with. The backend
           // knew exactly what was wrong in each case; the panel was throwing
           // it away. Still keyed on the status and not the body — a 422 from
           // FastAPI's own validation quotes the input that failed, and the
           // input here carries the clinical text.
-          413: "This page has more questions than BreezeFill can map in one go. Try a page with fewer fields, or one step of the form at a time.",
-          422: "BreezeFill could not read any questions on this page. Its fields may have no labels, or the form may be inside a frame BreezeFill cannot see.",
-        }[response.status] || `Request failed (${response.status}).`
+          413: reportable(
+            "This page has more questions than BreezeFill can map at once. Try one section of the form at a time.",
+            "BF-413"
+          ),
+          422: reportable(
+            "BreezeFill could not read any questions on this page. Its fields may have no labels, or the form may sit inside a frame it cannot see.",
+            "BF-422"
+          ),
+        }[response.status] || reportable("BreezeFill's server refused the request.", `BF-${response.status}`)
       );
     }
     const body = await response.json();
@@ -1778,11 +1806,16 @@ async function ask(message) {
     await chrome.scripting.executeScript({ target: { tabId }, files: INJECT_FILES });
   } catch {
     throw new Error(
-      "BreezeFill has no access to this tab. Click the BreezeFill icon in the toolbar while this page is open, then try again."
+      reportable(
+        "BreezeFill has no access to this tab. Click the BreezeFill icon in the toolbar while this page is open, then try again.",
+        "BF-TAB"
+      )
     );
   }
   const response = await chrome.tabs.sendMessage(tabId, { target: "breezefill-content", ...message });
-  if (!response || !response.ok) throw new Error("The page did not respond.");
+  if (!response || !response.ok) {
+    throw new Error(reportable("The insurer's page did not answer.", "BF-PAGE"));
+  }
   return response;
 }
 
@@ -2104,21 +2137,6 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
     updateFound();
   });
 
-  // The way in to a field nothing answered. The box is not on screen because
-  // six empty ones made a checking screen read as a form to fill — but `dob`
-  // is required and a note that never states a birth date is the ordinary
-  // case, so the row cannot be a dead end either.
-  //
-  // Opening it is sticky: `adding` stays until the panel is reloaded, so a
-  // doctor who types a value and then clears it is not left mid-word with the
-  // box shut under them. `full-name` is asked for at step 1 and has no row.
-  const row = $(`row-${id}`);
-  const add = row && row.querySelector(".add");
-  if (!add) continue;
-  add.addEventListener("click", () => {
-    row.classList.add("adding");
-    $(id).focus();
-  });
 }
 // Advance only on an explicit click — never on typing, and never because the
 // insurer's page changed shape underneath.

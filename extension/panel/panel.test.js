@@ -243,7 +243,10 @@ describe("when the backend is not running", () => {
     // The browser's own wording is what the doctor saw last time, and there
     // is nothing they can do with it.
     expect($("map-status").textContent).not.toContain("Failed to fetch");
-    expect($("map-status").textContent).toContain("Could not reach the backend");
+    expect($("map-status").textContent).toContain("Could not reach BreezeFill's server");
+    // Every failure the doctor can see names a code, so a support email is a
+    // lookup rather than a description of what "did not work" felt like.
+    expect($("map-status").textContent).toContain("BF-NET");
   });
 
   test("a bank that will not load costs sharpness, not the fill", async () => {
@@ -1024,44 +1027,45 @@ describe("the check screen says what it knows about each value", () => {
     expect($("badge-nric").textContent).toBe("Found in the note");
   });
 
-  test("a field nothing answered offers a way in without standing one open", async () => {
+  test("a field nothing answered is typed into directly", async () => {
     const panel = loadPanel();
     await settle();
     $("paste").value = "Patient: Chua Beng Huat";
     await panel.parsePaste();
 
     const row = $("row-insurer");
-    // Not open by itself: six standing boxes are what made a checking screen
-    // read as a form to fill.
-    expect(row.className).not.toContain("adding");
+    expect(row.className).toContain("missing");
 
-    row.querySelector(".add").click();
-
-    // But never a dead end — `dob` is required and an unlabelled date is
-    // never read as a birth date, so this row is the ordinary case.
-    expect(row.className).toContain("adding");
-    expect(document.activeElement).toBe($("insurer"));
-  });
-
-  test("a box opened by hand stays open when the value is cleared again", async () => {
-    // updateFound runs on every keystroke, and it used to rewrite the row's
-    // whole class list. Typing one character and deleting it would then shut
-    // the box under the doctor mid-correction.
-    const panel = loadPanel();
-    await settle();
-    $("paste").value = "Patient: Chua Beng Huat";
-    await panel.parsePaste();
-
-    const row = $("row-insurer");
-    row.querySelector(".add").click();
+    // There is nothing to press first. A button here once opened the box on
+    // request; it stood in front of the only thing a doctor can do on this
+    // row, and the row says "Nothing found" in words already.
+    expect(row.querySelector(".add")).toBeNull();
+    expect(row.querySelector("input")).toBe($("insurer"));
 
     $("insurer").value = "AIA";
+    $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(row.className).not.toContain("missing");
+    expect(row.className).toContain("confirmed");
+    expect($("badge-insurer").textContent).toBe("You typed this");
+  });
+
+  test("the row keeps its layout through a keystroke", async () => {
+    // updateFound runs on every one of them, and it used to write the class
+    // list out in full — which deleted `detail`, the class carrying the whole
+    // card layout, and dropped the row back to the mapped row's.
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    await panel.parsePaste();
+
+    $("insurer").value = "A";
     $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
     $("insurer").value = "";
     $("insurer").dispatchEvent(new Event("input", { bubbles: true }));
 
-    expect(row.className).toContain("missing");
-    expect(row.className).toContain("adding");
+    expect($("row-insurer").className).toContain("detail");
+    expect($("row-insurer").className).toContain("missing");
   });
 });
 
@@ -2582,5 +2586,54 @@ describe("when the form moves to a different section", () => {
     await settle();
 
     expect($("prompt-why").textContent).not.toContain("The form moved on");
+  });
+});
+
+describe("a failure a doctor can report", () => {
+  // "It did not work" is what arrives otherwise. A doctor cannot read a stack
+  // trace and should not be asked to describe a fault in their own words, so
+  // every message they can see names a code: BF-503 is a key that was never
+  // set, BF-NET is their wifi, and the two need completely different answers.
+  const cases = [
+    [503, "BF-503"],
+    [502, "BF-502"],
+    [413, "BF-413"],
+    [422, "BF-422"],
+    [404, "BF-404"],
+    [418, "BF-418"], // anything unlisted still names itself
+  ];
+
+  for (const [status, code] of cases) {
+    test(`${status} is reportable as ${code}`, async () => {
+      routes["/map-redacted"] = () => respond({}, false, status);
+      routes["/map-live"] = () => respond({}, false, status);
+      const panel = loadPanel();
+      await settle();
+      $("paste").value = "Patient: Chua Beng Huat";
+      $("full-name").value = "Chua Beng Huat";
+      $("dob").value = "1972-11-04";
+      await panel.onMap();
+
+      const said = $("map-status").textContent;
+      expect(said).toContain(code);
+      expect(said).toContain("thngedward@gmail.com");
+    });
+  }
+
+  test("the developer's own instruction is gone from the doctor's screen", async () => {
+    // 503 used to read "Set ANTHROPIC_API_KEY in the terminal running it,
+    // then restart it." A GP has no terminal. The code carries that detail to
+    // the person who can act on it instead.
+    routes["/map-redacted"] = () => respond({}, false, 503);
+    routes["/map-live"] = () => respond({}, false, 503);
+    const panel = loadPanel();
+    await settle();
+    $("paste").value = "Patient: Chua Beng Huat";
+    $("full-name").value = "Chua Beng Huat";
+    $("dob").value = "1972-11-04";
+    await panel.onMap();
+
+    expect($("map-status").textContent).not.toContain("ANTHROPIC_API_KEY");
+    expect($("map-status").textContent).not.toContain("terminal");
   });
 });
