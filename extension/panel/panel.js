@@ -1478,9 +1478,12 @@ function renderRows() {
  * Nowhere, unless it is put somewhere: the focused element has just left the
  * document, so the browser drops focus to <body> and the next Tab starts again
  * from the top of the panel — which on a long claim means the doctor loses
- * their place on every single confirm. The next value waiting to be confirmed
- * is what they were going to press anyway, and Fill is where they end up once
- * this was the last one.
+ * their place on every single confirm.
+ *
+ * Somewhere IN PLACE, and never the Fill button. The next value still waiting
+ * is what they were going to press anyway; when there is none, they stay on
+ * the row they just confirmed rather than being carried to the bottom of the
+ * claim.
  */
 function focusAfterConfirm(wrap) {
   const remaining = [...$("rows").querySelectorAll("button.confirm")];
@@ -1488,9 +1491,19 @@ function focusAfterConfirm(wrap) {
     remaining.find(
       (b) => wrap.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
     ) || remaining[0];
-  const fill = $("fill-btn");
-  if (next) next.focus();
-  else if (!fill.disabled) fill.focus();
+  // preventScroll throughout. Focus is a keyboard position, not a scroll
+  // instruction, and where the doctor is looking is their decision.
+  if (next) {
+    next.focus({ preventScroll: true });
+    return;
+  }
+  // Nothing left to confirm, and this is where it used to travel to the Fill
+  // button — which scrolled the doctor to the bottom of the claim the instant
+  // they confirmed the last value, ending the read-through they were in the
+  // middle of. Confirming the last one is not the same as being finished.
+  // Staying on the row keeps Tab order sensible and moves nothing.
+  wrap.tabIndex = -1;
+  wrap.focus({ preventScroll: true });
 }
 
 function updateFillButton() {

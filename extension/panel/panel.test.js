@@ -1737,12 +1737,18 @@ describe("confirming a value", () => {
     expect(document.activeElement).toBe(rows[1].querySelector("button.confirm"));
   });
 
-  test("hands it to Fill once there is no next", async () => {
+  test("stays on the row once there is no next, rather than travelling to Fill", async () => {
+    // Focusing Fill scrolled the doctor to the bottom of the claim the instant
+    // they confirmed the last value, ending the read-through they were in the
+    // middle of. Confirming the last one is not the same as being finished —
+    // they may still be checking the ones they already confirmed.
     await mapWith([ADMISSION_DATE]);
+    const row = $("rows").children[0];
 
-    $("rows").querySelector("button.confirm").click();
+    row.querySelector("button.confirm").click();
 
-    expect(document.activeElement).toBe($("fill-btn"));
+    expect(document.activeElement).toBe(row);
+    expect(document.activeElement).not.toBe($("fill-btn"));
     expect($("fill-btn").disabled).toBe(false);
   });
 });
@@ -1948,5 +1954,23 @@ describe("the fill report", () => {
 
     expect(mapped.indexOf("fill-report")).toBeLessThan(mapped.indexOf("rows"));
     expect(mapped.indexOf("fill-report")).toBeLessThan(mapped.indexOf("fill-btn"));
+  });
+});
+
+describe("an inferred value's sentence", () => {
+  test("is still marked, and still marked as you scroll to it", async () => {
+    // The dashed rule alone read as "nothing is highlighted". It is the
+    // sentence the doctor has to read — the rule only says the value is not
+    // written in there.
+    await mapWithNote([
+      { ...QUOTED, status: "inferred", needs_review: true,
+        value: "J03.90", label: "ICD-10 code",
+        reasoning: "J03.90 is the ICD-10 code for acute tonsillitis." },
+    ]);
+
+    const mark = marked();
+    expect(mark).not.toBeNull();
+    expect(mark.textContent).toBe("Dx acute tonsillitis.");
+    expect(mark.classList.contains("reasoned")).toBe(true);
   });
 });
