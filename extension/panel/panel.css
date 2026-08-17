@@ -68,6 +68,9 @@
   --check-mark: #fdf3dc;
   /* The value itself, inside the sentence that carries it. */
   --check-hit: #f4dfa6;
+  /* A sentence a value was REASONED from rather than quoted out of. Marked,
+     because it is what the doctor has to read — just not as the answer. */
+  --check-faint: #fbf7ec;
   --missing: #6e6e73;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
@@ -749,9 +752,13 @@ details > *:not(summary) {
   color: var(--text);
 }
 
+/* Still a highlight — it is the sentence the doctor has to read. What the
+   dashed rule under it says is only that the value is not written in there. An
+   outline alone read as "nothing is marked". */
 .quote.on.reasoned {
+  background: var(--check-faint);
   color: var(--text);
-  text-decoration: underline dashed var(--check-line);
+  text-decoration: underline dashed var(--check);
   text-underline-offset: 4px;
 }
 
