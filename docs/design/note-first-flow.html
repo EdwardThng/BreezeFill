@@ -1,0 +1,1160 @@
+<title>BreezeFill Note-First Flow</title>
+<style>
+  /* ------------------------------------------------------------------ tokens
+     Palette is the panel's own design system (extension/panel/panel.css),
+     because this is a mockup OF that panel — a second palette would be a
+     different product. The page around it uses a cooler neutral so the panel
+     reads as an object sitting on a desk rather than as the page itself. */
+  :root {
+    --paper: #f5f5f4;
+    --surface: #fcfcfb;
+    --field: #ffffff;
+    --text: #1d1d1f;
+    --muted: #86868b;
+    --muted-strong: #6e6e73;
+    --line: #e7e7e4;
+    --line-strong: #e3e3e0;
+    --line-quiet: #eaeae7;
+
+    --confident: #157553;
+    --confident-bg: #f1f7f3;
+    --confident-line: #cfe3d6;
+    --check: #8a6a28;
+    --check-bg: #fbf7ef;
+    --check-line: #d9c9a8;
+    --missing: #86868b;
+    --accent: #0071e3;
+    --accent-hover: #0062c4;
+
+    --disabled-bg: #efefec;
+    --disabled-line: #e0e0dc;
+    --disabled-ink: #a5a5a0;
+
+    /* The desk the panel sits on. Cool, slightly blue — the browser chrome
+       around an insurer portal, not the panel's own warm paper. */
+    --desk: #e8eaee;
+    --desk-ink: #3d4350;
+    --desk-muted: #6a7183;
+    --desk-line: #d3d7e0;
+    --desk-card: #ffffff;
+
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1a1a1c;
+      --surface: #202023;
+      --field: #17171a;
+      --text: #f2f2f0;
+      --muted: #97979d;
+      --muted-strong: #b0b0b6;
+      --line: #2e2e33;
+      --line-strong: #35353b;
+      --line-quiet: #292930;
+
+      --confident: #4cb98a;
+      --confident-bg: #16261f;
+      --confident-line: #2c4c3d;
+      --check: #d3ab63;
+      --check-bg: #262015;
+      --check-line: #4d4029;
+      --missing: #8b8b92;
+      --accent: #4c9dff;
+      --accent-hover: #6bafff;
+
+      --disabled-bg: #26262a;
+      --disabled-line: #33333a;
+      --disabled-ink: #6b6b73;
+
+      --desk: #101114;
+      --desk-ink: #dfe2e9;
+      --desk-muted: #8d94a4;
+      --desk-line: #262a33;
+      --desk-card: #1b1d22;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #1a1a1c;
+    --surface: #202023;
+    --field: #17171a;
+    --text: #f2f2f0;
+    --muted: #97979d;
+    --muted-strong: #b0b0b6;
+    --line: #2e2e33;
+    --line-strong: #35353b;
+    --line-quiet: #292930;
+
+    --confident: #4cb98a;
+    --confident-bg: #16261f;
+    --confident-line: #2c4c3d;
+    --check: #d3ab63;
+    --check-bg: #262015;
+    --check-line: #4d4029;
+    --missing: #8b8b92;
+    --accent: #4c9dff;
+    --accent-hover: #6bafff;
+
+    --disabled-bg: #26262a;
+    --disabled-line: #33333a;
+    --disabled-ink: #6b6b73;
+
+    --desk: #101114;
+    --desk-ink: #dfe2e9;
+    --desk-muted: #8d94a4;
+    --desk-line: #262a33;
+    --desk-card: #1b1d22;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--desk);
+    color: var(--desk-ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 30px 22px 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ------------------------------------------------------------------ intro */
+  .intro { display: flex; flex-direction: column; gap: 8px; max-width: 66ch; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--desk-muted);
+    margin: 0;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 27px;
+    font-weight: 560;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  .lede { margin: 0; color: var(--desk-muted); font-size: 14.5px; }
+
+  /* ------------------------------------------------------------------ stage */
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 396px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* --------------------------------------------------------- insurer portal */
+  .browser {
+    background: var(--desk-card);
+    border: 1px solid var(--desk-line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(16, 17, 20, 0.05), 0 12px 30px rgba(16, 17, 20, 0.07);
+  }
+
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--desk-line);
+  }
+
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 9px; height: 9px; border-radius: 999px; background: var(--desk-line); }
+
+  .url {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--desk-muted);
+    background: var(--desk);
+    border-radius: 6px;
+    padding: 4px 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .portal { padding: 20px 22px 22px; color: var(--desk-ink); }
+
+  .portal-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--desk-line);
+  }
+
+  .portal-head h2 { margin: 0; font-size: 16px; font-weight: 560; letter-spacing: -0.01em; }
+  .portal-step { font-family: var(--mono); font-size: 11px; color: var(--desk-muted); }
+
+  .pips { display: flex; gap: 6px; margin: 14px 0 18px; flex-wrap: wrap; }
+
+  .pip {
+    font-size: 11.5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--desk-line);
+    color: var(--desk-muted);
+    background: none;
+  }
+
+  .pip.on { border-color: transparent; background: var(--desk-ink); color: var(--desk-card); }
+
+  .q { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+  .q > span { font-size: 12.5px; color: var(--desk-muted); }
+
+  .q input, .q select {
+    width: 100%;
+    font: inherit;
+    font-size: 13.5px;
+    padding: 8px 10px;
+    color: var(--desk-ink);
+    background: var(--desk-card);
+    border: 1px solid var(--desk-line);
+    border-radius: 7px;
+    transition: background 0.35s ease, border-color 0.35s ease;
+  }
+
+  .q input.written, .q select.written {
+    background: var(--confident-bg);
+    border-color: var(--confident-line);
+  }
+
+  .portal-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 6px;
+    border-top: 1px solid var(--desk-line);
+    margin-top: 4px;
+  }
+
+  /* ------------------------------------------------------------- the panel  */
+  .panel {
+    background: var(--paper);
+    color: var(--text);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 13.5px;
+    line-height: 1.55;
+    box-shadow: 0 1px 2px rgba(16, 17, 20, 0.05), 0 12px 30px rgba(16, 17, 20, 0.07);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .chip {
+    width: 27px; height: 27px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    background: var(--paper);
+    border: 1px solid var(--line-strong);
+  }
+
+  .chip svg { width: 16px; height: 16px; display: block; }
+
+  .panel-head h3 { margin: 0; font-size: 14.5px; font-weight: 520; letter-spacing: -0.01em; }
+  .tagline { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.3; }
+  .counter { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .panel-body {
+    padding: 13px 15px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    max-height: 640px;
+    overflow-y: auto;
+  }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .step h4 { margin: 0; font-size: 14.5px; font-weight: 520; }
+  .sub { margin: -6px 0 0; font-size: 12.5px; color: var(--muted); }
+
+  label.f { display: flex; flex-direction: column; gap: 5px; }
+  label.f > span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+  .panel input[type="text"], .panel textarea, .panel select {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--field);
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    padding: 8px 10px;
+  }
+
+  .panel textarea { font-family: var(--mono); font-size: 11.5px; resize: vertical; }
+
+  .panel button { font-family: inherit; cursor: pointer; }
+
+  .primary {
+    width: 100%;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 10px 13px;
+    border-radius: 9px;
+    border: 1px solid var(--text);
+    background: var(--text);
+    color: var(--surface);
+    transition: opacity 0.18s ease, transform 0.12s ease;
+  }
+
+  .primary:hover { opacity: 0.9; }
+  .primary:active { transform: scale(0.99); }
+
+  .primary[disabled] {
+    background: var(--disabled-bg);
+    border-color: var(--disabled-line);
+    color: var(--disabled-ink);
+    cursor: not-allowed;
+  }
+
+  .ghost {
+    font-size: 12.5px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line-strong);
+    background: var(--field);
+    color: var(--text);
+  }
+
+  .ghost:hover { border-color: var(--muted); }
+
+  .link {
+    background: none; border: 0; padding: 0;
+    font-size: 12.5px; color: var(--accent);
+    text-decoration: underline; text-underline-offset: 2px;
+    align-self: flex-start;
+  }
+
+  /* ---------------------------------------------------------- finished rows */
+  .done {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .done-head {
+    width: 100%;
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 12px;
+    background: none; border: 0;
+    font: inherit; text-align: left; color: inherit;
+  }
+
+  .done-head:hover { background: var(--paper); }
+
+  .tick {
+    flex: none;
+    width: 15px; height: 15px;
+    border-radius: 999px;
+    background: var(--confident);
+    color: #fff;
+    font-size: 9px;
+    display: grid; place-items: center;
+  }
+
+  .done-label { flex: 1; min-width: 0; }
+  .done-title { font-size: 11px; color: var(--muted); display: block; }
+  .done-value { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .chev { color: var(--disabled-ink); font-size: 16px; transition: transform 0.2s ease; }
+  .done[data-open="true"] .chev { transform: rotate(90deg); }
+
+  .done-body {
+    padding: 0 12px 11px 36px;
+    display: flex; flex-direction: column; gap: 7px;
+    font-size: 12.5px; color: var(--muted);
+    white-space: pre-wrap;
+  }
+
+  /* The sealed row: the one row that is a promise rather than a summary. */
+  .done.sealed { border-color: var(--confident-line); background: var(--confident-bg); }
+  .done.sealed .done-title { color: var(--confident); }
+  .done.sealed .tick { background: var(--confident); }
+
+  /* ---------------------------------------------------------------- cards   */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 11px 12px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+
+  .card.pending { border-left: 3px solid var(--check); padding-left: 12px; }
+  .card.confirmed { border-left: 3px solid var(--confident); padding-left: 12px; }
+
+  .badge { font-size: 11.5px; font-weight: 500; }
+  .badge.found { color: var(--confident); }
+  .badge.check { color: var(--check); }
+  .badge.none { color: var(--missing); }
+  .badge.typed { color: var(--confident); }
+
+  .card .name { font-size: 13.5px; font-weight: 500; }
+  .card .help { font-size: 11.5px; color: var(--muted); margin: 0; }
+
+  .choices { display: flex; flex-direction: column; gap: 6px; }
+  .choices p { margin: 0; font-size: 12px; color: var(--check); }
+  .choice-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .choice {
+    font-size: 12.5px;
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--check-line);
+    background: var(--check-bg);
+    color: var(--text);
+  }
+
+  .choice:hover { border-color: var(--check); }
+
+  .status { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.2em; }
+  .status.busy { color: var(--check); }
+  .status.good { color: var(--confident); }
+
+  .scanline {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--muted-strong);
+    background: var(--paper);
+    border: 1px dashed var(--line-strong);
+    border-radius: 9px;
+    padding: 9px 11px;
+  }
+
+  .pulse {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: var(--check);
+    animation: pulse 1.4s ease-in-out infinite;
+    flex: none;
+  }
+
+  .pulse.live { background: var(--confident); }
+
+  @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  .prompt {
+    background: var(--check-bg);
+    border: 1px solid var(--check-line);
+    border-radius: 10px;
+    padding: 11px 12px;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+
+  .prompt strong { font-size: 13px; font-weight: 550; }
+  .prompt p { margin: 0; font-size: 12.5px; color: var(--muted-strong); }
+
+  .progress { height: 3px; background: var(--line); border-radius: 999px; overflow: hidden; }
+  .progress i { display: block; height: 100%; background: var(--text); transition: width 0.3s ease; }
+
+  /* ------------------------------------------------------------------ notes */
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+  }
+
+  .note-card {
+    background: var(--desk-card);
+    border: 1px solid var(--desk-line);
+    border-radius: 11px;
+    padding: 14px 15px;
+  }
+
+  .note-card h5 {
+    margin: 0 0 5px;
+    font-size: 12.5px;
+    font-weight: 560;
+    letter-spacing: -0.005em;
+  }
+
+  .note-card p { margin: 0; font-size: 12.5px; color: var(--desk-muted); line-height: 1.55; }
+
+  .toolbar { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+
+  .toolbar button {
+    font-family: inherit;
+    font-size: 12.5px;
+    padding: 6px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--desk-line);
+    background: var(--desk-card);
+    color: var(--desk-ink);
+    cursor: pointer;
+  }
+
+  .toolbar button:hover { border-color: var(--desk-muted); }
+
+  .hint { font-size: 12.5px; color: var(--desk-muted); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    margin: -1px; padding: 0; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="eyebrow">BreezeFill · proposed sequence</p>
+    <h1>The note comes first. The page is read afterwards, and again at every step.</h1>
+    <p class="lede">
+      Click through both halves. The insurer's wizard is on the left — press
+      <strong>Next section</strong> to move it. The side panel is on the right and
+      reacts to what the page becomes, not to what it was when the note was pasted.
+    </p>
+  </div>
+
+  <div class="toolbar">
+    <button type="button" id="reset">Start over</button>
+    <span class="hint" id="hint">Step 1: type the patient's name.</span>
+  </div>
+
+  <div class="stage">
+    <!-- ------------------------------------------------ the insurer portal -->
+    <div class="browser">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="url">claimez.aia.com.sg/doc/?pid=•••••••• — the URL never changes between sections</div>
+      </div>
+      <div class="portal">
+        <div class="portal-head">
+          <h2 id="portal-title">Verification</h2>
+          <span class="portal-step" id="portal-step">Section 1 of 4</span>
+        </div>
+        <div class="pips" id="pips"></div>
+        <div id="portal-questions"></div>
+        <div class="portal-nav">
+          <button type="button" class="ghost" id="prev-section">Back</button>
+          <button type="button" class="ghost" id="next-section">Next section →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- -------------------------------------------------------- the panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="chip" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="4.5" y="4.5" width="15" height="16" rx="3.5" stroke="currentColor" stroke-width="2"/>
+            <rect x="9" y="2.5" width="6" height="4" rx="2" fill="currentColor"/>
+            <path d="M8 11.5h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M8 15h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span>
+          <h3>BreezeFill</h3>
+          <p class="tagline">Fills the form in place. Never submits it.</p>
+        </span>
+        <span class="counter" id="counter">Step 1 of 4</span>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note-card">
+      <h5>Why the note goes first</h5>
+      <p>
+        Mapping used to fire once, against whatever page was showing. On this form
+        that is the verification section — which holds none of the questions a
+        consultation note can answer. The note no longer waits for the right page.
+      </p>
+    </div>
+    <div class="note-card">
+      <h5>Nothing maps without a click</h5>
+      <p>
+        The panel notices a new section and says what it found there. It does not
+        call the model until you press the button — four sections would otherwise
+        be four calls nobody asked for.
+      </p>
+    </div>
+    <div class="note-card">
+      <h5>The check screen stays</h5>
+      <p>
+        The parse is a first draft. These values are what the note is scrubbed
+        against before it leaves the browser, so a wrong name here is a name left
+        in the text — it is checked before anything is sent, then sealed.
+      </p>
+    </div>
+    <div class="note-card">
+      <h5>Filling is still per step</h5>
+      <p>
+        Values are written into the section on screen when you press Fill, and
+        never on a page change. Advancing a step is you using the insurer's form,
+        not asking BreezeFill for anything.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------------------------------------------------------------- content
+  // Four sections of an AIA-shaped wizard. The first and last exist to show
+  // the case the current sequence gets wrong: a page with questions on it that
+  // a consultation note cannot answer.
+  const SECTIONS = [
+    {
+      title: "Verification",
+      questions: [
+        { id: "v1", label: "Policy number", type: "text" },
+        { id: "v2", label: "Claimant NRIC / FIN", type: "text" },
+        { id: "v3", label: "Relationship to policyholder", type: "select", options: ["Self", "Spouse", "Child"] }
+      ],
+      answerable: false,
+      why: "These are the claimant's own details, entered by whoever opened the link."
+    },
+    {
+      title: "Admission details",
+      questions: [
+        { id: "a1", label: "Hospital admitted to", type: "text" },
+        { id: "a2", label: "Date of admission", type: "text" },
+        { id: "a3", label: "Date of discharge", type: "text" },
+        { id: "a4", label: "Ward class", type: "select", options: ["A", "B1 (4-bedded)", "B2", "C"] },
+        { id: "a5", label: "Was this an emergency admission?", type: "select", options: ["Yes", "No"] }
+      ],
+      answerable: true,
+      rows: [
+        { id: "a1", label: "Hospital admitted to", value: "Mount Elizabeth Hospital", status: "found" },
+        { id: "a2", label: "Date of admission", value: "14/03/2026", status: "found" },
+        { id: "a3", label: "Date of discharge", value: "17/03/2026", status: "found" },
+        { id: "a4", label: "Ward class", value: "B1 (4-bedded)", status: "check",
+          help: "The note says “ward B1”. B1 (4-bedded) is the option this form accepts." },
+        { id: "a5", label: "Was this an emergency admission?", value: "", status: "none",
+          help: "The note does not say. Answer this one yourself." }
+      ]
+    },
+    {
+      title: "Patient diagnosis",
+      questions: [
+        { id: "d1", label: "Diagnosis of all conditions treated", type: "text" },
+        { id: "d2", label: "ICD-10 code", type: "text" },
+        { id: "d3", label: "Date you first consulted the patient for this condition", type: "text" },
+        { id: "d4", label: "Duration of symptoms before consultation", type: "text" }
+      ],
+      answerable: true,
+      rows: [
+        { id: "d1", label: "Diagnosis of all conditions treated", value: "Acute appendicitis, non-perforated", status: "found" },
+        { id: "d2", label: "ICD-10 code", value: "K35.80", status: "check",
+          help: "Inferred from the diagnosis. The note does not state a code." },
+        { id: "d3", label: "Date you first consulted the patient for this condition", value: "14/03/2026", status: "found" },
+        { id: "d4", label: "Duration of symptoms before consultation", value: "2 days", status: "found" }
+      ]
+    },
+    {
+      title: "Requested fees",
+      questions: [
+        { id: "f1", label: "Total surgeon fee (SGD)", type: "text" },
+        { id: "f2", label: "Anaesthetist fee (SGD)", type: "text" },
+        { id: "f3", label: "Operation code", type: "text" }
+      ],
+      answerable: false,
+      why: "Billing figures live in the practice management system, not the note."
+    }
+  ];
+
+  const SAMPLE = `Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
+18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902
+
+14/03/2026, 0930h. 53M, 2-day history of periumbilical pain migrating to RIF.
+Referred to Mount Elizabeth Hospital, admitted same day 14/03/2026.
+Laparoscopic appendicectomy 15/03/2026. Discharged 17/03/2026. Ward B1.
+MC 7 days from 15/03/2026.`;
+
+  const DEMOGRAPHICS = [
+    { id: "nric", label: "NRIC", value: "S7211043C", state: "found" },
+    { id: "dob", label: "Date of birth", value: "04/11/1972", state: "found" },
+    { id: "phone", label: "Phone", value: "", state: "check",
+      choices: ["91112233", "62551234"], ask: "2 found in the note — pick the patient's:" },
+    { id: "policy", label: "Policy number", value: "GHS-4471902", state: "found" },
+    { id: "insurer", label: "Insurer", value: "AIA", state: "found" },
+    { id: "address", label: "Address", value: "18 Toa Payoh Lorong 4, Singapore 310018", state: "found" }
+  ];
+
+  // ------------------------------------------------------------------ state
+  const s = {
+    step: "name",            // name | note | check | page
+    name: "",
+    note: "",
+    demo: DEMOGRAPHICS.map((d) => ({ ...d })),
+    sealed: false,
+    section: 0,
+    scanning: false,
+    scanned: false,          // the panel has read this section
+    mappedSection: null,     // which section index the rows belong to
+    mapping: false,
+    rows: [],
+    confirmed: new Set(),
+    written: new Set(),      // question ids written into the page
+    openDone: null
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  // ----------------------------------------------------------- insurer page
+  function renderPortal() {
+    const sec = SECTIONS[s.section];
+    $("portal-title").textContent = sec.title;
+    $("portal-step").textContent = `Section ${s.section + 1} of ${SECTIONS.length}`;
+
+    const pips = $("pips");
+    pips.replaceChildren(
+      ...SECTIONS.map((x, i) => {
+        const p = el("span", "pip" + (i === s.section ? " on" : ""), x.title);
+        return p;
+      })
+    );
+
+    const box = $("portal-questions");
+    box.replaceChildren(
+      ...sec.questions.map((q) => {
+        const wrap = el("label", "q");
+        wrap.append(el("span", null, q.label));
+        let field;
+        if (q.type === "select") {
+          field = el("select");
+          field.append(el("option", null, "— select —"));
+          for (const o of q.options) field.append(el("option", null, o));
+        } else {
+          field = el("input");
+          field.type = "text";
+        }
+        const row = (s.rows || []).find((r) => r.id === q.id);
+        if (s.written.has(q.id) && row) {
+          field.classList.add("written");
+          if (q.type === "select") field.value = row.value;
+          else field.value = row.value;
+        }
+        wrap.append(field);
+        return wrap;
+      })
+    );
+
+    $("prev-section").disabled = s.section === 0;
+    $("next-section").textContent =
+      s.section === SECTIONS.length - 1 ? "Review →" : "Next section →";
+    $("next-section").disabled = s.section === SECTIONS.length - 1;
+  }
+
+  // ------------------------------------------------------------- done rows
+  function doneRow(key, title, value, body) {
+    const wrap = el("div", "done" + (key === "sealed" ? " sealed" : ""));
+    wrap.dataset.open = s.openDone === key ? "true" : "false";
+
+    const head = el("button", "done-head");
+    head.type = "button";
+    head.setAttribute("aria-expanded", s.openDone === key ? "true" : "false");
+    head.append(el("span", "tick", "✓"));
+
+    const label = el("span", "done-label");
+    label.append(el("span", "done-title", title));
+    label.append(el("span", "done-value", value));
+    head.append(label);
+    head.append(el("span", "chev", "›"));
+    head.addEventListener("click", () => {
+      s.openDone = s.openDone === key ? null : key;
+      render();
+    });
+    wrap.append(head);
+
+    if (s.openDone === key && body) {
+      const b = el("div", "done-body");
+      b.textContent = body;
+      wrap.append(b);
+    }
+    return wrap;
+  }
+
+  // ----------------------------------------------------------------- steps
+  function stepName() {
+    const step = el("div", "step");
+    step.append(el("h4", null, "Who is this claim for?"));
+    step.append(el("p", "sub",
+      "Type the patient's name yourself. BreezeFill never guesses this one — a name has no shape for a pattern to find."));
+
+    const f = el("label", "f");
+    f.append(el("span", null, "Full name"));
+    const input = el("input");
+    input.type = "text";
+    input.value = s.name;
+    input.placeholder = "Full name as it appears on the policy";
+    input.addEventListener("input", (e) => { s.name = e.target.value; syncPrimary(); });
+    f.append(input);
+    step.append(f);
+
+    const go = el("button", "primary", "Continue");
+    go.type = "button";
+    go.disabled = !s.name.trim();
+    go.addEventListener("click", () => { s.step = "note"; render(); });
+    step.append(go);
+    return step;
+  }
+
+  function stepNote() {
+    const step = el("div", "step");
+    step.append(el("h4", null, "Paste the consultation"));
+    step.append(el("p", "sub",
+      "Exactly as it sits in your CMS — demographics header and clinical note together. Add anything else the form asks for underneath."));
+
+    const f = el("label", "f");
+    f.append(el("span", "visually-hidden", "Consultation note"));
+    const ta = el("textarea");
+    ta.rows = 9;
+    ta.value = s.note;
+    ta.placeholder = "Paste here.";
+    ta.addEventListener("input", (e) => { s.note = e.target.value; syncPrimary(); });
+    f.append(ta);
+    step.append(f);
+
+    const sample = el("button", "ghost", "Use a sample note");
+    sample.type = "button";
+    sample.addEventListener("click", () => { s.note = SAMPLE; render(); });
+    step.append(sample);
+
+    const go = el("button", "primary", "Find patient details");
+    go.type = "button";
+    go.disabled = !s.note.trim();
+    go.addEventListener("click", () => { s.step = "check"; render(); });
+    step.append(go);
+
+    step.append(el("p", "sub",
+      "Pattern matching, never a model. Nothing has been sent anywhere yet."));
+    return step;
+  }
+
+  function demoCard(d) {
+    const asking = d.state === "check" && !d.value;
+    const card = el("div", "card" + (asking ? " pending" : d.value ? " confirmed" : ""));
+
+    const badgeText = asking
+      ? "Needs checking"
+      : !d.value
+        ? "Nothing found — fill by hand"
+        : d.state === "typed" ? "You typed this" : "Found in the note";
+    const badgeClass = asking ? "check" : !d.value ? "none" : d.state === "typed" ? "typed" : "found";
+    card.append(el("div", "badge " + badgeClass, badgeText));
+    card.append(el("div", "name", d.label));
+
+    const input = el("input");
+    input.type = "text";
+    input.value = d.value;
+    input.addEventListener("input", (e) => { d.value = e.target.value; d.state = "typed"; render(); });
+    card.append(input);
+
+    if (asking) {
+      const c = el("div", "choices");
+      c.append(el("p", null, d.ask));
+      const row = el("div", "choice-row");
+      for (const option of d.choices) {
+        const b = el("button", "choice", option);
+        b.type = "button";
+        b.addEventListener("click", () => { d.value = option; d.state = "typed"; render(); });
+        row.append(b);
+      }
+      c.append(row);
+      card.append(c);
+    }
+    return card;
+  }
+
+  function stepCheck() {
+    const step = el("div", "step");
+    step.append(el("h4", null, "Check these"));
+    step.append(el("p", "sub",
+      "Found by pattern in what you pasted. Correct anything wrong — this is the dictionary the note is scrubbed against, so it has to be right before anything is sent."));
+
+    for (const d of s.demo) step.append(demoCard(d));
+
+    const unresolved = s.demo.filter((d) => d.state === "check" && !d.value).length;
+    const go = el("button", "primary",
+      unresolved ? `${unresolved} still to choose` : "Save and look at this page");
+    go.type = "button";
+    go.disabled = unresolved > 0;
+    go.addEventListener("click", () => {
+      s.sealed = true;
+      s.step = "page";
+      s.scanning = true;
+      render();
+      window.setTimeout(() => { s.scanning = false; s.scanned = true; render(); }, 900);
+    });
+    step.append(go);
+    return step;
+  }
+
+  function sealedRow() {
+    const found = s.demo.filter((d) => d.value).length;
+    return doneRow(
+      "sealed",
+      "Sensitive information saved",
+      "Kept confidential — never sent to the AI",
+      `${found} values are held in this panel for as long as it is open, and nowhere else.\n\n` +
+      "They are used for two things: they are the dictionary your note is scrubbed against " +
+      "before it leaves the browser, and they are copied onto the form directly. " +
+      "The AI is shown the scrubbed note and never these values.\n\n" +
+      "Closing the panel discards them. Nothing is written to disk."
+    );
+  }
+
+  function scanBlock() {
+    const sec = SECTIONS[s.section];
+    const block = el("div", "step");
+    block.append(el("h4", null, "This page"));
+
+    if (s.scanning) {
+      const line = el("div", "scanline");
+      line.append(el("span", "pulse"));
+      line.append(el("span", null, `Reading “${sec.title}”…`));
+      block.append(line);
+      return block;
+    }
+
+    const watching = el("div", "scanline");
+    watching.append(el("span", "pulse live"));
+    watching.append(el("span", null,
+      `Watching this page. Section ${s.section + 1} of ${SECTIONS.length}: “${sec.title}”.`));
+    block.append(watching);
+
+    const isMapped = s.mappedSection === s.section;
+
+    if (!sec.answerable) {
+      const p = el("div", "prompt");
+      p.append(el("strong", null,
+        `${sec.questions.length} questions here, none the note answers.`));
+      p.append(el("p", null, sec.why + " Move to the next section — BreezeFill will look again on its own."));
+      block.append(p);
+      return block;
+    }
+
+    if (!isMapped && !s.mapping) {
+      const p = el("div", "prompt");
+      p.append(el("strong", null,
+        `${sec.questions.length} questions found in “${sec.title}”.`));
+      p.append(el("p", null,
+        "Nothing has been sent yet. Mapping asks the model to answer these from your scrubbed note."));
+      const go = el("button", "primary", `Map these ${sec.questions.length} questions`);
+      go.type = "button";
+      go.addEventListener("click", () => {
+        s.mapping = true;
+        render();
+        window.setTimeout(() => {
+          s.mapping = false;
+          s.mappedSection = s.section;
+          s.rows = sec.rows.map((r) => ({ ...r }));
+          s.confirmed = new Set();
+          render();
+        }, 1100);
+      });
+      p.append(go);
+      block.append(p);
+      return block;
+    }
+
+    if (s.mapping) {
+      const line = el("div", "scanline");
+      line.append(el("span", "pulse"));
+      line.append(el("span", null, "Redacting and mapping…"));
+      block.append(line);
+      return block;
+    }
+
+    // Mapped: the rows for this section.
+    const ready = s.rows.filter((r) => r.value && (r.status !== "check" || s.confirmed.has(r.id)));
+    const summary = el("p", "status",
+      `${ready.length} of ${s.rows.length} answers ready to write. The rest are yours to complete.`);
+    block.append(summary);
+
+    const bar = el("div", "progress");
+    const fill = el("i");
+    fill.style.width = `${Math.round((ready.length / s.rows.length) * 100)}%`;
+    bar.append(fill);
+    block.append(bar);
+
+    for (const r of s.rows) {
+      const pending = r.status === "check" && !s.confirmed.has(r.id) && r.value;
+      const card = el("div", "card" + (pending ? " pending" : s.confirmed.has(r.id) || (r.status === "found" && r.value) ? " confirmed" : ""));
+      const badgeText = !r.value
+        ? "Not found — fill by hand"
+        : r.status === "check"
+          ? (s.confirmed.has(r.id) ? "Confirmed by you" : "Needs your confirmation")
+          : "Extracted from the note";
+      card.append(el("div", "badge " + (!r.value ? "none" : r.status === "check" && !s.confirmed.has(r.id) ? "check" : "found"), badgeText));
+      card.append(el("div", "name", r.label));
+      if (r.help) card.append(el("p", "help", r.help));
+
+      const input = el("input");
+      input.type = "text";
+      input.value = r.value;
+      input.placeholder = r.value ? "" : "Nothing in the note answers this";
+      input.addEventListener("input", (e) => {
+        r.value = e.target.value;
+        s.confirmed.add(r.id);
+        render();
+      });
+      card.append(input);
+
+      if (pending) {
+        const ok = el("button", "ghost", "Confirm this answer");
+        ok.type = "button";
+        ok.addEventListener("click", () => { s.confirmed.add(r.id); render(); });
+        card.append(ok);
+      }
+      block.append(card);
+    }
+
+    const fillBtn = el("button", "primary",
+      s.written.size && [...s.rows].every((r) => s.written.has(r.id) || !r.value)
+        ? "Filled — press again after any edit"
+        : `Fill ${ready.length} field${ready.length === 1 ? "" : "s"}`);
+    fillBtn.type = "button";
+    fillBtn.disabled = ready.length === 0;
+    fillBtn.addEventListener("click", () => {
+      for (const r of ready) s.written.add(r.id);
+      render();
+    });
+    block.append(fillBtn);
+
+    if (s.written.size) {
+      block.append(el("p", "status good",
+        "Written into the section on screen. Nothing was submitted — that is still yours to press."));
+    }
+    return block;
+  }
+
+  // ---------------------------------------------------------------- render
+  function render() {
+    const body = $("panel-body");
+    const parts = [];
+
+    if (s.step !== "name") {
+      parts.push(doneRow("name", "Patient", s.name || "—", s.name));
+    }
+    if (s.step === "check" || s.step === "page") {
+      const words = s.note.trim().split(/\s+/).filter(Boolean).length;
+      parts.push(doneRow("note", "Consultation note", `${words} words pasted`, s.note));
+    }
+    if (s.sealed) parts.push(sealedRow());
+
+    if (s.step === "name") parts.push(stepName());
+    if (s.step === "note") parts.push(stepNote());
+    if (s.step === "check") parts.push(stepCheck());
+    if (s.step === "page") parts.push(scanBlock());
+
+    body.replaceChildren(...parts);
+
+    const order = { name: 1, note: 2, check: 3, page: 4 };
+    $("counter").textContent = `Step ${order[s.step]} of 4`;
+
+    const hints = {
+      name: "Step 1: type the patient's name, then Continue.",
+      note: "Step 2: press “Use a sample note”, then Find patient details.",
+      check: "Step 3: pick the patient's phone number, then save.",
+      page: s.mappedSection === s.section
+        ? "Confirm what needs confirming, press Fill, then move the wizard on with Next section."
+        : "Now press Next section on the left — the panel re-reads the page each time."
+    };
+    $("hint").textContent = hints[s.step];
+
+    renderPortal();
+  }
+
+  function syncPrimary() {
+    const btn = document.querySelector(".step .primary");
+    if (!btn) return;
+    if (s.step === "name") btn.disabled = !s.name.trim();
+    if (s.step === "note") btn.disabled = !s.note.trim();
+  }
+
+  // ------------------------------------------------------------- page moves
+  function moveSection(delta) {
+    const next = Math.min(SECTIONS.length - 1, Math.max(0, s.section + delta));
+    if (next === s.section) return;
+    s.section = next;
+    // The observer notices the shape changed. It re-reads, and then waits.
+    if (s.step === "page") {
+      s.rows = [];
+      s.mappedSection = null;
+      s.confirmed = new Set();
+      s.scanning = true;
+      render();
+      window.setTimeout(() => { s.scanning = false; render(); }, 800);
+    } else {
+      render();
+    }
+  }
+
+  $("next-section").addEventListener("click", () => moveSection(1));
+  $("prev-section").addEventListener("click", () => moveSection(-1));
+  $("reset").addEventListener("click", () => {
+    s.step = "name";
+    s.name = "";
+    s.note = "";
+    s.demo = DEMOGRAPHICS.map((d) => ({ ...d }));
+    s.sealed = false;
+    s.section = 0;
+    s.scanning = false;
+    s.scanned = false;
+    s.mappedSection = null;
+    s.mapping = false;
+    s.rows = [];
+    s.confirmed = new Set();
+    s.written = new Set();
+    s.openDone = null;
+    render();
+  });
+
+  render();
+</script>

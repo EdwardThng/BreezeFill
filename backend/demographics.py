@@ -27,9 +27,21 @@ number gets written onto a claim and signed. So:
 - A date of birth is never taken from unlabelled text at all. A clinical note
   is full of dates — consultation, admission, discharge, MC — and every one of
   them is date-shaped.
-- A name is never guessed from anything. It comes from a labelled line, or
-  from the segment of a labelled patient line that no other rule claimed, or
-  not at all.
+- A name is never guessed from prose. It comes from a labelled line, or from
+  the one gap of a patient header that no other field claimed — and only when
+  that header has already proved what it is by yielding two other fields, and
+  only when the words are capitalised the way a name is. Two candidate names
+  means neither. When the doctor has already typed the name, which in the
+  panel is always, this stops being a guess: it is a search for that name.
+- A value belongs to one field. The shapes are found first and the gaps
+  between them are what is left over, so a value read as an NRIC cannot also
+  be part of the address. This is not tidiness: the address rule used to take
+  the whole line, which put the patient's NRIC, birth date, phone and policy
+  number into the address box on any block nobody had labelled.
+- A value the note says is somebody else's is dropped before any of the above.
+  `Clinic tel`, `Next of kin contact`, `her husband S6234567C` — uniqueness is
+  what the unlabelled rule believes, and a unique value can still be the
+  clinic's.
 
 Everything found is shown back to the doctor as an editable field. Nothing
 here is a final answer; it is a first draft of one.
@@ -116,6 +128,93 @@ PHONE_IN_TEXT = re.compile(
     rf"(?<!{_TOKEN_CHAR}){SG_PHONE_PATTERN.pattern}(?!{_TOKEN_CHAR})"
 )
 
+# The insurers a Singapore GP actually bills, and what a note calls them.
+#
+# An insurer is the one demographic with no shape and no infinite range: there
+# are a few dozen of them, they are spelled the same way every time, and the
+# list changes about once a year. So it is a vocabulary, and a vocabulary is a
+# shape — which is what lets this field be found in prose at all.
+#
+# The canonical name on the left is what goes on the form, and for an insurer
+# whose form is in the bank it is **the same string as that schema's
+# `insurer`** — a value that disagreed with the schema would look like two
+# insurers to anything comparing them.
+#
+# THE RULE FOR ADDING A VARIATION: a variation that is also an ordinary English
+# word, or the first word of an institution's name, must be qualified. Bare
+# "Income" matches "discussed income protection"; bare "Raffles" matches
+# "Raffles Hospital A&E", which is in half the notes in Singapore; bare "GE"
+# matches the policy prefix `GE-88213`; bare "FWD" matches the `Fwd:` on a
+# pasted email. Each of those writes a wrong insurer onto a claim
+# deterministically, under a green "from the details you entered" badge — the
+# model never sees this field and cannot disagree with it.
+#
+# Plan names (PruShield, IncomeShield, HealthShield Gold Max) identify an
+# insurer just as well and are deliberately absent: mapping a plan to its
+# insurer is a fact about the market rather than about the words on the page,
+# and one that goes stale without anything failing.
+INSURERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # The seven Integrated Shield insurers, which is what a GP meets most.
+    ("AIA", ("AIA", "AIA Singapore")),
+    (
+        "Great Eastern",
+        ("Great Eastern", "Great Eastern Life", "Great Eastern Life Assurance"),
+    ),
+    ("HSBC Life", ("HSBC Life", "HSBC Insurance", "HSBC Life Singapore")),
+    ("Income", ("Income Insurance", "NTUC Income")),
+    (
+        "Prudential",
+        ("Prudential", "Prudential Assurance", "Prudential Singapore"),
+    ),
+    ("Raffles Health Insurance", ("Raffles Health Insurance",)),
+    ("Singlife", ("Singlife", "Singapore Life", "Singlife with Aviva")),
+    # Rebranded, and kept as their own names rather than rewritten to the new
+    # ones. A note saying "Aviva" is echoed back as Aviva: restating it as
+    # Singlife would put a word on the claim that the doctor did not write and
+    # may not agree with.
+    ("Aviva", ("Aviva", "Aviva Singapore")),
+    ("AXA", ("AXA", "AXA Insurance", "AXA Singapore")),
+    # The commercial and international insurers behind employer panels and
+    # expatriate cover.
+    ("Aetna", ("Aetna", "Aetna International")),
+    ("Allianz", ("Allianz", "Allianz Partners")),
+    ("Bupa", ("Bupa", "Bupa Global")),
+    ("China Life", ("China Life",)),
+    ("China Taiping", ("China Taiping",)),
+    ("Chubb", ("Chubb", "Chubb Insurance")),
+    ("Cigna", ("Cigna", "Cigna Healthcare")),
+    ("Etiqa", ("Etiqa", "Etiqa Insurance")),
+    ("FWD", ("FWD Insurance", "FWD Singapore")),
+    ("Henner", ("Henner", "Henner Group")),
+    ("Liberty", ("Liberty Insurance",)),
+    ("Manulife", ("Manulife", "Manulife Singapore")),
+    ("MSIG", ("MSIG", "MSIG Insurance")),
+    ("QBE", ("QBE", "QBE Insurance")),
+    ("Sompo", ("Sompo", "Sompo Insurance")),
+    ("Tokio Marine", ("Tokio Marine", "Tokio Marine Life")),
+)
+
+# Normalised variation -> the name that goes on the form.
+_INSURER_BY_VARIATION = {
+    " ".join(variation.lower().split()): canonical
+    for canonical, variations in INSURERS
+    for variation in variations
+}
+
+# Longest variation first, so "Great Eastern Life" wins over "Great Eastern"
+# and "AIA Singapore" over "AIA". Both collapse to one canonical name anyway —
+# what the ordering buys is that the match covers the whole phrase, so the
+# leftover " Life" cannot read as anything else.
+INSURER_PATTERN = re.compile(
+    r"\b(?:"
+    + "|".join(
+        r"\s+".join(re.escape(word) for word in variation.split())
+        for variation in sorted(_INSURER_BY_VARIATION, key=len, reverse=True)
+    )
+    + r")\b",
+    re.IGNORECASE,
+)
+
 # A Singapore postal code, which is what makes an address segment an address.
 POSTAL_PATTERN = re.compile(r"\bSingapore\s*\d{6}\b|\bS\d{6}\b|(?<!\d)\d{6}(?!\d)")
 
@@ -125,8 +224,14 @@ _ADDRESS_LABEL_PREFIX = re.compile(
 )
 
 # The fields a label may introduce ANYWHERE in a line, each with the shape its
-# value has to take. Name and insurer are deliberately absent: they have no
-# shape, so there would be nothing to confirm a guess against.
+# value has to take. The name is deliberately absent: it has no shape, so there
+# would be nothing to confirm a guess against.
+#
+# The insurer used to be absent for the same reason and is not any more. Its
+# shape is a closed vocabulary rather than a pattern — `INSURER_PATTERN` matches
+# a name off the list and nothing else — which answers the same question a
+# regex answers for an NRIC: is the thing after this label really a value for
+# this field.
 #
 # Address is absent for a different reason, and it is not "no shape" — it has
 # one, and `_sole_address` uses it. It is absent because this pass returns the
@@ -137,6 +242,7 @@ SHAPED_FIELDS = {
     "phone": PHONE_IN_TEXT,
     "policy_number": POLICY_PATTERN,
     "dob": DATE_IN_TEXT,
+    "insurer": INSURER_PATTERN,
 }
 
 # Longest alias, in words: "date of birth".
@@ -300,6 +406,13 @@ def _classify_segment(segment: str) -> tuple[str, str] | None:
     if POSTAL_PATTERN.search(text):
         return "address", text
 
+    # Before the name rule, because an insurer's name has no digits in it
+    # either — "Patient: Tan Wei Ling · S8012345D · AIA" ends with a segment
+    # that is a perfectly good name by every test but this one.
+    insurer = _canonical_insurer(text)
+    if insurer:
+        return "insurer", insurer
+
     # Anything left with no digits in it is the name. A segment with digits
     # that matched none of the rules above is unidentified, and stays that way.
     if not re.search(r"\d", text):
@@ -307,19 +420,405 @@ def _classify_segment(segment: str) -> tuple[str, str] | None:
     return None
 
 
-def _parse_patient_line(value: str) -> dict[str, tuple[str, str]]:
+# What a doctor only ever types BETWEEN things: a middot, a pipe, a semicolon,
+# an em dash, or the two-space gap they leave when lining a block up.
+#
+# This is no longer how a header is cut — the shapes locate themselves, see
+# `_shaped_spans` — and all that is left of the old separator table is this:
+# telling two names apart inside one gap. A comma is deliberately absent even
+# from that, because "Chua, Beng Huat" is one name written surname-first.
+_HARD_SEP = re.compile(r"\s*[·|;]\s*|\s{2,}|\s+—\s+")
+
+# A name is at most this many words. A longer run of words with no digits in it
+# is a sentence, not somebody's name. Six rather than four because a Malay name
+# written in full — "Muhammad Nur Iskandar Bin Abdullah" — is five.
+MAX_NAME_WORDS = 6
+
+# The particles that sit inside a name in lower case and are still part of it.
+_NAME_PARTICLES = {"bin", "binte", "bte", "b", "s/o", "d/o", "a/l", "a/p",
+                   "van", "von", "de", "del", "der", "di", "da", "la", "le"}
+
+
+def _same_name(piece: str, known: str) -> bool:
+    """Is this piece the name the doctor already typed?
+
+    Case and spacing are forgiven, and so is the ordering: a CMS exports
+    "Chua Beng Huat" where the doctor typed "Beng Huat Chua" often enough that
+    `redaction.py` carries the same reversal, and for the same reason — the
+    two are one person, and a piece that fails to match is a piece that stays
+    in the note.
+
+    Nothing else is forgiven. This is a check, not a search: a piece either is
+    the name on the claim or it is something else on the page.
+    """
+    def key(text: str) -> str:
+        return " ".join(text.lower().replace(",", " ").split())
+
+    wanted, got = key(known), key(piece)
+    if not wanted or not got:
+        return False
+    if got == wanted:
+        return True
+    # Both rotations, because either half can be the surname: a CMS that puts
+    # the surname first writes "Chua Beng Huat" where the doctor typed "Beng
+    # Huat Chua", and one that puts it last does the reverse.
+    parts = wanted.split()
+    if len(parts) < 2:
+        return False
+    return got in (
+        " ".join(parts[1:] + parts[:1]),
+        " ".join(parts[-1:] + parts[:-1]),
+    )
+
+
+def _looks_like_a_name(text: str) -> bool:
+    """Words that could be somebody's name, rather than a phrase.
+
+    Capitalisation is the whole test, and it is a better one than length: a
+    name is written with capitals in every note ever typed, and the leftover
+    piece this has to reject — "patient reports ongoing epigastric discomfort"
+    — is a sentence fragment in lower case. Word count alone cannot separate
+    them, because a Malay name in full is as long as a short sentence.
+
+    The cost, stated: a name typed entirely in lower case is not read as one.
+    The doctor types the name themselves at step 1 regardless, so this costs a
+    prefilled box rather than an answer.
+    """
+    words = text.split()
+    if not (0 < len(words) <= MAX_NAME_WORDS):
+        return False
+    return all(
+        word.lower().strip(".") in _NAME_PARTICLES or word[:1].isupper()
+        for word in words
+    )
+
+# How many DIFFERENT fields a line must yield before it counts as a patient
+# header rather than a line of prose that happens to contain a number.
+#
+# Two, and they must be different fields: a line naming three dates is a
+# treatment history, while a line naming a date and an NRIC is a header. The
+# whole point of the count is that the pieces stop being independent guesses —
+# one shaped value in a sentence is a coincidence, two of different kinds on
+# one line is a block of fields.
+MIN_HEADER_FIELDS = 2
+
+
+# THE ORDER IS THE OVERLAP RULE. Every finder runs over the whole line, and a
+# match that overlaps one already taken is dropped — so the most specific shape
+# has to look first. An NRIC before a policy number, a date before anything
+# that counts digits, a postal code before an insurer whose name contains one.
+_SHAPE_FINDERS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("nric", NRIC_PATTERN),
+    ("dob", DATE_IN_TEXT),
+    ("phone", PHONE_IN_TEXT),
+    ("policy_number", POLICY_PATTERN),
+    # The postal code is evidence rather than the value: the address is the
+    # words in front of it, rebuilt below.
+    ("address", POSTAL_PATTERN),
+    ("insurer", INSURER_PATTERN),
+)
+
+# A guessed name is at least this many words. One capitalised word is how a
+# clinical sentence starts — "Discharged", "Admitted", "Referred" — and on a
+# line that has already cleared the header test, that word sits in exactly the
+# position a name would. Two words is what a name has and a sentence opener
+# does not. Does NOT apply when the doctor's own name is being checked for:
+# they typed it, so whatever they typed is what is looked for.
+MIN_NAME_WORDS = 2
+
+# "Child: Tan Jia Hui", "Pt Rahmat bin Osman". A word and a colon in front of a
+# name introduce it and are not part of it. Only a SHORT word, so a sentence
+# ending in a colon does not get treated as a label.
+_NAME_LABEL_PREFIX = re.compile(r"^[A-Za-z]{1,12}\s*[:.\-]\s+")
+
+
+def _shaped_spans(line: str) -> list[tuple[int, int, str, str]]:
+    """Every shaped value in the line, as (start, end, field, value).
+
+    FINDING THE SHAPES FIRST IS THE WHOLE DESIGN, and it replaces splitting the
+    line on punctuation. Splitting needed a table of separators, and that table
+    was assembled from the notes this repo happened to have: it knew a middot,
+    a pipe and a two-space gap, and did not know a single space, a tab, a
+    newline or a hyphen — which is four of the commonest ways anybody types a
+    header. Worse, no table can be complete, because a single space cannot be a
+    separator (it is also what "Tan Wei Ling" is made of) while still being how
+    half of real headers are written.
+
+    An NRIC, a date, a phone number, a policy number and a postal code all
+    locate themselves. So they are found wherever they are, whatever sits
+    between them, and what is left over in the gaps is the name and the
+    address. The separator question disappears rather than being answered.
+
+    Ownership is read here so it applies to every route into this module: a
+    value with `Mother` or `Clinic` in front of it on the line is not the
+    patient's, and it was previously dropped only by the unlabelled pass.
+    """
+    taken: list[tuple[int, int, str, str]] = []
+    for field, pattern in _SHAPE_FINDERS:
+        for match in pattern.finditer(line):
+            if _owned_by_someone_else(line, match.start()):
+                continue
+            if any(s < match.end() and match.start() < e for s, e, _, _ in taken):
+                continue
+            value = _normalised(field, match.group(0).strip())
+            if not value:
+                continue
+            taken.append((match.start(), match.end(), field, value))
+    return sorted(taken)
+
+
+def _name_candidate(text: str) -> str:
+    """A gap between two shaped values, tidied into a possible name."""
+    return _NAME_LABEL_PREFIX.sub("", text.strip(" \t,.;:·|/-")).strip()
+
+
+def _prose_words(text: str) -> bool:
+    """Does this run of leftover text read as a sentence rather than a header?
+
+    THE GUARD THAT FINDING SHAPES FIRST MADE NECESSARY. Splitting a line on
+    punctuation could not see a value inside prose at all — `_classify_segment`
+    only ever matched a whole piece — so a clinical sentence produced no fields
+    and the header test was never reached. Finding shapes wherever they are
+    removes that accident, and "Seen 02/08/2026, sore throat. Covered by AIA."
+    then reads as a date plus an insurer: two fields, a header, and the
+    consultation date written into the box for the date of BIRTH.
+
+    A header's leftovers are names, titles, particles and the odd label. A
+    sentence's leftovers are ordinary lower-case words. So one lower-case word
+    that is not a name particle disqualifies the line — "sore", "by",
+    "attended", "with" — while "Mr Chua Beng Huat", "Sivakumar s/o Raju",
+    "Rahmat bin Osman" and a stray "Policy" all survive.
+    """
+    for word in text.split():
+        stripped = word.strip(".,;:()[]#/-")
+        if not stripped or not stripped[0].isalpha():
+            continue
+        if stripped.lower() in _NAME_PARTICLES:
+            continue
+        if stripped[0].islower():
+            return True
+    return False
+
+
+def _name_runs(gap: str) -> list[str]:
+    """A gap between two shaped values, cut where a doctor separated things.
+
+    Only on the HARD separators, and the omission is the point: a comma is not
+    one here, because "Chua, Beng Huat" is one name written surname-first and
+    cutting it produces two candidates and therefore no name. A middot between
+    two names really is two people.
+    """
+    return [
+        candidate
+        for run in _HARD_SEP.split(gap)
+        if (candidate := _name_candidate(run or ""))
+    ]
+
+
+def _known_name_in(gap: str, known: str) -> str | None:
+    """The known name, found anywhere inside a gap, as the gap wrote it.
+
+    A window over the words rather than a comparison of the whole gap: the two
+    names of "Chua Beng Huat · Tan Wei Ling" arrive as ONE gap now that the
+    line is not split before the shapes are found, and only one of them is the
+    patient.
+    """
+    words = gap.split()
+    for start in range(len(words)):
+        for end in range(min(start + MAX_NAME_WORDS, len(words)), start, -1):
+            run = " ".join(words[start:end])
+            if _same_name(run, known):
+                return _name_candidate(run)
+    return None
+
+
+def _header_pieces(
+    line: str, known_name: str = ""
+) -> tuple[dict[str, str], list[str]] | None:
+    """One line -> the fields it carries, or None if it is not a header line.
+
+    THE RULE THIS EXISTS FOR: a value belongs to one field. An NRIC that has
+    been recognised as an NRIC is not also part of the address, and neither is
+    the date of birth, the phone number or the policy number. Before this, the
+    address was "the line that has a postal code in it", so a header block
+    written without a `Patient:` label put the entire block — name, NRIC, date
+    of birth, phone, policy and all — into the address box, while the fields
+    those values belonged to sat empty beside it.
+
+    Two things make it safe to read a line nobody labelled:
+
+    - It must yield `MIN_HEADER_FIELDS` different fields before anything is
+      taken from it, so a sentence of clinical text is never read as a block.
+    - The name is not guessed when it does not have to be. The doctor types it
+      at step 1, BEFORE pasting anything — it is the one value the panel
+      insists on, because redaction cannot find a name by shape — so when
+      `known_name` is given this only CHECKS which gap is that name. No match,
+      no name, whatever the gap looks like. Only a caller that has no name to
+      check against falls back to reading one, and then only from two or more
+      capitalised words on a line that has proved what it is.
+
+    Returns the fields found and the name candidates, or None for prose.
+    """
+    spans = _shaped_spans(line)
+    found: dict[str, str] = {}
+    for _, _, field, value in spans:
+        found.setdefault(field, value)
+
+    if len(found) < MIN_HEADER_FIELDS:
+        return None
+
+    # The gaps: everything the shapes did not claim, in order.
+    gaps: list[tuple[int, int]] = []
+    cursor = 0
+    for start, end, _, _ in spans:
+        if start > cursor:
+            gaps.append((cursor, start))
+        cursor = end
+    if cursor < len(line):
+        gaps.append((cursor, len(line)))
+
+    # The address is the postal code plus the words leading up to it, which is
+    # the one field whose value is bigger than the shape that found it. The gap
+    # in front is taken whole when it carries a digit — a street number, a unit
+    # number — and left alone when it does not, because a gap of plain words
+    # before a postal code is a name standing next to an address rather than
+    # part of one.
+    for index, (start, end, field, _) in enumerate(spans):
+        if field != "address":
+            continue
+        previous_end = spans[index - 1][1] if index else 0
+        gap = line[previous_end:start]
+        if re.search(r"\d", gap):
+            address_start = previous_end + (len(gap) - len(gap.lstrip(" \t,.;·|")))
+            # A gap that opens with the name the doctor typed is a name and an
+            # address run together, so the address begins after the name.
+            trimmed = line[address_start:start].strip()
+            for length in range(len(trimmed.split()), 0, -1):
+                head = " ".join(trimmed.split()[:length])
+                if known_name and _same_name(head, known_name):
+                    address_start += len(head)
+                    break
+            found["address"] = line[address_start:end].strip(" \t,.;·|")
+            gaps = [g for g in gaps if not (g[0] <= previous_end and g[1] >= start)]
+        break
+
+    # A line whose leftovers read as a sentence is a sentence, whatever shapes
+    # it happens to contain.
+    #
+    # The text before the FIRST value is exempt, and only that. It is the name
+    # slot — a header opens with the patient — and a doctor who types the whole
+    # header in lower case has still typed a header. Everything after the first
+    # value is where a sentence gives itself away: "Seen 02/08/2026, sore
+    # throat. Covered by AIA." puts a date and an insurer on one line, and the
+    # words between them are what say it is not a header.
+    if any(_prose_words(line[s:e]) for s, e in gaps if s > 0):
+        return None
+
+    # With a name to check against this is a lookup and cannot be wrong. The
+    # second name in "Chua Beng Huat · Tan Wei Ling · S7211043C" is somebody
+    # else — a next of kin, a referring doctor — and stays unclaimed, which is
+    # exactly what could not be told apart without the name in hand.
+    if known_name:
+        hits = [found_ for s, e in gaps if (found_ := _known_name_in(line[s:e], known_name))]
+        return found, hits[:1]
+
+    return found, [
+        candidate
+        for s, e in gaps
+        for candidate in _name_runs(line[s:e])
+        if not re.search(r"\d", candidate)
+        and _looks_like_a_name(candidate)
+        and len(candidate.split()) >= MIN_NAME_WORDS
+    ]
+
+
+def _header_block(
+    lines: list[str], known_name: str = ""
+) -> tuple[dict[str, str], list[str]] | None:
+    """A header written one value per line, which no single line can prove.
+
+    `_header_pieces` asks each line for two different fields before it believes
+    any of them, and that test is what keeps a sentence of clinical text from
+    being read as a block. A header laid out down the page rather than across
+    it fails that test on every line while being the least ambiguous layout
+    there is — the block says everything the line cannot.
+
+    So the count is taken over the block, and the price of reading a line that
+    proves nothing on its own is that EVERY line in the block must be either a
+    value and nothing else, or a name and nothing else. One line of prose
+    disqualifies the whole block. A note's own paragraphs are then never
+    blocks: "Seen 02/08/2026. 3 days sore throat." carries a date, but it also
+    carries words, and a header does not.
+    """
+    per_line: list[tuple[list[tuple[int, int, str, str]], str]] = []
+    found: dict[str, str] = {}
+
+    for line in lines:
+        spans = _shaped_spans(line)
+        leftover = line
+        for start, end, _, _ in reversed(spans):
+            leftover = leftover[:start] + leftover[end:]
+        leftover = _name_candidate(leftover)
+        if spans and leftover:
+            return None  # a value with words around it: prose, or a label
+        if not spans and not _looks_like_a_name(leftover):
+            return None
+        per_line.append((spans, leftover))
+        for _, _, field, value in spans:
+            found.setdefault(field, value)
+
+    if len(found) < MIN_HEADER_FIELDS:
+        return None
+
+    names = [leftover for spans, leftover in per_line if not spans and leftover]
+    if known_name:
+        return found, [n for n in names if _same_name(n, known_name)]
+    return found, [n for n in names if len(n.split()) >= MIN_NAME_WORDS]
+
+
+def _blocks(text: str) -> list[list[str]]:
+    """Runs of consecutive non-empty lines. A blank line ends a block, which is
+    what separates a header from the note underneath it."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in _logical_lines(text):
+        if line.strip():
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _parse_patient_line(value: str, known_name: str = "") -> dict[str, tuple[str, str]]:
     """A labelled patient line, which may carry the whole block at once."""
+    # Tried first, and on the raw value rather than on `SEGMENT_SPLIT`'s
+    # segments: a block written with commas — "Patient: Chua Beng Huat,
+    # S7211043C, 04/11/1972" — has no middot and no double space in it, so the
+    # segment split sees one segment and the whole block became the name.
+    header = _header_pieces(value, known_name)
+    if header is not None:
+        fields, names = header
+        found = {field: (found_, "patient-line") for field, found_ in fields.items()}
+        # A labelled line names the patient, so its leftover piece is the name
+        # without needing the evidence an unlabelled line has to produce.
+        if len(names) == 1:
+            found.setdefault("full_name", (names[0], "patient-line"))
+        return found
+
     segments = [s for s in SEGMENT_SPLIT.split(value) if s and s.strip()]
-    found: dict[str, tuple[str, str]] = {}
     if len(segments) <= 1:
         return {"full_name": (value.strip(), "labelled")}
 
+    found = {}
     for segment in segments:
         classified = _classify_segment(segment)
         if classified is None:
             continue
         field, parsed = classified
-        # First segment of a kind wins; a patient line does not list two NRICs.
+        # First segment of a kind wins; a patient line lists one NRIC.
         found.setdefault(field, (parsed, "patient-line"))
     return found
 
@@ -440,9 +939,32 @@ def _all_matches(pattern: re.Pattern[str], text: str) -> list[str]:
     return seen
 
 
+def _canonical_insurer(text: str) -> str | None:
+    """A string naming a known insurer -> the name this repo writes for it.
+
+    Two readings, in order. The whole string may BE an insurer's name, which is
+    what a labelled line usually holds. Failing that, one may sit inside it —
+    "AIA Singapore (GHS plan)" is an insurer plus a parenthetical, and the
+    parenthetical is not part of the answer.
+
+    Two different insurers inside one string yields None, the same refusal the
+    rest of the module makes: nothing here can tell which one the form wants.
+    """
+    exact = _INSURER_BY_VARIATION.get(" ".join(text.lower().split()))
+    if exact:
+        return exact
+    found = _shaped_candidates("insurer", INSURER_PATTERN, text)
+    return found[0] if len(found) == 1 else None
+
+
 def _normalised(field: str, raw: str) -> str | None:
     """One raw match, in the form the field actually holds, or None if the
     shape matched but the value does not survive validation."""
+    if field == "insurer":
+        # The name this repo uses, not the one the note wrote: "AIA Singapore"
+        # and "AIA" are one insurer, and a schema's `insurer` is the string
+        # anything comparing them will compare against.
+        return _INSURER_BY_VARIATION.get(" ".join(raw.lower().split()))
     if field == "nric":
         cleaned = raw.replace(" ", "").upper()
         return cleaned if NRIC_PATTERN.fullmatch(cleaned) else None
@@ -454,21 +976,215 @@ def _normalised(field: str, raw: str) -> str | None:
     return raw
 
 
+def _dedupe_key(field: str, value: str) -> str:
+    """What makes two candidates the same identifier rather than two of them.
+
+    Only phone needs one. Every other shaped field arrives from `_normalised`
+    in a single canonical form already — an NRIC uppercased and stripped of
+    spaces, a date as ISO — so equal values are equal strings. A phone number
+    is deliberately kept as the note wrote it, because that is what the doctor
+    reads back and what goes onto the form, and the renderings of one number
+    are exactly the ones a note mixes: `+65 9123 4567`, `9123-4567`, `91234567`.
+
+    Without this the two-candidate rule fired on a single number written twice
+    — the doctor was asked to choose between one number and itself, and the
+    field stayed blank until they did. The refusal to guess is unchanged; what
+    changes is that one number is no longer mistaken for two.
+    """
+    if field != "phone":
+        return value
+    digits = re.sub(r"\D", "", value)
+    # +65 is a country code, not part of the number — but only when what
+    # remains is a whole Singapore one. `6512 3456` is a landline whose own
+    # first two digits are 65, and stripping those would leave six digits and
+    # collide with any other 65-prefixed number in the note.
+    if len(digits) == 10 and digits.startswith("65"):
+        digits = digits[2:]
+    return digits
+
+
+# A policy number as its two halves: the insurer's prefix and the digits that
+# identify the policy. The separator is not one of them — `GHS-88213004`,
+# `GHS/88213004` and `GHS88213004` are one reference written three ways.
+_POLICY_PARTS = re.compile(r"^([A-Z]{2,5})[-/]?(\d{4,})$")
+
+
+def _same_policy(a: str, b: str) -> bool:
+    """Whether two policy numbers are one reference written two ways.
+
+    Not a key, because sameness here is a relation rather than a canonical
+    form: the digits must be identical AND one prefix must extend the other.
+    `GH-88213004` and `GHS-88213004` are the same policy with the prefix
+    truncated once, which is what a note looks like when someone typed it
+    twice; `GE-88213004` and `GHS-88213004` are not, because neither prefix
+    contains the other and those are two insurers.
+
+    Requiring the digits to match is what keeps this from merging real
+    references. The residual case — two genuinely different policies sharing a
+    full digit run, one of whose prefixes extends the other — needs an
+    insurer's numbering to collide with another's on the same patient's note,
+    which is a different failure from the one being fixed and a much rarer one.
+    """
+    left, right = _POLICY_PARTS.match(a), _POLICY_PARTS.match(b)
+    if not left or not right:
+        return False
+    if left.group(2) != right.group(2):
+        return False
+    return left.group(1).startswith(right.group(1)) or right.group(1).startswith(left.group(1))
+
+
+def _duplicate_index(field: str, value: str, kept: list[str]) -> int | None:
+    """Where `value` has already been seen, by this field's idea of sameness."""
+    key = _dedupe_key(field, value)
+    for index, existing in enumerate(kept):
+        if _dedupe_key(field, existing) == key:
+            return index
+        if field == "policy_number" and _same_policy(existing, value):
+            return index
+    return None
+
+
 def _shaped_candidates(
     field: str, pattern: re.Pattern[str], text: str
 ) -> list[str]:
     """Every distinct value of `field`'s shape in `text`, ready to use.
 
     Deduplicated AFTER normalising, so `S8012345D` written once in each case
-    is one candidate rather than two. One candidate is the value; more than
+    is one candidate rather than two, and one phone number written two ways is
+    one candidate rather than a question. One candidate is the value; more than
     one is a question for the doctor; none is a genuine blank.
+
+    The rendering the note wrote FIRST survives, not a canonical one: the list
+    reads the way the note reads, and the value written onto the form is the
+    one the doctor typed.
+
+    A policy number is the one exception, and it is not a ranking. When two
+    renderings are the same reference and one prefix extends the other, the
+    fuller one replaces the shorter — both readings agree about the policy, so
+    keeping `GH-88213004` over `GHS-88213004` would put a truncated prefix on
+    a claim to honour an ordering rule that exists to preserve the doctor's own
+    wording. The wording is the same wording; one of them is just cut short.
     """
     out: list[str] = []
     for raw in _all_matches(pattern, text):
         value = _normalised(field, raw)
-        if value and value not in out:
+        if not value:
+            continue
+        at = _duplicate_index(field, value, out)
+        if at is None:
             out.append(value)
+        elif field == "policy_number" and len(value) > len(out[at]):
+            out[at] = value
     return out
+
+
+# How far back a note's own business reaches. Inside this window a date is
+# describing the episode being claimed for — the consultation, the admission,
+# the discharge, the review, the first consult for this condition, the surgery
+# the year before. Outside it, a date in a clinical note is overwhelmingly a
+# birth date, because nothing else that old gets written down as a bare date.
+#
+# Two years rather than one: an episode routinely opens in the previous
+# calendar year, and a first-consult date twelve months back is common enough
+# that offering it as a birth date would put a plausible wrong answer one click
+# away on ordinary notes.
+#
+# What this costs, stated rather than discovered later: an INFANT's birth date
+# is inside the window, so an unlabelled one is not offered. That is the right
+# side to fail on — the alternative offers every consultation date on every
+# note, which is noise on all of them to catch a birth date on a few — and it
+# is recoverable, since a paediatric claim states the date of birth in the
+# header where the labelled rules read it directly.
+CLINICAL_WINDOW_YEARS = 2
+
+
+def _birth_date_candidates(text: str) -> list[str]:
+    """The dates in the note that could plausibly be a birth date.
+
+    Recency is the only signal available without reading meaning, and it is a
+    surprisingly good one: a note's dates cluster around the episode, and a
+    birth date does not. So a date inside the clinical window is taken to be
+    describing the episode, and only what falls outside it is offered.
+
+    A date with no year at all — "seen 2/8", "MC from 15/3" — never reaches
+    here: `DATE_IN_TEXT` requires a year and `parse_date` requires four digits
+    of it. That is the same judgement by a different route. A yearless date is
+    shorthand, and shorthand is how a doctor writes THIS year, which makes it
+    a consultation date; a birth date written that way could not be read
+    anyway, since the century is exactly what is missing.
+
+    Filtering rather than ranking, deliberately. The candidate list is evidence
+    handed to the doctor, and a list that put the likeliest first would be this
+    module deciding after all — quietly, in the one place nobody would look for
+    a decision. Either a date could be a birth date or it could not.
+    """
+    today = date.today()
+    try:
+        cutoff = today.replace(year=today.year - CLINICAL_WINDOW_YEARS)
+    except ValueError:  # 29 February, on a year whose counterpart has none
+        cutoff = date(today.year - CLINICAL_WINDOW_YEARS, 2, 28)
+
+    return [
+        iso
+        for iso in _shaped_candidates("dob", DATE_IN_TEXT, text)
+        if date.fromisoformat(iso) <= cutoff
+    ]
+
+
+# Words that name somebody who is not the patient.
+#
+# The unlabelled pass believes a shape that occurs exactly once, and that rule
+# has one hole its own docstring names: the clinic's number under the doctor's
+# signature. Two numbers in a note and it refuses both; ONE number and it
+# writes the clinic's onto the claim, green, as a value the doctor entered.
+# Uniqueness was doing all the work, and uniqueness is not ownership.
+#
+# So a value with one of these words in front of it on the same line is known
+# not to be the patient's, and is dropped before the count is taken. Case 5 of
+# docs/patient_details_cases.md is the whole argument: `Clinic tel 62551234`
+# and `Next of kin contact 91112233` were only ever saved by there being two of
+# them.
+#
+# Deliberately NOT here: "dr", which is also how an address abbreviates Drive
+# ("Bishan Dr, Singapore 570118"), and "surgery", which is a procedure in every
+# other note. A word that appears in ordinary clinical prose cannot be a
+# disqualifier — it would silently blank correct values instead of wrong ones.
+_OTHER_OWNER = re.compile(
+    r"\b(?:clinic|polyclinic|hospital|medical\s+cent(?:re|er)|practice|pharmacy"
+    r"|employer|company|workplace"
+    r"|next\s+of\s+kin|nok|kin|caregiver|carer|guardian"
+    r"|spouse|husband|wife|father|mother|son|daughter|brother|sister|sibling"
+    r"|emergency|doctor|physician|referring)\b",
+    re.IGNORECASE,
+)
+
+
+def _owned_by_someone_else(line: str, at: int) -> bool:
+    """Does anything before position `at` on this line claim the value?"""
+    return bool(_OTHER_OWNER.search(line[:at]))
+
+
+def _without_other_owners(pattern: re.Pattern[str], text: str) -> str:
+    """`text` with every match of `pattern` that belongs to somebody else
+    blanked out, so the unlabelled pass never counts it as a candidate.
+
+    Blanked rather than the line dropped, and that is the whole reason this is
+    per-value: `S6123456B, seen together with her husband S6234567C` carries
+    the patient's own NRIC and somebody else's on ONE line. Dropping the line
+    loses both; dropping the second match leaves exactly one candidate, which
+    is the patient's, which is the answer.
+
+    Spaces of equal length rather than deletion, so every other rule that reads
+    this text still sees the offsets the note actually has.
+    """
+    out: list[str] = []
+    for line in _logical_lines(text):
+        for match in reversed(list(pattern.finditer(line))):
+            if _owned_by_someone_else(line, match.start()):
+                span = match.end() - match.start()
+                line = line[: match.start()] + " " * span + line[match.end():]
+        out.append(line)
+    return "\n".join(out)
 
 
 def _address_lines(text: str) -> list[str]:
@@ -488,7 +1204,18 @@ def _address_lines(text: str) -> list[str]:
     """
     lines: list[str] = []
     for line in _logical_lines(text):
-        if not POSTAL_PATTERN.search(line):
+        postal = POSTAL_PATTERN.search(line)
+        if not postal:
+            continue
+        # "Clinic address 9 Serangoon Road, Singapore 218000" is an address,
+        # and it is not this patient's. Same rule the shaped fields get.
+        if _owned_by_someone_else(line, postal.start()):
+            continue
+        # A header block is not an address, however many postal codes it
+        # contains. `_header_pieces` has already taken the address out of it
+        # piece by piece; taking the whole line here as well would be the bug
+        # that rule exists to fix, arriving by the back door.
+        if _header_pieces(line) is not None:
             continue
         # A label with no colon never reached LABELLED_LINE, so it is still
         # attached. It introduces the address; it is not part of it.
@@ -498,7 +1225,7 @@ def _address_lines(text: str) -> list[str]:
     return lines
 
 
-def parse_demographics(text: str) -> ParsedDemographics:
+def parse_demographics(text: str, known_name: str = "") -> ParsedDemographics:
     """The whole pasted block -> a draft PatientRecord.
 
     Never raises: unparseable input is an empty result, which the doctor fills
@@ -514,9 +1241,18 @@ def parse_demographics(text: str) -> ParsedDemographics:
             values[field] = value
             sources[field] = source
 
-    def offer(field: str, candidates: list[str]) -> None:
-        """More than one candidate: hand them over rather than dropping them."""
-        if field not in choices and len(candidates) > 1:
+    def offer(field: str, candidates: list[str], minimum: int = 2) -> None:
+        """Candidates the parser would not choose between, handed over rather
+        than dropped.
+
+        `minimum` is 2 everywhere except the date of birth, and the asymmetry
+        follows from what a lone candidate means. For a shaped field a single
+        match IS the answer — `record` takes it — so a one-item list could only
+        ever be a value pretending to be a question. A date of birth is never
+        taken from unlabelled text at all, so its single candidate has nowhere
+        else to go: offering it is the only way it reaches the doctor.
+        """
+        if field not in choices and len(candidates) >= minimum:
             choices[field] = candidates
 
     for line in _logical_lines(text):
@@ -529,7 +1265,7 @@ def parse_demographics(text: str) -> ParsedDemographics:
         value = match.group(2).strip()
 
         if field == "full_name":
-            for name, (parsed, source) in _parse_patient_line(value).items():
+            for name, (parsed, source) in _parse_patient_line(value, known_name).items():
                 record(name, parsed, source)
             continue
         if field == "dob":
@@ -542,10 +1278,51 @@ def parse_demographics(text: str) -> ParsedDemographics:
             if NRIC_PATTERN.fullmatch(cleaned):
                 record("nric", cleaned, "labelled")
             continue
+        if field == "insurer":
+            # A known insurer is written the way this repo writes it; an
+            # unknown one is kept exactly as the doctor typed it. That last
+            # part is the important half: the list is the insurers a GP meets
+            # most, not every insurer that exists, and dropping a labelled
+            # answer for being off the list would turn a correct value into a
+            # blank on the one line where the doctor already said what it is.
+            record("insurer", _canonical_insurer(value) or value, "labelled")
+            continue
         record(field, value, "labelled")
 
+    # A patient header written without a label in front of it.
+    #
+    # Third, so anything the doctor labelled still wins. What this adds is the
+    # block that names its fields by position rather than by label — the shape
+    # every CMS export and every hand-typed header actually uses — and the
+    # property that makes it worth having: each piece is claimed by exactly one
+    # field, so a value already read as an NRIC, a date of birth, a phone
+    # number or a policy number cannot also turn up inside the address.
+    for line in _logical_lines(text):
+        header = _header_pieces(line, known_name)
+        if header is None:
+            continue
+        fields, names = header
+        for field, value in fields.items():
+            record(field, value, "header-line")
+        if len(names) == 1:
+            record("full_name", names[0], "header-line")
+
+    # ...and the same header laid out down the page instead of across it, which
+    # no single line of can prove.
+    for block in _blocks(text):
+        if len(block) < 2:
+            continue
+        header = _header_block(block, known_name)
+        if header is None:
+            continue
+        fields, names = header
+        for field, value in fields.items():
+            record(field, value, "header-block")
+        if len(names) == 1:
+            record("full_name", names[0], "header-block")
+
     # Labels sitting mid-line, which the line-anchored rule above cannot see.
-    # Runs second so an explicitly labelled line always wins, and only ever
+    # Runs after so an explicitly labelled line always wins, and only ever
     # fills fields still empty.
     for line in _logical_lines(text):
         line_found, line_choices = _labelled_anywhere(line)
@@ -560,14 +1337,46 @@ def parse_demographics(text: str) -> ParsedDemographics:
     # every date in the note would invite the doctor to pick a consultation
     # date as a birth date, which is why `dob` is offered as a choice only from
     # a region a label already said was a date of birth).
-    for field, pattern in (("nric", NRIC_PATTERN), ("phone", PHONE_IN_TEXT)):
+    # The insurer joins them because its vocabulary is as good as a shape: a
+    # note that names one insurer and no other has answered the question, and a
+    # note that names two — the patient's and the one that declined last time —
+    # has not, so it asks. What it cannot do is name one that is not on the
+    # list, which is why the labelled line above still wins and still keeps
+    # whatever the doctor wrote.
+    for field, pattern in (
+        ("nric", NRIC_PATTERN),
+        ("phone", PHONE_IN_TEXT),
+        ("insurer", INSURER_PATTERN),
+    ):
         if field in values:
             continue
-        candidates = _shaped_candidates(field, pattern, text)
+        # Anything a clinic, an employer or a next of kin has already claimed
+        # is gone before the count is taken — uniqueness decides this pass, so
+        # a value that is unique and somebody else's is the worst input it can
+        # be given.
+        candidates = _shaped_candidates(
+            field, pattern, _without_other_owners(pattern, text)
+        )
         if len(candidates) == 1:
             record(field, candidates[0], "sole-match")
         else:
             offer(field, candidates)
+
+    # The dates, once nothing has claimed one as the birth date.
+    #
+    # Still never RECORDED from unlabelled text — that rule is unchanged and is
+    # what stops a consultation date being written onto a claim. What changes
+    # is that the blank is no longer silent: a note is full of dates, and the
+    # doctor is the only one who knows which of them is a birth date, so they
+    # are shown the list instead of an empty box with nothing behind it.
+    #
+    # The hazard is real and is the reason this was refused for so long: every
+    # admission, discharge and review date is date-shaped too. It survives
+    # being offered because a choice is not a fill — nothing is pre-selected
+    # and no candidate reaches the field without a click — and because the
+    # clinical dates are now filtered out rather than listed alongside.
+    if "dob" not in values:
+        offer("dob", _birth_date_candidates(text), minimum=1)
 
     if "address" not in values:
         candidates = _address_lines(text)

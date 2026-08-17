@@ -132,6 +132,19 @@ class MapResponse(BaseModel):
 
 class ParseRequest(BaseModel):
     text: str
+    # The name the doctor typed before pasting anything.
+    #
+    # Not a hint and not an answer to be improved on: it is what turns finding
+    # the name in the block from a guess into a check. The panel asks for it
+    # first precisely because redaction cannot find a name by shape, so it is
+    # always known by the time a paste exists — and with it in hand, the piece
+    # of a header that is the patient is the piece that equals it, and the
+    # piece next to it belongs to somebody else.
+    #
+    # Optional, because a caller that is not the panel may not have one. Then
+    # the parser falls back to reading a name out of the block, under the
+    # fences in `_looks_like_a_name`.
+    full_name: str = ""
 
 
 class LiveField(BaseModel):
@@ -248,7 +261,7 @@ def parse_paste(request: ParseRequest) -> ParsedDemographics:
     patterns that drifted from the Python one is a leak, and the same reasoning
     keeps redaction itself server-side today.
     """
-    return parse_demographics(request.text)
+    return parse_demographics(request.text, known_name=request.full_name)
 
 
 def _review_rows(schema: FormSchema, patient: PatientRecord) -> list[MappedField]:

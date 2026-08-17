@@ -145,17 +145,19 @@ class TestLabelledLines:
 
 class TestRefusals:
     def test_two_phone_numbers_means_neither(self) -> None:
-        # No labelled line to settle it: the patient's and the clinic's are
-        # indistinguishable by shape, so the field stays blank.
-        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        # No labelled line to settle it and nothing naming an owner, so the
+        # two are indistinguishable by shape and the field stays blank.
+        text = "Reviewed today. Contactable on 91112233 or 98887777.\n"
         assert parse_demographics(text).phone is None
 
     def test_one_phone_number_in_prose_is_taken(self) -> None:
         assert parse_demographics("Contactable on 91112233.\n").phone == "91112233"
 
     def test_a_second_nric_in_the_note_blocks_the_guess(self) -> None:
-        # Case 6's shape: a note that mentions a family member.
-        text = "Patient S7211043C attended with her husband S7106114A.\n"
+        # Two of them and nothing saying whose is whose. When the note DOES
+        # say — "her husband S7106114A" — the other one is disqualified rather
+        # than counted; see TestAValueSomebodyElseOwns.
+        text = "S7211043C and S7106114A both attended today.\n"
         assert parse_demographics(text).nric is None
 
     def test_a_lone_nric_in_prose_is_taken(self) -> None:
@@ -239,7 +241,12 @@ class TestLabelsAnywhereInALine:
         # "HP 9123 4567 / 6123 4567" names two numbers and nothing here can
         # tell which the form wants. Same refusal as unlabelled prose.
         assert parse_demographics(self.SAMPLE).phone is None
-        assert parse_demographics(self.SAMPLE).policy_number is None
+
+    def test_two_policy_prefixes_from_two_insurers_yield_neither(self) -> None:
+        # The refusal that survives the dedupe: neither prefix contains the
+        # other, so these are two references and not one written twice.
+        text = "Policy GHS-88213004 or GE-88213004\n"
+        assert parse_demographics(text).policy_number is None
 
     def test_a_label_followed_by_the_wrong_shape_yields_nothing(self) -> None:
         # The label says which field; the shape says whether the thing after it
@@ -250,9 +257,11 @@ class TestLabelsAnywhereInALine:
     def test_a_qualified_label_is_not_the_patients(self) -> None:
         # "Clinic tel" and "Next of kin phone" are labels for somebody else.
         # The qualifying word in front is what says so, so a label has to open
-        # the line or follow a separator to count.
+        # the line or follow a separator to count — and the same word then
+        # keeps the number out of the unlabelled pass too, which is why the
+        # patient's own number survives here as the only candidate.
         text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
-        assert parse_demographics(text).phone is None
+        assert parse_demographics(text).phone == "91112233"
 
     def test_a_label_after_a_separator_still_counts(self) -> None:
         parsed = parse_demographics("Pt details, NRIC S8012345D, DOB 14/03/1978\n")
@@ -348,7 +357,7 @@ class TestAnAddressIsFoundByItsPostalCode:
         # claim as the patient's.
         text = (
             f"{self.ADDRESS}\n\nSeen 02/08/2026. Sore throat.\n"
-            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+            "Blk 501 Bishan St 11 #01-02, S570501\n"
         )
         assert parse_demographics(text).address is None
 
@@ -424,10 +433,31 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["9123 4567", "6123 4567"]
 
-    def test_two_policy_numbers_are_offered(self) -> None:
+    def test_one_policy_written_twice_is_not_a_question(self) -> None:
+        # `GH-88213004` is `GHS-88213004` with the prefix cut short — same
+        # digits, and one prefix contains the other. The doctor was being asked
+        # to choose between a policy number and itself.
         parsed = parse_demographics(self.SAMPLE)
+        assert parsed.policy_number == "GHS-88213004"
+        assert "policy_number" not in parsed.choices
+
+    def test_the_fuller_prefix_survives_whichever_came_first(self) -> None:
+        # The one place the first-written rendering does not win, and it is not
+        # a ranking: both readings agree about the policy, so keeping the
+        # truncated one would put a prefix on a claim that the insurer did not
+        # issue, to honour a rule that exists to preserve the doctor's wording.
+        parsed = parse_demographics("Policy GH-88213004, also written GHS-88213004\n")
+        assert parsed.policy_number == "GHS-88213004"
+
+    def test_two_policies_with_different_digits_are_still_offered(self) -> None:
+        parsed = parse_demographics("Policy GHS-88213004 or GHS-77104002\n")
         assert parsed.policy_number is None
-        assert parsed.choices["policy_number"] == ["GHS-88213004", "GH-88213004"]
+        assert parsed.choices["policy_number"] == ["GHS-88213004", "GHS-77104002"]
+
+    def test_a_separator_is_not_part_of_the_reference(self) -> None:
+        parsed = parse_demographics("Policy GHS-88213004 (GHS88213004 in the system)\n")
+        assert parsed.policy_number == "GHS-88213004"
+        assert "policy_number" not in parsed.choices
 
     def test_candidates_keep_the_order_the_note_wrote_them_in(self) -> None:
         # Not a ranking — but if the doctor is choosing between two numbers,
@@ -435,9 +465,9 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         assert parse_demographics(self.SAMPLE).choices["phone"][0] == "9123 4567"
 
     def test_two_phones_in_prose_are_offered_too(self) -> None:
-        # The clinic's own number under the signature. Same collision, found
-        # by the unlabelled rule rather than the labelled one.
-        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        # Two numbers with nothing to separate them, found by the unlabelled
+        # rule rather than the labelled one.
+        text = "Reviewed today. Contactable on 91112233 or 62551234.\n"
         parsed = parse_demographics(text)
         assert parsed.phone is None
         assert parsed.choices["phone"] == ["91112233", "62551234"]
@@ -445,12 +475,50 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
     def test_two_addresses_are_offered(self) -> None:
         text = (
             "Blk 118 Bishan St 12 #07-21, S570118\n\nSeen 02/08/2026.\n"
-            "Bishan Family Clinic, Blk 501 Bishan St 11 #01-02, S570501\n"
+            "Blk 501 Bishan St 11 #01-02, S570501\n"
         )
         parsed = parse_demographics(text)
         assert parsed.address is None
         assert len(parsed.choices["address"]) == 2
         assert parsed.choices["address"][0] == "Blk 118 Bishan St 12 #07-21, S570118"
+
+    def test_one_number_written_two_ways_is_not_two_candidates(self) -> None:
+        # The doctor was being asked to choose between a number and itself,
+        # and the field stayed blank until they did.
+        text = "Contactable at +65 9123 4567 or 9123-4567.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone == "+65 9123 4567"
+        assert "phone" not in parsed.choices
+
+    def test_the_surviving_rendering_is_the_one_the_note_wrote_first(self) -> None:
+        # Not a canonical form: what goes onto the claim should be what the
+        # doctor typed, and a list they are choosing from should read like
+        # their own note.
+        text = "HP 91234567. Also reachable on 9123 4567.\n"
+        assert parse_demographics(text).phone == "91234567"
+
+    def test_a_landline_starting_65_is_not_mistaken_for_a_country_code(self) -> None:
+        # `6512 3456` opens with the country code's own digits. Stripping them
+        # would leave six digits, which would collide with any other number in
+        # the note that happens to start 65.
+        text = "Reviewed today. Home 6512 3456. Also on 6534 5678.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["6512 3456", "6534 5678"]
+
+    def test_two_different_numbers_are_still_two_candidates(self) -> None:
+        # The dedupe must not become a merge: these are genuinely two numbers
+        # and the refusal to choose between them is the point.
+        text = "Contactable on 91112233. Second number 62551234.\n"
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.choices["phone"] == ["91112233", "62551234"]
+
+    def test_one_nric_written_two_ways_is_not_two_candidates(self) -> None:
+        text = "IC s8012345d on the card, S 8012345 D in the system.\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S8012345D"
+        assert "nric" not in parsed.choices
 
     def test_a_field_that_resolved_is_never_also_a_question(self) -> None:
         parsed = parse_demographics("HP 9123 4567\n")
@@ -469,15 +537,77 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         text = "Chua Beng Huat attended with Tan Wei Ling today.\n"
         assert "full_name" not in parse_demographics(text).choices
 
-    def test_dates_in_prose_are_never_offered_as_a_date_of_birth(self) -> None:
-        # The refusal that must survive this change. A clinical note is
-        # nothing but dates — consultation, admission, discharge, MC — so a
-        # list of every date in the note invites the doctor to pick a
-        # consultation date as a birth date, one click, looking exactly like
-        # a correct answer on the form.
-        text = "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n"
+    # Written relative to today rather than as literals: every assertion here
+    # turns on how old a date is, so a hard-coded year would start failing on
+    # a date nobody chose.
+    @staticmethod
+    def _years_ago(years: int) -> str:
+        today = date.today()
+        try:
+            return today.replace(year=today.year - years).strftime("%d/%m/%Y")
+        except ValueError:  # 29 February
+            return date(today.year - years, 2, 28).strftime("%d/%m/%Y")
+
+    def test_a_recent_date_is_the_consultation_and_is_not_offered(self) -> None:
+        # The refusal that must survive: a clinical note is nothing but dates —
+        # consultation, admission, discharge, MC — and none of them is a birth
+        # date, so not one is ever written into the field. They are not even
+        # offered, because inside the clinical window a date is describing the
+        # episode being claimed for.
+        text = (
+            f"Seen {self._years_ago(0)}, first consult {self._years_ago(1)}, "
+            f"review {self._years_ago(0)}.\n"
+        )
         parsed = parse_demographics(text)
         assert parsed.dob is None
+        assert "dob" not in parsed.choices
+
+    def test_an_old_date_is_offered_because_nothing_else_is_that_old(self) -> None:
+        # The other side. A note does not carry decade-old dates unless it is
+        # saying when someone was born, so the blank stops being silent — the
+        # doctor is shown what the note said and clicks, or ignores it.
+        # No dob label anywhere — "born" is one, and would send these down the
+        # labelled route instead, which believes what the note claims.
+        text = (
+            f"47F. Records go back to {self._years_ago(47)}. "
+            f"Seen {self._years_ago(0)} for review.\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.dob is None
+        assert parsed.choices["dob"] == [self._iso_years_ago(47)]
+
+    @staticmethod
+    def _iso_years_ago(years: int) -> str:
+        today = date.today()
+        try:
+            return today.replace(year=today.year - years).isoformat()
+        except ValueError:
+            return date(today.year - years, 2, 28).isoformat()
+
+    def test_a_lone_old_date_is_offered_rather_than_filled(self) -> None:
+        # Everywhere else a single candidate IS the answer — one NRIC in the
+        # note is the patient's NRIC. A date is the exception however old it
+        # is: nothing SAID this was a birth date, so it is offered and never
+        # recorded. This is why `offer` takes a minimum.
+        parsed = parse_demographics(f"Longstanding asthma since {self._years_ago(40)}.\n")
+        assert parsed.dob is None
+        assert parsed.choices["dob"] == [self._iso_years_ago(40)]
+
+    def test_a_date_with_no_year_is_never_a_birth_date(self) -> None:
+        # "seen 2/8" is how a doctor writes this year, and a birth date written
+        # that way could not be read anyway — the century is exactly what is
+        # missing. Neither the pattern nor parse_date accepts one, so this is
+        # the same judgement arrived at by a different route.
+        parsed = parse_demographics("Seen 2/8, review 9/8. MC from 15/3.\n")
+        assert parsed.dob is None
+        assert "dob" not in parsed.choices
+
+    def test_a_date_of_birth_that_resolved_is_not_also_a_question(self) -> None:
+        # The note states one, so the dates in the clinical text below it are
+        # not a question about it.
+        text = "DOB: 14/03/1978\nSeen 02/08/2026, review 09/08/2026.\n"
+        parsed = parse_demographics(text)
+        assert parsed.dob == "1978-03-14"
         assert "dob" not in parsed.choices
 
     def test_two_dates_behind_a_dob_label_are_offered(self) -> None:
@@ -490,3 +620,337 @@ class TestMoreThanOneCandidateIsOfferedRatherThanDropped:
         parsed = parse_demographics("DOB 14/03/1978 or 15/03/1978\n")
         assert parsed.dob is None
         assert parsed.choices["dob"] == ["1978-03-14", "1978-03-15"]
+
+
+class TestTheInsurer:
+    """The one demographic whose values are a closed list.
+
+    Everything else here is found by shape or by label. An insurer has no shape
+    — "Great Eastern" and "Tan Wei Ling" are the same thing to a regex — but it
+    does have a vocabulary, and a vocabulary answers the same question: is the
+    thing in front of me a value for this field, or just words.
+
+    So the risk moves. It is no longer "will it find one", it is "will it find
+    one that is not there", because this field is copied onto the claim without
+    the model ever seeing it and shows up green as something the doctor
+    entered. Most of the tests below are refusals for that reason.
+    """
+
+    def test_an_insurer_named_in_prose_is_taken(self) -> None:
+        parsed = parse_demographics("Seen 02/08/2026, sore throat. Covered by AIA.\n")
+        assert parsed.insurer == "AIA"
+        assert parsed.sources["insurer"] == "sole-match"
+
+    def test_a_variation_is_written_the_way_the_repo_writes_it(self) -> None:
+        # The schema for this insurer says "Great Eastern". A value that
+        # disagreed with it would read as a second insurer to anything
+        # comparing the two.
+        text = "Insured under Great Eastern Life Assurance.\n"
+        assert parse_demographics(text).insurer == "Great Eastern"
+
+    def test_one_insurer_written_two_ways_is_one_insurer(self) -> None:
+        # Both spellings canonicalise before the count is taken, so this is a
+        # value rather than a question. Also pins the longest-first ordering:
+        # "AIA Singapore" must match whole rather than leaving " Singapore".
+        text = "AIA Singapore policy, verified with AIA on 02/08.\n"
+        assert parse_demographics(text).insurer == "AIA"
+
+    def test_two_insurers_are_offered_rather_than_guessed(self) -> None:
+        text = "Prudential rejected the earlier claim; now covered by NTUC Income.\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer is None
+        assert parsed.choices["insurer"] == ["Prudential", "Income"]
+
+    def test_a_labelled_insurer_beats_one_mentioned_in_the_note(self) -> None:
+        text = "Insurer: Singlife\nPreviously with Aviva.\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer == "Singlife"
+        assert parsed.sources["insurer"] == "labelled"
+
+    def test_a_label_with_no_colon_still_reads(self) -> None:
+        parsed = parse_demographics("NRIC S8012345D  Insurer MSIG\n")
+        assert parsed.insurer == "MSIG"
+
+    def test_an_insurer_in_a_compound_patient_line(self) -> None:
+        # Without the insurer rule this segment has no digits, which is the
+        # test for a name — and the name slot is already taken, so it was
+        # dropped silently.
+        text = "Patient: Tan Wei Ling · S8012345D · 14/03/1978 · Cigna\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Tan Wei Ling"
+        assert parsed.insurer == "Cigna"
+
+    def test_an_insurer_the_list_does_not_know_is_kept_as_written(self) -> None:
+        # The list is the insurers a GP meets most, not every insurer there is.
+        # A labelled line is the doctor stating the answer, and dropping it for
+        # being off the list would turn a correct value into a blank.
+        text = "Insurer: Pacific Cross Insurance\n"
+        parsed = parse_demographics(text)
+        assert parsed.insurer == "Pacific Cross Insurance"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # The institution case, and the reason "Raffles" alone is not a
+            # variation: half the notes in Singapore name a hospital.
+            "Referred to Raffles Hospital A&E for review.\n",
+            "Seen at Raffles Medical, Bishan.\n",
+            # The English-word case.
+            "Discussed income protection and MC entitlement.\n",
+            # The policy-prefix case: GE- is a Great Eastern policy, but "GE"
+            # is not a name and matching it here would fill the field from a
+            # string that is already the policy number.
+            "Policy GE-88213004, patient to verify cover.\n",
+            # The pasted-email case. "Fwd:" is not FWD Insurance.
+            "Fwd: referral letter attached.\n",
+        ],
+    )
+    def test_a_word_that_only_looks_like_an_insurer_is_refused(self, text: str) -> None:
+        parsed = parse_demographics(text)
+        assert parsed.insurer is None
+        assert "insurer" not in parsed.choices
+
+    def test_the_canonical_names_match_the_schemas(self) -> None:
+        # A parsed insurer and a schema's `insurer` are two answers to one
+        # question, and they are compared by string. Drift here is invisible
+        # until something reads them side by side.
+        import json
+        from pathlib import Path
+
+        from demographics import INSURERS
+
+        canonical = {name for name, _ in INSURERS}
+        schemas = Path(__file__).resolve().parent.parent / "backend" / "schemas"
+        for path in schemas.glob("*.json"):
+            schema = json.loads(path.read_text(encoding="utf-8"))
+            insurer = schema.get("insurer")
+            # Internal fixtures name insurers that do not exist.
+            if not insurer or schema.get("internal"):
+                continue
+            assert insurer in canonical, f"{path.name} names an insurer not in INSURERS"
+
+
+class TestAHeaderNobodyLabelled:
+    """A patient block written without `Patient:` in front of it.
+
+    The rule being guarded is one piece, one field. Before this, a block with
+    no label was read by the address rule alone — "the line with a postal code
+    in it" — so the whole block went into the address box while the NRIC, date
+    of birth, phone and policy boxes it was made of sat empty next to it.
+
+    Reading an unlabelled line is a loosening, so the tests that matter are the
+    ones showing what still refuses: prose is not a header, and a name is still
+    never taken from words alone.
+    """
+
+    HEADER = (
+        "Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·\n"
+        "18 Toa Payoh Lorong 4, Singapore 310018 · Policy GHS-4471902\n"
+        "AIA Singapore\n"
+    )
+
+    def test_every_field_lands_in_its_own_box(self) -> None:
+        parsed = parse_demographics(self.HEADER)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.nric == "S7211043C"
+        assert parsed.dob == "1972-11-04"
+        assert parsed.phone == "91112233"
+        assert parsed.policy_number == "GHS-4471902"
+        assert parsed.insurer == "AIA"
+
+    def test_the_address_is_the_address_and_nothing_else(self) -> None:
+        # The whole point. Every one of these was inside the address string.
+        parsed = parse_demographics(self.HEADER)
+        assert parsed.address == "18 Toa Payoh Lorong 4, Singapore 310018"
+        for taken in ("S7211043C", "04/11/1972", "91112233", "GHS-4471902", "Chua"):
+            assert taken not in parsed.address
+
+    def test_a_comma_separated_block_reads_the_same_way(self) -> None:
+        # The comma is the separator AND a character inside the address, which
+        # is why the address is rebuilt from the note's own text rather than
+        # from the pieces the split produced.
+        text = (
+            "Chua Beng Huat, S7211043C, 04/11/1972, 91112233, "
+            "18 Toa Payoh Lorong 4, Singapore 310018, Policy GHS-4471902\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.address == "18 Toa Payoh Lorong 4, Singapore 310018"
+        assert parsed.nric == "S7211043C"
+
+    def test_a_labelled_block_written_with_commas_reads_too(self) -> None:
+        text = "Patient: Chua Beng Huat, S7211043C, 04/11/1972, 91112233\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name == "Chua Beng Huat"
+        assert parsed.dob == "1972-11-04"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # One shaped value in a sentence is a coincidence, not a block.
+            "08/05/2026. Reviewed. Ongoing epigastric discomfort.\n",
+            # Three dates is a treatment history: the count is of different
+            # FIELDS, so this is one field however many times it appears.
+            "Seen 02/08/2026, first consult 31/07/2026, review 09/08/2026.\n",
+            # A number with a word in front of it is not that field's value.
+            "Referred to Dr Lim, tel 62551234, on 04/11/2026.\n",
+        ],
+    )
+    def test_prose_is_not_a_header(self, text: str) -> None:
+        parsed = parse_demographics(text)
+        assert parsed.full_name is None
+        assert parsed.address is None
+
+    def test_two_nameless_pieces_yield_no_name(self) -> None:
+        # The same refusal every other field makes. A name has no shape, so
+        # there is nothing to break the tie with — and a wrong name is the one
+        # error redaction cannot recover from, since it is the value the note
+        # is scrubbed against.
+        text = "Chua Beng Huat · Tan Wei Ling · S7211043C · 91112233\n"
+        parsed = parse_demographics(text)
+        assert parsed.full_name is None
+        assert parsed.nric == "S7211043C"
+
+    def test_a_sentence_is_too_long_to_be_a_name(self) -> None:
+        text = "S7211043C · 91112233 · patient reports ongoing epigastric discomfort\n"
+        assert parse_demographics(text).full_name is None
+
+    def test_an_address_on_its_own_line_is_unaffected(self) -> None:
+        # One field on the line, so it is not a header — the old rule still
+        # owns this case and still takes the whole line.
+        text = "NRIC: S8012345D\nBlk 118 Bishan St 12 #07-21, S570118\n"
+        parsed = parse_demographics(text)
+        assert parsed.address == "Blk 118 Bishan St 12 #07-21, S570118"
+
+
+class TestTheNameIsCheckedNotGuessed:
+    """The doctor types the name at step 1, before the paste box exists.
+
+    That is not a convenience, it is the panel's first question, and it is
+    asked first because `redaction.py` cannot find a name by shape — nothing
+    can be scrubbed of a name nobody supplied. So by the time there is a block
+    to parse, the name is already known, and finding it in the block is a
+    lookup rather than a judgement.
+
+    What that buys is the case nothing else could settle: two capitalised
+    pieces on one header, one of them the patient and one of them somebody
+    else.
+    """
+
+    HEADER = (
+        "Chua Beng Huat · Tan Wei Ling · S7211043C · 04/11/1972 · 91112233 ·\n"
+        "18 Toa Payoh Lorong 4, Singapore 310018\n"
+    )
+
+    def test_the_piece_that_is_the_name_is_the_one_that_matches(self) -> None:
+        parsed = parse_demographics(self.HEADER, known_name="Chua Beng Huat")
+        assert parsed.full_name == "Chua Beng Huat"
+        # And the other person on the line is not read as anything.
+        assert "Tan Wei Ling" not in (parsed.address or "")
+
+    def test_a_surname_written_the_other_way_round_still_matches(self) -> None:
+        # A CMS exporting surname-first against a doctor who typed it last, or
+        # the reverse. `redaction.py` forgives the same rotation, and for the
+        # same reason: they are one person, and a piece that does not match is
+        # a piece left in the note.
+        for typed in ("Beng Huat Chua", "CHUA BENG HUAT", "Chua  Beng Huat"):
+            parsed = parse_demographics(self.HEADER, known_name=typed)
+            assert parsed.full_name == "Chua Beng Huat", typed
+
+    def test_a_name_that_matches_nothing_on_the_line_yields_no_name(self) -> None:
+        # Neither piece is this patient, so neither is taken — the guess that
+        # would have picked one is not reached when a name was supplied.
+        parsed = parse_demographics(self.HEADER, known_name="Nurul Aisyah")
+        assert parsed.full_name is None
+        # Everything else on the line still parses; only the name is withheld.
+        assert parsed.nric == "S7211043C"
+
+    def test_without_a_name_it_falls_back_to_reading_one(self) -> None:
+        # A caller that is not the panel has nothing to check against, so the
+        # fenced guess is still there — and still refuses two candidates.
+        assert parse_demographics(self.HEADER).full_name is None
+        one_name = "Chua Beng Huat · S7211043C · 04/11/1972 · 91112233\n"
+        assert parse_demographics(one_name).full_name == "Chua Beng Huat"
+
+
+class TestAValueSomebodyElseOwns:
+    """The hole the unlabelled pass had, and the word that closes it.
+
+    That pass believes a shape that occurs exactly once. Its own docstring
+    names the failure it was written to avoid — the clinic's number under the
+    doctor's signature — and it only avoided it when a SECOND number happened
+    to be present. One number in the note and the clinic's went onto the claim,
+    green, as a value the doctor entered. Uniqueness was doing all the work,
+    and uniqueness is not ownership.
+
+    So a value with `clinic`, `next of kin`, `employer`, `husband` and the rest
+    in front of it on the same line is dropped before the count is taken. Two
+    consequences, and the second is the better one: the wrong value stops being
+    taken, and the right value stops being refused for standing next to it.
+    """
+
+    def test_a_lone_clinic_number_is_not_the_patients(self) -> None:
+        # docs/patient_details_cases.md case 6, and the defect it recorded.
+        text = (
+            "Patient: Goh Siew Lan\n"
+            "Seen 11/08/2026. Follow-up of type 2 diabetes.\n"
+            "Clinic address 9 Serangoon Road, Singapore 218000. Tel 62221234.\n"
+        )
+        parsed = parse_demographics(text)
+        assert parsed.phone is None
+        assert parsed.address is None
+        # And it is not offered either: this is not a value nobody could
+        # choose between, it is a value known to belong to somebody else.
+        assert "phone" not in parsed.choices
+
+    def test_the_patients_number_survives_the_clinics(self) -> None:
+        # The other half. Before, two numbers meant neither, so a note with a
+        # clinic footer could not yield a phone at all.
+        text = "Reviewed today. Contactable on 91112233. Clinic tel 62551234.\n"
+        assert parse_demographics(text).phone == "91112233"
+
+    def test_a_family_members_nric_does_not_block_the_patients(self) -> None:
+        # One line, two NRICs, and the note says which is which. Dropping the
+        # whole line would lose both, so the disqualification is per value and
+        # reads only what sits BEFORE it.
+        text = "S6123456B, seen together with her husband S6234567C.\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S6123456B"
+        assert "nric" not in parsed.choices
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Clinic tel 62551234",
+            "Next of kin contact 91112233",
+            "Employer contact 62551234",
+            "Emergency contact 91112233",
+            "Caregiver mobile 91112233",
+        ],
+    )
+    def test_the_words_that_disqualify(self, line: str) -> None:
+        assert parse_demographics(f"Seen 09/08/2026.\n{line}\n").phone is None
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            # "Dr" is how an address abbreviates Drive, and a disqualifier that
+            # fires on it would blank correct addresses.
+            "Blk 5 Bishan Dr #01-02, Singapore 570118",
+            # "surgery" is a procedure in every other note.
+            "For surgery. Contactable on 91112233",
+        ],
+    )
+    def test_a_word_from_ordinary_notes_does_not_disqualify(self, line: str) -> None:
+        parsed = parse_demographics(f"{line}\n")
+        assert parsed.address is not None or parsed.phone is not None
+
+    def test_a_labelled_value_is_never_disqualified(self) -> None:
+        # The doctor wrote it against the field, on a line that also says
+        # "Clinic". They said this is the patient's NRIC, so it is: only the
+        # unlabelled pass reads ownership, because only the unlabelled pass is
+        # guessing whose value it found.
+        text = "Clinic visit today  NRIC S8012345D\n"
+        parsed = parse_demographics(text)
+        assert parsed.nric == "S8012345D"
+        assert parsed.sources["nric"] == "labelled-inline"

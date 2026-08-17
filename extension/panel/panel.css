@@ -30,9 +30,19 @@
   --surface: #fcfcfb;
   --field: #ffffff;
 
-  /* Ink */
+  /* Ink.
+
+     `--muted` and `--muted-strong` deliberately hold the same value. The old
+     `--muted` (#86868b) measured 3.3:1 on --paper and 3.5:1 on --surface, and
+     every role carrying it is 10–12.5px body copy — taglines, field labels,
+     status lines, help text — so it failed WCAG AA (4.5:1) everywhere it was
+     used, on a tool a GP reads between patients.
+
+     The two names are kept rather than collapsed because they mark intent. If
+     the tones are separated again, it must be by darkening --muted-strong,
+     never by lightening --muted back. */
   --text: #1d1d1f;
-  --muted: #86868b;
+  --muted: #6e6e73;
   --muted-strong: #6e6e73;
 
   /* Hairlines — close in value to the fill they separate, so structure is
@@ -53,7 +63,15 @@
   --confident-body: #2c6b4e;
   --check: #8a6a28;
   --check-line: #d9c9a8;
-  --missing: #86868b;
+  /* The marked sentence in the note pane. The same amber family as --check,
+     because it marks the thing the doctor is being asked to check. */
+  --check-mark: #fdf3dc;
+  /* The value itself, inside the sentence that carries it. */
+  --check-hit: #f4dfa6;
+  /* A sentence a value was REASONED from rather than quoted out of. Marked,
+     because it is what the doctor has to read — just not as the answer. */
+  --check-faint: #fbf7ec;
+  --missing: #6e6e73;
 
   /* The one accent in the panel, and it is only ever the Fill button. */
   --accent: #0071e3;
@@ -63,12 +81,23 @@
   --disabled-line: #e0e0dc;
   --disabled-ink: #a5a5a0;
 
-  --focus-ring: rgba(29, 29, 31, 0.06);
-  --focus-line: #b9b9b4;
+  /* The keyboard user's only position cue, so it is held to SC 1.4.11's 3:1
+     for non-text contrast. The old #b9b9b4 measured 1.95:1 — present in the
+     stylesheet and invisible on screen — and a 6% halo could not be seen at
+     all. This is a form-filling tool; tabbing through it is the normal way to
+     use it, not an accessibility edge case. */
+  --focus-ring: rgba(29, 29, 31, 0.13);
+  --focus-line: #7c7c78;
 
   --danger: #9a2b22;
   --danger-bg: #fdf2f1;
   --danger-line: #ebcfcc;
+
+  /* Entering elements start fast and settle, so the panel answers a click on
+     the frame the eye is watching. CSS's built-in `ease` is too weak to read
+     as intentional, and `ease-in` would delay exactly the moment being
+     watched. Every entrance below uses this; nothing uses `ease-in`. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
   --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -165,80 +194,86 @@ body {
 
 /* --------------------------------------------------------- collapsed step */
 
-.done-row {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  animation: pf-rise 0.26s ease both;
+/* A finished step is one hairline row on the panel's own ground.
+
+   It used to be a card — bordered box, filled green disc, chevron, and a
+   drawer holding the values under an uppercase mono caption. That made the
+   heaviest chrome on the screen stand in for the least important thing on it,
+   and it cost two clicks to change a value when going back to the step is the
+   only reason the row exists. Putting the value on the row deletes the drawer
+   rather than restyling it, and leaves the live step as the only object on
+   screen with an edge. */
+.done-rows {
+  display: flex;
+  flex-direction: column;
+  flex: none;
 }
 
-.done-head {
+.done-rows[hidden] {
+  display: none;
+}
+
+/* Under the work once there are mapped values, not above it. */
+.done-rows.below {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 2px;
+}
+
+.done-row {
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 9px;
-  padding: 10px 12px;
   background: none;
   border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 7px 2px;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   color: inherit;
-  transition: background 0.18s ease;
+  cursor: pointer;
+  transition: background 0.16s ease;
 }
 
-.done-head:hover {
-  background: #f7f7f6;
+.done-row:last-child {
+  border-bottom: 0;
 }
 
-.done-tick {
+.done-row:hover {
+  background: rgba(29, 29, 31, 0.024);
+  border-color: var(--line);
+}
+
+/* A glyph rather than a 15px filled disc: the loudest mark in the panel was
+   being spent on the least urgent fact on the screen. */
+.done-check {
   flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  background: var(--confident);
-  color: #fff;
-  font-size: 9px;
-  display: grid;
-  place-items: center;
+  color: var(--confident);
+  font-size: 11px;
 }
 
-.done-label {
+.done-name {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 84px;
+}
+
+.done-value {
   flex: 1;
   min-width: 0;
-}
-
-.done-title {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.done-summary {
   font-size: 13px;
-  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.done-chevron {
+.done-go {
   flex: none;
-  font-size: 17px;
-  color: var(--disabled-ink);
-  transition: transform 0.22s ease;
-}
-
-.done-row[data-open="true"] .done-chevron {
-  transform: rotate(90deg);
-}
-
-.done-body {
-  padding: 0 12px 11px 36px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  animation: pf-rise 0.22s ease both;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 /* ------------------------------------------------------------ active step */
@@ -251,7 +286,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: pf-rise 0.3s ease both;
+  animation: pf-rise 0.3s var(--ease-out) both;
 }
 
 .step[hidden] {
@@ -326,12 +361,6 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-
 /* --------------------------------------------------------------- buttons  */
 
 button {
@@ -380,8 +409,10 @@ button:disabled {
   border-color: #35353a;
 }
 
+/* 0.99 on a control this wide is below the threshold at which a press is felt
+   at all — it read as no feedback. */
 .primary:active:not(:disabled) {
-  transform: scale(0.99);
+  transform: scale(0.97);
 }
 
 /* The one accent element in the panel. */
@@ -502,42 +533,36 @@ button.link:hover {
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------- legend + drawers */
+/* ------------------------------------------------------------- this page  */
 
-.legend {
+/* The offer to map. Amber rather than green: nothing has been sent yet, and
+   the doctor is the one who decides whether it is. */
+.prompt {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  background: #f7f7f6;
-  border: 1px solid var(--line-quiet);
-  border-radius: 9px;
-  padding: 9px 11px;
+  flex-direction: column;
+  gap: 9px;
+  background: #fbf7ef;
+  border: 1px solid var(--check-line);
+  border-radius: 10px;
+  padding: 12px;
 }
 
-.legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
+.prompt[hidden] {
+  display: none;
+}
+
+.prompt strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.prompt p {
+  margin: 0;
+  font-size: 12.5px;
   color: var(--muted-strong);
 }
 
-.legend i {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.legend .is-confident {
-  color: var(--confident);
-}
-.legend .is-check {
-  color: var(--check);
-}
-.legend .is-missing {
-  color: var(--missing);
-}
+/* ---------------------------------------------------------------- drawers */
 
 details.found,
 details.extra,
@@ -551,6 +576,19 @@ details.quiet {
 
 details.advanced {
   margin: 0 16px 16px;
+}
+
+/* The check screen's cards sit inside the drawer, so the drawer stops being a
+   box drawn around a list of boxes: it keeps the summary line and gives the
+   cards their own edge back. */
+details.found {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+details.found > summary {
+  margin-bottom: 8px;
 }
 
 details > summary {
@@ -582,7 +620,168 @@ details > *:not(summary) {
   margin-top: 10px;
 }
 
+/* ------------------------------------------------------------- the note  */
+
+/* Laid out rather than margined, so the note pane can be dropped between the
+   readiness bar and the rows without any of them growing a margin for it. */
+#mapped {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#mapped[hidden] {
+  display: none;
+}
+
+/* The consultation, on screen while the values taken from it are checked.
+
+   A SIBLING of the scroller rather than sticky inside it. Sticky pinned at the
+   scroll container's padding edge, so rows kept sliding through the strip
+   above the pane and it read as a rendering fault. A sibling cannot have one.
+
+   A third of the panel by flex, so it stays a third whatever height the
+   browser window is — a fixed pixel height stops being a third the moment the
+   doctor resizes anything. */
+.notepane {
+  flex: 0 0 33%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.notepane[hidden] {
+  display: none;
+}
+
+/* Folded away, the pane is its header and nothing else. */
+.notepane[data-folded="true"] {
+  flex: none;
+}
+
+.notepane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notepane-title {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Which row the mark is following, and — when it is following nothing — why
+   not. A pane that silently stops marking anything reads as broken, and "the
+   model did not quote this" is worth knowing on a screen whose whole job is
+   checking where values came from. */
+.notepane-state {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notepane-toggle {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.notepane-toggle:hover {
+  background: none;
+  color: var(--text);
+}
+
+/* Positioned so a mark inside measures its offset against the text box. */
+.notepane-text {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 16px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+.notepane-text[hidden] {
+  display: none;
+}
+
+/* Every quotable sentence is a span from the first render and only a class
+   moves. Rebuilding the note to redraw the mark reset the pane's scroll on
+   every frame of a scroll, which is what made following it stutter. */
+.quote {
+  border-radius: 3px;
+  transition: background 0.22s ease, color 0.22s ease;
+}
+
+/* TWO marks, because there are two relationships between a value and the
+   sentence it cites.
+
+   QUOTED — the value is in this sentence, and the value itself is emphasised
+   inside it, so the match is shown rather than asserted.
+
+   REASONED — the value is NOT in this sentence; it was worked out from it.
+   "J03.90" appears nowhere in "Dx acute tonsillitis." Marking that the same
+   solid way makes the most dangerous row on the screen — an inference the
+   doctor is about to sign as their own clinical statement — read as a wrong
+   citation. It gets an outline instead of a fill. */
+.quote.on.quoted {
+  background: var(--check-mark);
+  color: var(--text);
+}
+
+/* Still a highlight — it is the sentence the doctor has to read. What the
+   dashed rule under it says is only that the value is not written in there. An
+   outline alone read as "nothing is marked". */
+.quote.on.reasoned {
+  background: var(--check-faint);
+  color: var(--text);
+  text-decoration: underline dashed var(--check);
+  text-underline-offset: 4px;
+}
+
+.quote .hit {
+  font-weight: 400;
+}
+
+.quote.on.quoted .hit {
+  font-weight: 600;
+  background: var(--check-hit);
+  border-radius: 2px;
+}
+
+.quote.on.reasoned .hit {
+  font-weight: 600;
+}
+
 /* --------------------------------------------------------- review + rows  */
+
+.progress[hidden],
+.note[hidden] {
+  display: none;
+}
 
 .progress {
   height: 3px;
@@ -591,12 +790,19 @@ details > *:not(summary) {
   overflow: hidden;
 }
 
+/* Driven by transform rather than width: width is a layout property, so every
+   step of the animation re-laid-out and repainted the review list underneath
+   it. scaleX runs on the compositor and looks identical here — the bar is a
+   plain rounded rectangle, and the parent clips it. */
 .progress > i {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--text);
   border-radius: 999px;
-  transition: width 0.45s cubic-bezier(0.22, 0.7, 0.3, 1);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.25s var(--ease-out);
 }
 
 .review-row {
@@ -608,20 +814,32 @@ details > *:not(summary) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  animation: pf-rise 0.26s ease both;
+  animation: pf-rise 0.26s var(--ease-out) both;
   transition: background 0.24s ease, border-color 0.24s ease,
-    border-left-color 0.24s ease;
+    box-shadow 0.24s ease;
 }
 
-/* State is a 3px left rule plus a word — never colour alone. */
+/* State is a 3px left rule plus a word — never colour alone.
+
+   Drawn as an inset shadow rather than a left border. A border changed the
+   card's content inset (1px + 12px on a stateless row against 3px + 13px on a
+   stated one), so a list holding both sat 3px out of line down its left edge;
+   and replacing the left border with a coloured one on stated rows only would
+   have deleted the hairline from the rest. A shadow leaves the box model
+   alone, so every row aligns and every row keeps its outline. */
 .review-row.pending {
-  border-left: 3px solid var(--check);
-  padding-left: 13px;
+  box-shadow: inset 3px 0 0 var(--check);
 }
 
 .review-row.confirmed {
-  border-left: 3px solid var(--confident);
-  padding-left: 13px;
+  box-shadow: inset 3px 0 0 var(--confident);
+}
+
+/* A row that was already on screen before the last render. It has not
+   entered, so it must not play an entrance — see renderRows in panel.js. */
+.review-row.no-enter,
+.done-row.no-enter {
+  animation: none;
 }
 
 .review-row .badge {
@@ -668,9 +886,21 @@ details > *:not(summary) {
   padding: 9px 11px;
 }
 
+.review-row.pending input,
 .review-row.pending textarea,
 .review-row.pending select {
   border-color: var(--check-line);
+}
+
+/* The model's own sentence saying why an inferred value follows from the
+   sentence marked in the note above. Said on the row, because the row is where
+   the doctor signs off — the pane can only mark what the value was worked out
+   FROM, and that sentence does not contain the answer. */
+.derived {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--check);
 }
 
 .date-hint {
@@ -710,7 +940,7 @@ button.confirm:active:not(:disabled) {
   border-radius: 11px;
   padding: 12px;
   margin-top: 10px;
-  animation: pf-rise 0.26s ease both;
+  animation: pf-rise 0.26s var(--ease-out) both;
 }
 
 .report-block h3 {
@@ -784,17 +1014,6 @@ button.confirm:active:not(:disabled) {
   }
 }
 
-@keyframes pf-tick {
-  from {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 @keyframes pf-spin {
   to {
     transform: rotate(360deg);
@@ -809,8 +1028,21 @@ button.confirm:active:not(:disabled) {
   .report-block {
     animation: none;
   }
+
+  /* Position changes, not the colour and opacity ones that aid comprehension.
+     The progress bar still fills, the chevrons still point where they point —
+     they simply arrive rather than travel. */
+  .progress > i,
+  .done-chevron,
+  details > summary::before {
+    transition: none;
+  }
+
+  /* Stopping the spinner leaves a static ring with one dark quadrant, which
+     communicates nothing and reads as a stalled control. The status line
+     beside it already says what is happening in words. */
   .status.busy::after {
-    animation: none;
+    display: none;
   }
 }
 

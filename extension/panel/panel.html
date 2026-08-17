@@ -30,9 +30,13 @@
   </head>
   <body>
     <!--
-      The tagline is load-bearing product copy, not decoration: it is the one
-      line that states the guarantee the whole design exists to protect. Do
-      not cut it.
+      Changed by the owner on 2026-08-16, from "Fills the form in place. Never
+      submits it." That line stated the guarantee; this one states the benefit.
+      The guarantee has not left the panel — the fill report still says "Check
+      each one on the form, then submit it yourself", at the moment it matters
+      — but it is no longer the always-visible line, and
+      docs/design/breezefill-panel/README.md still calls the old one
+      load-bearing. Note the claim is a measurement nobody has taken yet.
     -->
     <header class="head">
       <span class="head-chip" aria-hidden="true">
@@ -48,23 +52,56 @@
       </span>
       <span class="head-text">
         <h1>BreezeFill</h1>
-        <p class="tagline">Fills the form in place. Never submits it.</p>
+        <p class="tagline">Fill your form 3x faster.</p>
       </span>
-      <span class="step-counter" id="step-counter">Step 1 of 6</span>
+      <!-- Overwritten by showStep on the first render; this is what shows for
+           the instant before that, so it has to agree with STEPS. -->
+      <span class="step-counter" id="step-counter">Step 1 of 4</span>
     </header>
 
+    <!--
+      The consultation, kept beside the values that came out of it.
+
+      Checking a mapped value is a comparison between two things — what the
+      model proposed and what the note actually said — and the panel showed one
+      at a time, so the doctor either held the other in their head or scrolled
+      back for it.
+
+      A SIBLING of the scroller, not sticky inside it. Sticky pinned the pane
+      at the scroll container's padding edge, so rows kept sliding through the
+      strip above it — a seam that read as a rendering fault. A sibling cannot
+      have one. It is also a third of the panel by flex rather than a fixed
+      height, so it stays a third whatever size the doctor drags the panel to.
+
+      The mark follows the row being read. `MappedField.source` has carried the
+      sentence each value came from since the first version of mapping.py — the
+      model is told to quote it verbatim — and the panel discarded it until now.
+    -->
+    <div class="notepane" id="notepane" hidden>
+      <div class="notepane-head">
+        <span class="notepane-title">Consultation</span>
+        <span class="notepane-state" id="note-following"></span>
+        <button
+          class="notepane-toggle"
+          id="note-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="note-text"
+        >
+          Hide
+        </button>
+      </div>
+      <pre class="notepane-text" id="note-text"></pre>
+    </div>
+
     <div class="scroll" id="scroll">
-      <!-- Finished steps collapse into one-line rows here, newest last. -->
-      <div id="done-rows"></div>
+      <!-- Finished steps, one hairline row each. Moved under the work once
+           there are mapped values on screen — see placeLedger. -->
+      <div class="done-rows" id="done-rows"></div>
 
       <!-- Step 1 — the name ---------------------------------------------- -->
       <section class="step" id="step-name" aria-labelledby="h-name">
         <h2 id="h-name">Who is this claim for?</h2>
-        <p class="step-sub">
-          Type the patient's name yourself. BreezeFill never guesses this one —
-          a name has no shape for a pattern to find, so it is the one value the
-          note cannot be scrubbed of unless you supply it.
-        </p>
         <label class="field">
           <span>Full name</span>
           <input
@@ -79,11 +116,19 @@
 
       <!-- Step 2 — the consultation -------------------------------------- -->
       <section class="step" id="step-note" aria-labelledby="h-note" hidden>
-        <h2 id="h-note">Paste the consultation</h2>
-        <p class="step-sub">
-          Exactly as it sits in your CMS — demographics header and clinical
-          note together. Messy is fine.
-        </p>
+        <!--
+          One box, and the heading is what carries what two paragraphs used to.
+          Claim forms ask for things a consultation note does not hold — the
+          admitting hospital's own reference, a ward class, an operation code
+          from the billing system — and those used to have a step of their own.
+          They did not need one: everything pasted here is a single corpus,
+          parsed and redacted in one pass, so a doctor typing an admission
+          reference under their note gets exactly what a separate box gave them
+          and one less screen to walk through.
+        -->
+        <h2 id="h-note">
+          Paste the clinical note, and anything else the form needs
+        </h2>
 
         <!--
           What is being read, not a choice to make. BreezeFill answers the
@@ -111,9 +156,10 @@
         </label>
         <!--
           Synthetic throughout, and deliberately awkward: two phone numbers so
-          the sole-match rule has to refuse both, a policy number written two
-          ways, and a first-consult date that is not the consultation date. A
-          sample that parsed cleanly would demonstrate the wrong thing.
+          the sole-match rule has to refuse both, one policy number written two
+          ways so the dedupe has to recognise it as one, and a first-consult
+          date that is not the consultation date. A sample that parsed cleanly
+          would demonstrate the wrong thing.
         -->
         <button id="sample-note" class="sample" type="button">
           Use a sample note
@@ -122,41 +168,17 @@
         <button id="note-next" class="primary" type="button">
           Find patient details
         </button>
-        <p class="note">
-          Pattern matching, never a model. The identifiers found here are what
-          the note is scrubbed against before any of it is sent anywhere.
-        </p>
+        <!--
+          The guarantee, stated where the doctor is about to hand over the
+          note. It is the accurate form of the claim: the paste does reach the
+          backend — pass 1 needs the demographics as the dictionary it scrubs
+          with — and what it never reaches is the model. `privacy.html` words
+          it the same way, and a store reviewer reads both.
+        -->
+        <p class="note">The model never sees who this is.</p>
       </section>
 
-      <!-- Step 3 — anything the note does not hold ------------------------ -->
-      <!--
-        A second box, not a second pipeline. Claim forms ask for things a
-        consultation note does not hold — the admitting hospital's own
-        reference, a ward class, an operation code from the billing system —
-        and a doctor keeps those somewhere else. They are appended to the note
-        and go through exactly the same redaction; nothing here takes a
-        shortcut past it.
-      -->
-      <section class="step" id="step-extra" aria-labelledby="h-extra" hidden>
-        <h2 id="h-extra">Anything else the form asks for?</h2>
-        <p class="step-sub">
-          Optional. Admission references, ward class, billing codes — whatever
-          the claim form wants that the consultation note does not hold.
-        </p>
-        <label class="field" id="other-notes-wrap">
-          <span class="visually-hidden">Other notes</span>
-          <textarea
-            id="other-notes"
-            rows="6"
-            spellcheck="false"
-            placeholder="Leave empty if there is nothing to add."
-          ></textarea>
-        </label>
-        <button id="extra-next" class="primary" type="button">Continue</button>
-        <p class="note">Redacted with the note, and read for identifiers the same way.</p>
-      </section>
-
-      <!-- Step 4 — check what was found ---------------------------------- -->
+      <!-- Step 3 — check what was found ---------------------------------- -->
       <!--
         Not a summary — a correction surface. These values are what redaction
         searches for in the note, so a value that arrived wrong here is a value
@@ -170,91 +192,145 @@
         have a box for it — it plays no part in redaction, so an insurer the
         form never asks about is not worth stopping a doctor over.
       -->
-      <section class="step" id="step-details" aria-labelledby="h-details" hidden>
-        <h2 id="h-details">Check what was found</h2>
-        <p class="step-sub">
-          Found by pattern in what you pasted. Correct anything that is wrong —
-          this is the dictionary the note is redacted against.
-        </p>
+      <section class="step" id="step-check" aria-labelledby="h-check" hidden>
+        <h2 id="h-check">Verify</h2>
 
-        <div class="legend">
-          <span class="is-confident"><i></i>Found</span>
-          <span class="is-check"><i></i>Needs checking</span>
-          <span class="is-missing"><i></i>Nothing found</span>
-        </div>
+        <!--
+          The same card as a review row, deliberately. A doctor checking values
+          before the note is sent and a doctor checking values before they are
+          written onto a form are doing the same job, and the panel used to
+          teach them two different layouts for it — a legend and a two-column
+          grid here, badged cards there. The badge carries what the legend used
+          to explain, which is why the legend is gone rather than restyled.
 
+          What does NOT move is where this sits. These values are the
+          dictionary redaction scrubs the note against, so they have to be
+          right BEFORE Map fields is pressed; a wrong name here is a name left
+          in the text that reaches the model. Merging this into the review
+          screen would put the correction after the send.
+        -->
         <details class="found" id="found" open>
           <summary id="found-summary">Patient details</summary>
 
-          <div class="grid">
-            <label class="field">
-              <span>NRIC</span>
-              <input id="nric" type="text" autocomplete="off" />
-              <div class="choices" id="choices-nric"></div>
-            </label>
-            <label class="field">
-              <span>Date of birth</span>
-              <input id="dob" type="date" />
-              <div class="choices" id="choices-dob"></div>
-            </label>
-            <label class="field">
-              <span>Phone</span>
-              <input id="phone" type="text" autocomplete="off" />
-              <div class="choices" id="choices-phone"></div>
-            </label>
-            <label class="field">
-              <span>Policy number</span>
-              <input id="policy-number" type="text" autocomplete="off" />
-              <div class="choices" id="choices-policy-number"></div>
-            </label>
-            <label class="field">
-              <span>Insurer</span>
-              <input id="insurer" type="text" autocomplete="off" />
-            </label>
+          <!--
+            A <div> wrapping a bound <label>, not a <label> wrapping
+            everything. The card holds the badge, the question, the control and
+            sometimes a row of candidate buttons, and a <label> takes ALL of
+            its text as the control's accessible name — so a screen reader
+            announced the date of birth field as "Needs checking, Date of
+            birth, 2 found in the note — pick the patient's, 9123 4567, 6123
+            4567". `for` names the question and nothing else.
+          -->
+          <div class="review-row" id="row-nric">
+            <div class="badge" id="badge-nric"></div>
+            <label class="label" for="nric">NRIC</label>
+            <input id="nric" type="text" autocomplete="off" />
+            <div class="choices" id="choices-nric"></div>
           </div>
-
-          <label class="field">
-            <span>Address</span>
+          <div class="review-row" id="row-dob">
+            <div class="badge" id="badge-dob"></div>
+            <label class="label" for="dob">Date of birth</label>
+            <input id="dob" type="date" />
+            <div class="choices" id="choices-dob"></div>
+          </div>
+          <div class="review-row" id="row-phone">
+            <div class="badge" id="badge-phone"></div>
+            <label class="label" for="phone">Phone</label>
+            <input id="phone" type="text" autocomplete="off" />
+            <div class="choices" id="choices-phone"></div>
+          </div>
+          <div class="review-row" id="row-policy-number">
+            <div class="badge" id="badge-policy-number"></div>
+            <label class="label" for="policy-number">Policy number</label>
+            <input id="policy-number" type="text" autocomplete="off" />
+            <div class="choices" id="choices-policy-number"></div>
+          </div>
+          <div class="review-row" id="row-insurer">
+            <div class="badge" id="badge-insurer"></div>
+            <label class="label" for="insurer">Insurer</label>
+            <input id="insurer" type="text" autocomplete="off" />
+            <div class="choices" id="choices-insurer"></div>
+          </div>
+          <div class="review-row" id="row-address">
+            <div class="badge" id="badge-address"></div>
+            <label class="label" for="address">Address</label>
             <input id="address" type="text" autocomplete="off" />
-              <div class="choices" id="choices-address"></div>
-          </label>
+            <div class="choices" id="choices-address"></div>
+          </div>
         </details>
 
-        <button id="map-btn" class="primary" type="button">Map fields</button>
-        <p class="status" id="map-status" role="status"></p>
-      </section>
-
-      <!-- Step 5 — review ------------------------------------------------ -->
-      <section class="step" id="step-review" aria-labelledby="h-review" hidden>
-        <h2 id="h-review">Review</h2>
-        <p class="note" id="review-summary"></p>
         <!--
-          Readiness as a bar rather than a count alone: the doctor should be
-          able to see how much is left without reading. It never advances on
-          its own — only a confirm click or an edit moves it.
+          The check screen ends here. What follows it is a different question —
+          "what does this page ask" — and it is asked of the page the doctor is
+          looking at NOW, which on a wizard is not the page they were looking at
+          when they pasted the note.
         -->
-        <div class="progress" aria-hidden="true">
-          <i id="review-progress" style="width: 0%"></i>
-        </div>
-        <div id="rows"></div>
+        <button id="check-next" class="primary" type="button">
+          Save and look at this page
+        </button>
+        <p class="status" id="check-status" role="status"></p>
       </section>
 
-      <!-- Step 6 — the page ---------------------------------------------- -->
+      <!-- Step 4 — the page in front of the doctor ------------------------ -->
       <!--
-        Not hidden behind review. "Check this page" is useful before any note
-        has been mapped — it answers "can BreezeFill see this form at all",
-        which is a different question from "did the model produce good values"
-        and worth being able to ask on its own. Fill stays disabled until there
-        is something confirmed to write.
+        The note no longer waits for the right page to be showing. It is
+        pasted, checked and sealed first; only then does the panel read the
+        page, and it reads it again every time the page becomes a different
+        one. That is the whole point of this step existing: mapping used to
+        fire once, against whatever happened to be on screen the moment the
+        note was ready — which on ClaimEZ is the verification section, holding
+        none of the questions a consultation note can answer.
+
+        Nothing here maps by itself. The panel says what it found and waits for
+        a click, because four wizard sections would otherwise be four model
+        calls nobody asked for. And nothing here fills by itself either:
+        advancing a section is the doctor using the insurer's form, not asking
+        BreezeFill for anything.
       -->
-      <section class="step" id="step-fill" aria-labelledby="h-fill">
-        <h2 id="h-fill">Write it onto the page</h2>
-        <div class="row-actions">
-          <button id="check-btn" type="button">Check this page</button>
-          <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
+      <section class="step" id="step-page" aria-labelledby="h-page" hidden>
+        <h2 id="h-page">This page</h2>
+
+        <!-- What was found, and the button that sends it. Hidden once mapped. -->
+        <div class="prompt" id="map-prompt" hidden>
+          <strong id="prompt-title"></strong>
+          <p id="prompt-why"></p>
+          <button id="map-btn" class="primary" type="button">Map these questions</button>
         </div>
-        <p class="status" id="fill-status" role="status"></p>
-        <div id="fill-report"></div>
+
+        <p class="status" id="map-status" role="status"></p>
+
+        <div id="mapped" hidden>
+          <!--
+            The answer to the button the doctor just pressed, above everything
+            they have already dealt with. It used to sit under the rows and the
+            Fill button, so pressing Fill landed them at the top of a list of
+            values they had just finished checking with the outcome somewhere
+            below the fold.
+          -->
+          <div id="fill-report"></div>
+          <p class="note" id="review-summary"></p>
+          <!--
+            Readiness as a bar rather than a count alone: the doctor should be
+            able to see how much is left without reading. It never advances on
+            its own — only a confirm click or an edit moves it.
+          -->
+          <div class="progress" id="review-progress-box" aria-hidden="true">
+            <!-- Empty at rest, and the stylesheet says so: the bar is scaled
+                 rather than resized, so an inline width here would pin it to
+                 nothing and the scale would never show. -->
+            <i id="review-progress"></i>
+          </div>
+
+          <div id="rows"></div>
+
+          <!--
+            Disabled until something is confirmed, which is the confirm-before-
+            write guarantee expressed in the markup: there is no path from a
+            mapped value to the page that does not pass through the rows above.
+          -->
+          <button id="fill-btn" class="primary" type="button" disabled>Fill</button>
+          <p class="status" id="fill-status" role="status"></p>
+        </div>
       </section>
 
       <!--

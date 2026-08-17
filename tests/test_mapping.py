@@ -139,7 +139,7 @@ def test_output_schema_covers_llm_fields_only():
         "diagnosis_primary", "date_first_consult", "symptoms_preexisting",
     }
     assert item["additionalProperties"] is False
-    assert set(item["required"]) == {"id", "value", "status", "source"}
+    assert set(item["required"]) == {"id", "value", "status", "source", "reasoning"}
     # Values are always strings; checkbox booleans travel as "true"/"false".
     assert item["properties"]["value"] == {"type": "string"}
 
@@ -771,3 +771,121 @@ def test_a_form_with_no_insurer_of_its_own_leaves_the_box_blank():
     [row] = assemble_claim(schema, make_record(insurer=""), {}, {})
 
     assert not row.value
+
+
+# ---------------------------------------------------------------------------
+# The citation, and why an inference is not one
+# ---------------------------------------------------------------------------
+#
+# `source` is the sentence the model is told to quote verbatim, and the panel
+# marks it in the note beside the value. Two things were wrong with it.
+#
+# It was quoted out of the REDACTED note and handed back untouched, so any
+# sentence carrying an identifier came back as "[PATIENT] seen 02/08" and
+# could never be found in the doctor's own paste — the citation silently
+# failed on exactly the sentences that name the patient.
+#
+# And an inferred value is not IN its sentence. "J03.90" appears nowhere in
+# "Dx acute tonsillitis." Marking the two the same way makes the inference —
+# the most dangerous value on the screen, and the one the doctor is about to
+# sign — read as a wrong citation. `reasoning` is what closes that.
+
+
+def test_the_quoted_sentence_is_remerged_like_the_value():
+    # Without this the pane searches the doctor's paste for a sentence that
+    # only ever existed in the redacted copy, and finds nothing.
+    answers = {
+        "diagnosis_primary": FieldAnswer(
+            value="Acute tonsillitis",
+            status="extracted",
+            source="[REDACTED_1] seen 02/08. Dx acute tonsillitis.",
+        )
+    }
+    rows = assemble_claim(
+        SAMPLE_SCHEMA, make_record(), answers, {"[REDACTED_1]": "Tan Wei Ling"}
+    )
+    row = {r.field_id: r for r in rows}["diagnosis_primary"]
+
+    assert row.source == "Tan Wei Ling seen 02/08. Dx acute tonsillitis."
+
+
+def test_a_quote_with_a_token_nothing_resolves_is_dropped_not_shown():
+    # A raw [TOKEN] in the pane is worse than no citation: it is a citation
+    # the doctor cannot check, rendered exactly like one they can.
+    answers = {
+        "diagnosis_primary": FieldAnswer(
+            value="Acute tonsillitis", status="extracted", source="[REDACTED_9] seen 02/08."
+        )
+    }
+    rows = assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})
+    row = {r.field_id: r for r in rows}["diagnosis_primary"]
+
+    assert row.source is None
+    # The VALUE is untouched — it carried no token, so it is still answerable.
+    assert row.value == "Acute tonsillitis"
+
+
+def test_an_inferred_value_carries_the_reasoning_that_produced_it():
+    answers = {
+        "diagnosis_primary": FieldAnswer(
+            value="J03.90",
+            status="inferred",
+            source="Dx acute tonsillitis.",
+            reasoning="J03.90 is the ICD-10 code for acute tonsillitis.",
+        )
+    }
+    rows = assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})
+    row = {r.field_id: r for r in rows}["diagnosis_primary"]
+
+    assert row.reasoning == "J03.90 is the ICD-10 code for acute tonsillitis."
+
+
+def test_only_an_inference_carries_reasoning():
+    # An extracted value is in the sentence it quotes, so a sentence
+    # explaining it is noise at best — and at worst it is the model
+    # rationalising a value it read straight off the page.
+    answers = {
+        "diagnosis_primary": FieldAnswer(
+            value="Acute tonsillitis",
+            status="extracted",
+            source="Dx acute tonsillitis.",
+            reasoning="The note states the diagnosis.",
+        )
+    }
+    rows = assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})
+
+    assert {r.field_id: r for r in rows}["diagnosis_primary"].reasoning is None
+
+
+def test_reasoning_is_remerged_and_dropped_when_a_token_survives():
+    answers = {
+        "diagnosis_primary": FieldAnswer(
+            value="J03.90", status="inferred", source="Dx acute tonsillitis.",
+            reasoning="[REDACTED_9] was coded from the diagnosis.",
+        )
+    }
+    rows = assemble_claim(SAMPLE_SCHEMA, make_record(), answers, {})
+
+    assert {r.field_id: r for r in rows}["diagnosis_primary"].reasoning is None
+
+
+def test_reasoning_never_reaches_the_output_grammar_as_a_union():
+    # The grammar limits are unforgiving and this adds a property to every
+    # item. It must stay a plain string like the rest.
+    fields = [f for f in SAMPLE_SCHEMA.fields if f.source == "llm"]
+    item = build_output_schema(fields)["properties"]["fields"]["items"]
+
+    assert item["properties"]["reasoning"] == {"type": "string"}
+    assert "reasoning" in item["required"]
+
+
+def test_symptom_timing_is_never_inferred():
+    # The owner's call. A note saying "3 days sore throat, seen 02/08" invites
+    # the arithmetic, and the arithmetic lands 30/07 on a claim form as a
+    # clinical fact — when "3 days" is a patient's estimate the doctor wrote
+    # down loosely, not a date they recorded. The insurer reads the answer as
+    # the doctor's own statement of when the illness started, and a claim can
+    # turn on it: pre-existing-condition windows and policy start dates are
+    # decided by exactly this number.
+    assert "symptom" in SYSTEM_PROMPT.lower()
+    assert "never infer" in SYSTEM_PROMPT.lower()

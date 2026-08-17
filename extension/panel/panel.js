@@ -112,9 +112,10 @@ const REQUIRED_FIELDS = ["full-name", "dob"];
 // It is deliberately awkward rather than tidy, because a sample that parsed
 // cleanly would demonstrate the wrong thing. It carries two phone numbers, so
 // the sole-match rule in demographics.py has to refuse both rather than guess;
-// a policy number written two ways; and a first-consult date that is not the
-// consultation date, which is exactly the distinction a schema description
-// exists to draw.
+// a policy number written two ways, which resolves rather than refusing,
+// because both renderings name one policy; and a first-consult date that is
+// not the consultation date, which is exactly the distinction a schema
+// description exists to draw.
 const SAMPLE_NOTE = `Tan Wei Ling, F, 47
 NRIC S8012345D  DOB 14/03/1978
 HP 9123 4567 / 6123 4567
@@ -126,8 +127,16 @@ O/E tonsils enlarged with exudate, tender cervical nodes.
 Dx acute tonsillitis. Rx oral amoxicillin 500mg TDS x 7 days.
 First consult for this episode 31/07/2026. MC 2 days.`;
 
+// Whether to animate a scroll. Read once: the panel is not open long enough
+// for the setting to change under it, and asking per frame is wasteful.
+const REDUCED_MOTION = globalThis.matchMedia
+  ? globalThis.matchMedia("(prefers-reduced-motion: reduce)")
+  : { matches: false };
+
 const state = {
   forms: [],
+  /** field_id of the row the note pane is currently marking. */
+  reading: null,
   /** Whether the last /forms call failed, as opposed to returning nothing. */
   formsFailed: false,
   /** Review rows from POST /map. */
@@ -158,6 +167,14 @@ const state = {
   /** Whether the details drawer has already opened itself for this paste. */
   openedForMissing: false,
   /**
+   * The questions read off the page the doctor is looking at NOW.
+   *
+   * Refreshed by scanPage on every page change, and deliberately not the same
+   * thing as `rows`: these are questions nobody has answered yet. Mapping is
+   * what turns them into rows, and it only happens on a click.
+   */
+  pageFields: [],
+  /**
    * Whether the doctor picked the form themselves.
    *
    * Detection re-runs when a wizard step renders, and it must never overrule
@@ -174,6 +191,15 @@ const state = {
    * answered and still filled.
    */
   schema: null,
+  /**
+   * The host of the page being filled, as the injected script reported it.
+   *
+   * Kept so the "reading the questions on this page" line can name it again
+   * after the doctor changes the picker, without another survey. The panel has
+   * no `tabs` permission and cannot ask Chrome what site it is on — this is
+   * the only place that answer exists.
+   */
+  host: "",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -344,26 +370,36 @@ function bestCandidate(scores) {
  * state: it means the page's own wording is the best instruction available.
  * Either way the panel is ready to map — nothing here disables anything.
  */
-function selectForm(form, host) {
-  state.schema = form || null;
+function describeSelection(form) {
   const detected = $("form-detected");
+  // The picker is kept in step with the state rather than assumed to already
+  // agree with it. It disagrees in both directions otherwise: a select with
+  // nothing chosen shows its first option, and a doctor who picks one by hand
+  // leaves the sentence above it describing the previous answer.
+  $("form-id").value = form ? form.form_id : "";
 
   if (form) {
-    $("form-id").value = form.form_id;
     detected.textContent = form.insurer
       ? `${form.insurer} — ${form.display_name}`
       : form.display_name;
     detected.classList.remove("unknown");
-  } else {
-    // Deliberately not phrased as a problem. Nothing is broken and there is
-    // nothing for the doctor to do: BreezeFill reads the questions on the page
-    // and answers those. Naming the host is the one useful detail, because it
-    // is how they would tell us which form to describe properly later.
-    detected.textContent = host
-      ? `Reading the questions on this page (${host})`
-      : "Reading the questions on this page";
-    detected.classList.add("unknown");
+    return;
   }
+
+  // Deliberately not phrased as a problem. Nothing is broken and there is
+  // nothing for the doctor to do: BreezeFill reads the questions on the page
+  // and answers those. Naming the host is the one useful detail, because it
+  // is how they would tell us which form to describe properly later.
+  detected.textContent = state.host
+    ? `Reading the questions on this page (${state.host})`
+    : "Reading the questions on this page";
+  detected.classList.add("unknown");
+}
+
+function selectForm(form, host) {
+  state.schema = form || null;
+  if (host) state.host = host;
+  describeSelection(state.schema);
 
   // The picker stays reachable, never required. A doctor who knows the bank
   // has a better description for this form than the page does can say so.
@@ -463,6 +499,16 @@ async function loadForms() {
   }
 
   select.replaceChildren();
+  // No form is a choice, not the absence of one, and it needs an entry to be
+  // choosable at all. A <select> has no empty state: without this its first
+  // option stands selected whether or not anyone picked it, so a doctor who
+  // opened the picker could name a form and never take one back — and the
+  // control claimed a schema was in use while `state.schema` was still null.
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No form — use this page's own wording";
+  select.append(none);
+
   for (const form of state.forms) {
     const option = document.createElement("option");
     option.value = form.form_id;
@@ -474,25 +520,33 @@ async function loadForms() {
 /** The visible wording of a field, so a message can name it the way the
  *  doctor sees it rather than by its id. */
 function labelOf(id) {
-  const span = $(id).closest(".field").querySelector("span");
+  // Two shapes carry a demographic input: the name's plain `.field` at step 1
+  // and the badged `.review-row` cards on the check screen. Asking for either
+  // keeps this working wherever a field is moved to next.
+  const row = $(id).closest(".review-row, .field");
+  const span = row && (row.querySelector(".label") || row.querySelector("span"));
   return (span ? span.textContent : id).toLowerCase();
 }
 
 /**
  * Everything the doctor pasted, as one body of text.
  *
- * The second box exists because a claim form asks for things a consultation
- * note does not hold, but it must not become a second pipeline: identifiers
- * can appear in either box, and redaction works on one corpus with one
- * dictionary. So both the demographics parse and the mapping call see this,
- * never `#paste` alone. A path that redacted one box and not the other would
- * be a leak with a plausible-looking cause.
+ * One box now. There used to be a second, for the things a claim form asks
+ * about that a consultation note does not hold — an admission reference, a
+ * ward class, a billing code — and this function existed to join them, because
+ * identifiers can appear in either and redaction works on one corpus with one
+ * dictionary. Two boxes that were always concatenated before anything read
+ * them were one box with a step in between, so the step went and the doctor
+ * types those lines under their note.
+ *
+ * Kept as a function rather than inlined, because the invariant it names is
+ * the one that matters: the demographics parse and the mapping call read the
+ * same text. Anything that later adds a second source of pasted text adds it
+ * HERE, and a path that redacted one source and not the other would be a leak
+ * with a plausible-looking cause.
  */
 function pastedText() {
-  return [$("paste").value, $("other-notes").value]
-    .map((text) => text.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  return $("paste").value.trim();
 }
 
 function patientRecord() {
@@ -552,7 +606,11 @@ async function parsePaste() {
     const response = await fetch(`${apiBase()}/parse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: pastedText() }),
+      // The name goes with the paste. Step 1 asked for it before this box
+      // existed, so the parser never has to work out which piece of a header
+      // block is the patient — it checks, which cannot be wrong, and the
+      // piece beside it stays unclaimed instead of being read as a name.
+      body: JSON.stringify({ text: pastedText(), full_name: $("full-name").value.trim() }),
     });
     if (!response.ok) throw new Error(String(response.status));
     parsed = await response.json();
@@ -590,19 +648,26 @@ async function parsePaste() {
 function renderChoices(choices) {
   for (const [id, key] of Object.entries(DEMOGRAPHIC_FIELDS)) {
     const box = $(`choices-${id}`);
-    // full_name and insurer have no slot: neither has a shape, so neither can
-    // produce candidates without guessing which words are a value.
+    // full_name has no slot: it has no shape, so it cannot produce candidates
+    // without guessing which words are a value. The insurer does have one — a
+    // closed list of names — so a note mentioning two of them asks here.
     if (!box) continue;
     box.textContent = "";
 
     const options = choices[key] || [];
     // A value the doctor typed, or one an earlier pass resolved, is an answer.
     // Re-asking would invite them to undo a decision they already made.
-    if (options.length < 2 || state.touched.has(id) || $(id).value.trim()) continue;
+    if (!options.length || state.touched.has(id) || $(id).value.trim()) continue;
 
     const why = document.createElement("p");
     why.className = "choices-why";
-    why.textContent = `${options.length} found in the note — pick the patient's:`;
+    // A single candidate only ever reaches here for the date of birth, which
+    // is never taken from unlabelled text however alone it is. For every other
+    // field a lone match is the value, so it arrives filled rather than asked.
+    why.textContent =
+      options.length === 1
+        ? "Found in the note — is this the patient's?"
+        : `${options.length} found in the note — pick the patient's:`;
     box.appendChild(why);
 
     for (const option of options) {
@@ -637,10 +702,45 @@ function pendingChoices() {
  * per paste — re-opening it on every keystroke would fight the doctor who
  * just closed it.
  */
+/**
+ * The badge above one demographic field, in the review row's own vocabulary.
+ *
+ * The three states are what the legend used to spell out in a key nobody
+ * reads twice: a value is here, a value is being asked about, or there is
+ * nothing. Saying it on the field itself is what let the legend go.
+ *
+ * "You typed this" is not decoration. A value the doctor entered and a value
+ * a pattern found carry different weight when they are checking whether the
+ * redaction dictionary is right, and the panel is the only thing that knows
+ * which is which.
+ */
+function badgeFor(id) {
+  if ($(`choices-${id}`) && $(`choices-${id}`).querySelector("button")) {
+    return ["inferred", "Needs checking"];
+  }
+  if (!$(id).value.trim()) return ["missing", "Nothing found — fill by hand"];
+  return state.touched.has(id)
+    ? ["demographic", "You typed this"]
+    : ["extracted", "Found in the note"];
+}
+
 function updateFound() {
   const ids = Object.keys(DEMOGRAPHIC_FIELDS);
   const found = ids.filter((id) => $(id).value.trim()).length;
   const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+
+  for (const id of ids) {
+    // `full-name` is asked for at step 1 and has no card here, which is the
+    // one place this list and the markup deliberately disagree.
+    const badge = $(`badge-${id}`);
+    if (!badge) continue;
+    const [status, text] = badgeFor(id);
+    badge.className = `badge ${status}`;
+    badge.textContent = text;
+    $(`row-${id}`).className =
+      "review-row" +
+      (status === "inferred" ? " pending" : status === "missing" ? "" : " confirmed");
+  }
   // Said on the summary line, not only inside the drawer: the drawer can be
   // shut, and a question nobody sees is the blank box this replaced.
   const pending = pendingChoices();
@@ -784,8 +884,14 @@ async function onMap() {
     state.edited.clear();
     state.confirmed.clear();
     renderRows();
-    showStep("review");
-    $("step-fill").hidden = false;
+    // showStep is called anyway — this is where mapping is pressed from, and
+    // saying so keeps the panel consistent when it is driven directly rather
+    // than walked through.
+    showStep("page");
+    // The offer is spent: these questions have been mapped, and the button
+    // that offered them would now re-ask the model the same thing.
+    $("map-prompt").hidden = true;
+    $("mapped").hidden = false;
     setStatus(status, "");
   } catch (error) {
     setStatus(status, messageFor(error), "error");
@@ -846,6 +952,20 @@ function renderRow(row) {
 
   const wrap = document.createElement("div");
   wrap.className = "review-row" + (pending ? " pending" : "") + (confirmed ? " confirmed" : "");
+  // What renderRows matches against to tell a row that has just appeared from
+  // one that was already on screen.
+  wrap.dataset.fieldId = row.field_id;
+
+  // Reading a row moves the note pane's highlight to the sentence that row's
+  // value came from. Both events, because both are how a doctor arrives at a
+  // row: the mouse, and the Tab key — and after a confirm click, focus lands
+  // on the next row's button, so the highlight follows the work by itself.
+  const read = () => {
+    state.reading = row.field_id;
+    markNote(row);
+  };
+  wrap.addEventListener("click", read);
+  wrap.addEventListener("focusin", read);
 
   const badge = document.createElement("div");
   badge.className = `badge ${row.status}`;
@@ -915,11 +1035,29 @@ function renderRow(row) {
   input.addEventListener("input", () => {
     state.edited.set(row.field_id, input.type === "checkbox" ? input.checked : input.value);
     state.confirmed.add(row.field_id);
-    updateFillButton();
     wrap.classList.remove("pending");
     wrap.classList.add("confirmed");
+    updateReviewMeta();
   });
+  // These rows carry no <label> at all — the question is a plain <div> above
+  // the control — so a screen reader reaching the input announces the value
+  // and nothing about what it is being asked. The question is the name.
+  input.setAttribute("aria-label", row.label);
   wrap.append(input);
+
+  // The inference, in words, where it is being signed off.
+  //
+  // The pane above marks the sentence this was worked out FROM, and that
+  // sentence does not contain the answer — so without this the doctor is shown
+  // a citation that does not match the value and left to reconstruct the step
+  // themselves. Only inferred rows carry it; assemble_claim drops it for every
+  // other status rather than trusting the prompt.
+  if (row.reasoning) {
+    const why = document.createElement("p");
+    why.className = "derived";
+    why.textContent = row.reasoning;
+    wrap.append(why);
+  }
 
   // The value in words, kept in step with the box above it. A doctor
   // correcting a swapped date is the whole point of this row, and they must be
@@ -944,8 +1082,16 @@ function renderRow(row) {
     button.textContent = "Confirm";
     button.addEventListener("click", () => {
       state.confirmed.add(row.field_id);
-      renderRows();
-      updateFillButton();
+      // Mutated rather than re-rendered. Rebuilding the list replayed every
+      // row's entrance animation and destroyed the button holding focus — one
+      // click, and the doctor's place in a twenty-field claim was gone. The
+      // row's own state is the only thing that changed, so it is the only
+      // thing touched; the count, bar and Fill button follow underneath.
+      wrap.classList.remove("pending");
+      wrap.classList.add("confirmed");
+      button.remove();
+      updateReviewMeta();
+      focusAfterConfirm(wrap);
     });
     wrap.append(button);
   }
@@ -965,41 +1111,11 @@ function renderRow(row) {
 const STEPS = [
   { key: "name", section: "step-name", title: "Patient" },
   { key: "note", section: "step-note", title: "Consultation note" },
-  { key: "extra", section: "step-extra", title: "Other notes" },
-  { key: "details", section: "step-details", title: "Patient details" },
-  { key: "review", section: "step-review", title: "Review" },
-  { key: "fill", section: "step-fill", title: "Fill" },
+  { key: "check", section: "step-check", title: "Verify", edit: "Edit details" },
+  { key: "page", section: "step-page", title: "This page" },
 ];
 
-/** A one-line summary of a finished step, for its collapsed row. */
-function summaryOf(key) {
-  if (key === "name") return $("full-name").value.trim() || "—";
-  if (key === "note") {
-    const words = $("paste").value.trim().split(/\s+/).filter(Boolean).length;
-    return `${words} word${words === 1 ? "" : "s"} pasted`;
-  }
-  if (key === "extra") {
-    const text = $("other-notes").value.trim();
-    return text ? `${text.split(/\s+/).filter(Boolean).length} words added` : "Nothing added";
-  }
-  if (key === "details") {
-    const found = Object.keys(DEMOGRAPHIC_FIELDS).filter((id) => $(id).value.trim()).length;
-    return `${found} of ${Object.keys(DEMOGRAPHIC_FIELDS).length} found`;
-  }
-  if (key === "review") {
-    return `${readyRows().length} value${readyRows().length === 1 ? "" : "s"} confirmed`;
-  }
-  return "";
-}
-
-/**
- * Show one step, collapse everything behind it, hide everything ahead.
- *
- * `step-fill` is deliberately exempt from the "hide what is ahead" rule:
- * "Check this page" answers "can BreezeFill see this form at all", which is a
- * different question from "did the model produce good values" and is worth
- * being able to ask before anything has been pasted.
- */
+/** Show one step, collapse everything behind it, hide everything ahead. */
 function showStep(key) {
   state.step = key;
   const index = STEPS.findIndex((s) => s.key === key);
@@ -1007,17 +1123,24 @@ function showStep(key) {
   for (const [i, step] of STEPS.entries()) {
     const el = $(step.section);
     if (!el) continue;
-    if (step.key === "fill") continue; // always reachable, see above
     el.hidden = i !== index;
   }
 
   const done = $("done-rows");
+  // Rebuilt every time, deliberately — a done row reads the inputs at render
+  // time, which is what makes it a record of the step as it was finished. But
+  // a row that was already standing there has not entered, so advancing to the
+  // last step must not replay the entrance of the three rows behind it.
+  const standing = new Set([...done.children].map((el) => el.dataset.key));
   done.replaceChildren(
-    ...STEPS.slice(0, index)
-      .filter((s) => s.key !== "fill")
-      .map((s) => doneRow(s))
+    ...STEPS.slice(0, index).map((s) => {
+      const el = doneRow(s);
+      if (standing.has(s.key)) el.classList.add("no-enter");
+      return el;
+    })
   );
 
+  placeLedger();
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
@@ -1026,39 +1149,93 @@ function showStep(key) {
   if (scroll) scroll.scrollTop = 0;
 }
 
-/** A finished step, as a row that reopens it. */
+/** A finished step in one line: what actually went into it. */
+function summaryOf(key) {
+  if (key === "name") return $("full-name").value.trim() || "\u2014";
+  if (key === "note") {
+    // The note's opening line, not a word count. A doctor checking they
+    // pasted the right consultation recognises how it starts; nobody has ever
+    // recognised a claim by its length.
+    const first = $("paste").value.split("\n").find((line) => line.trim());
+    return first ? first.trim() : "\u2014";
+  }
+  if (key === "check") {
+    const ids = Object.keys(DEMOGRAPHIC_FIELDS);
+    const found = ids.filter((id) => $(id).value.trim()).length;
+    return `${found} of ${ids.length} found`;
+  }
+  if (key === "page") {
+    const n = state.rows.length;
+    return n ? `${n} question${n === 1 ? "" : "s"}` : "\u2014";
+  }
+  return "";
+}
+
+/**
+ * A finished step, as one hairline row.
+ *
+ * It used to be a card: a bordered box with a filled green disc, a chevron,
+ * and a drawer holding the values under an uppercase mono caption. Three
+ * things were wrong with that, and the third is the one that mattered.
+ *
+ * It was the heaviest chrome on the screen standing in for the least important
+ * thing on it — a step already done, drawn with the same card, border and
+ * radius as the live one beneath it. Changing a value cost two clicks, expand
+ * then find the link, when going back to the step IS the only reason the row
+ * exists. And the drawer's whole content was the value, so putting the value
+ * on the row deletes the drawer rather than restyling it.
+ */
 function doneRow(step) {
-  const wrap = document.createElement("div");
-  wrap.className = "done-row";
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "done-row";
+  row.dataset.key = step.key;
 
-  const head = document.createElement("button");
-  head.type = "button";
-  head.className = "done-head";
+  const check = document.createElement("span");
+  check.className = "done-check";
+  check.textContent = "✓";
 
-  const tick = document.createElement("span");
-  tick.className = "done-tick";
-  tick.textContent = "✓";
+  const name = document.createElement("span");
+  name.className = "done-name";
+  name.textContent = step.title;
 
-  const label = document.createElement("span");
-  label.className = "done-label";
-  const title = document.createElement("span");
-  title.className = "done-title";
-  title.textContent = step.title;
-  const summary = document.createElement("span");
-  summary.className = "done-summary";
-  summary.textContent = summaryOf(step.key);
-  label.append(title, summary);
+  const value = document.createElement("span");
+  value.className = "done-value";
+  value.textContent = summaryOf(step.key);
 
-  const chevron = document.createElement("span");
-  chevron.className = "done-chevron";
-  chevron.textContent = "›";
+  const go = document.createElement("span");
+  go.className = "done-go";
+  go.textContent = "\u203a";
 
-  head.append(tick, label, chevron);
-  // The chevron is the affordance; reopening a step keeps everything already
-  // entered, and every later step stays reachable from its own row.
-  head.addEventListener("click", () => showStep(step.key));
-  wrap.append(head);
-  return wrap;
+  row.append(check, name, value, go);
+  row.addEventListener("click", () => showStep(step.key));
+  return row;
+}
+
+/**
+ * Where the finished steps sit, which depends on what the doctor is doing.
+ *
+ * ABOVE while the history IS the work — the steps just completed, in the order
+ * they were completed. BELOW once there are mapped values on screen, because
+ * arriving at the review meant arriving at a list of steps already finished
+ * with the values themselves pushed under the fold. And NOWHERE once a fill
+ * has landed: a history of where you have been is the least useful thing to
+ * show at the moment you asked what just happened.
+ */
+function placeLedger() {
+  const rows = $("done-rows");
+  const scroll = $("scroll");
+  if (!rows || !scroll) return;
+
+  if (state.filled) {
+    rows.hidden = true;
+    return;
+  }
+  rows.hidden = false;
+  const below = state.rows.length > 0;
+  rows.classList.toggle("below", below);
+  if (below) scroll.append(rows);
+  else scroll.prepend(rows);
 }
 
 function updateProgress() {
@@ -1066,27 +1243,267 @@ function updateProgress() {
   if (index >= 0) $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
 }
 
-function renderRows() {
-  const container = $("rows");
-  container.replaceChildren(...state.rows.map(renderRow));
-
+/**
+ * The readiness line, the bar and the Fill button — everything about the
+ * review except the rows themselves.
+ *
+ * Split out of renderRows so that confirming one value can move all three
+ * WITHOUT rebuilding the list. It is also called from the input handler, which
+ * is what the markup beside the bar has always claimed ("only a confirm click
+ * or an edit moves it") and what it did not actually do: editing a value
+ * updated the Fill button and left the bar and the count behind.
+ */
+function updateReviewMeta() {
   const pending = state.rows.filter(
     (r) => r.needs_review && hasValue(r) && !state.confirmed.has(r.field_id)
   ).length;
-  const summary = pending
-    ? `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`
-    : `${readyRows().length} of ${state.rows.length} fields ready to write. The rest are for you to complete by hand.`;
-  $("review-summary").textContent = summary;
+  // Nothing left to confirm is not news. The sentence that stood here — "4 of
+  // 5 fields ready to write. The rest are for you to complete by hand." —
+  // appeared exactly when the doctor had stopped needing a sentence, directly
+  // above the one button they were reaching for. It and the bar both leave,
+  // and Fill is the only thing still talking.
+  $("review-summary").hidden = pending === 0;
+  $("review-progress-box").hidden = pending === 0;
+  $("review-summary").textContent =
+    `${pending} value${pending === 1 ? "" : "s"} still to confirm. Nothing is written until you do.`;
 
   // Readiness as a bar as well as a count. It only ever moves on a confirm
   // click or an edit — nothing advances it on its own, which is the point.
+  //
+  // Scaled, not resized. `width` is a layout property, so every frame of this
+  // transition re-laid-out and repainted the review list underneath it.
   const needing = state.rows.filter((r) => r.needs_review && hasValue(r)).length;
   const done = needing - pending;
   const bar = $("review-progress");
-  if (bar) bar.style.width = `${needing === 0 ? 100 : Math.round((done / needing) * 100)}%`;
+  if (bar) bar.style.transform = `scaleX(${needing === 0 ? 1 : done / needing})`;
 
   updateFillButton();
   updateProgress();
+}
+
+/**
+ * Build the consultation once, with every cited sentence already a span.
+ *
+ * `row.source` is the snippet the model is told to quote VERBATIM out of the
+ * notes, so locating it is an exact substring search and nothing else. A fuzzy
+ * match would draw a mark around a sentence the value did not come from, on
+ * the one screen whose whole job is showing the doctor where a value came
+ * from — a wrong citation rendered exactly like a right one.
+ *
+ * Built once rather than on every mark. Rebuilding the pane to move the mark
+ * reset its scrollTop on every frame of a scroll, which is what made following
+ * the rows stutter; now only a class moves.
+ */
+function buildNote() {
+  const pre = $("note-text");
+  if (!pre) return;
+  const text = $("paste").value;
+
+  const spans = [];
+  const seen = new Set();
+  for (const row of state.rows) {
+    const src = typeof row.source === "string" ? row.source.trim() : "";
+    if (!src || seen.has(src)) continue;
+    const at = text.indexOf(src);
+    if (at < 0) continue;
+    seen.add(src);
+    spans.push({ at, end: at + src.length, src });
+  }
+  spans.sort((a, b) => a.at - b.at);
+
+  const parts = [];
+  let cursor = 0;
+  for (const span of spans) {
+    // Two citations claiming overlapping text: the earlier one keeps it. A
+    // nested span would mark a fragment of somebody else's sentence.
+    if (span.at < cursor) continue;
+    if (span.at > cursor) parts.push(document.createTextNode(text.slice(cursor, span.at)));
+    const el = document.createElement("span");
+    el.className = "quote";
+    el.dataset.src = span.src;
+    el.textContent = text.slice(span.at, span.end);
+    parts.push(el);
+    cursor = span.end;
+  }
+  if (cursor < text.length) parts.push(document.createTextNode(text.slice(cursor)));
+  pre.replaceChildren(...parts);
+}
+
+/**
+ * Emphasise the value inside the sentence that carries it.
+ *
+ * Only for a quoted value, because only a quoted value is in there. Rewrites
+ * one span's children and never the pane, so the scroll position is untouched.
+ */
+function setHit(el, hit) {
+  const text = el.dataset.src;
+  const at = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
+  if (at < 0) {
+    el.textContent = text;
+    return;
+  }
+  const strong = document.createElement("b");
+  strong.className = "hit";
+  strong.textContent = text.slice(at, at + hit.length);
+  el.replaceChildren(
+    document.createTextNode(text.slice(0, at)),
+    strong,
+    document.createTextNode(text.slice(at + hit.length))
+  );
+}
+
+/**
+ * Mark the sentence the row being read came from.
+ *
+ * Two marks, because there are two relationships. An EXTRACTED value is in its
+ * sentence, so the sentence is filled and the value emphasised inside it — the
+ * match is shown rather than asserted. An INFERRED one is not: "J03.90"
+ * appears nowhere in "Dx acute tonsillitis." Filling that sentence identically
+ * makes the most dangerous row on the screen read as a wrong citation, so it
+ * gets an outline, the header says the value was worked out from it, and the
+ * row itself carries the model's own sentence explaining the step.
+ *
+ * Called with null to leave the note unmarked.
+ */
+function markNote(row) {
+  const pre = $("note-text");
+  const state_line = $("note-following");
+  if (!pre) return;
+
+  const source = row && typeof row.source === "string" ? row.source.trim() : "";
+  const reasoned = Boolean(row) && row.status === "inferred";
+  const value = row && typeof row.value === "string" ? row.value.trim() : "";
+  let target = null;
+
+  for (const el of pre.querySelectorAll(".quote")) {
+    const on = Boolean(source) && el.dataset.src === source;
+    el.classList.toggle("on", on);
+    el.classList.toggle("quoted", on && !reasoned);
+    el.classList.toggle("reasoned", on && reasoned);
+    // No hit for an inference: the value is not in there to emphasise, and
+    // guessing which words produced it is the fuzzy match this refuses.
+    setHit(el, on && !reasoned ? value : null);
+    if (on) target = el;
+  }
+
+  // Three silent cases and they are not the same thing. Nothing is being read;
+  // the model answered from something it did not quote; or the value never
+  // came from the note at all — a demographic copied across, or a blank.
+  state_line.textContent = !row
+    ? ""
+    : !target
+      ? source
+        ? "quote not found in the note"
+        : "not taken from the note"
+      : reasoned
+        ? `${row.label} — worked out from this`
+        : row.label;
+
+  if (!target) return;
+  // Only when there is somewhere to go. A note that fits needs no moving, and
+  // nudging it clipped the first line for nothing.
+  if (pre.scrollHeight <= pre.clientHeight) return;
+  pre.scrollTo({
+    top: Math.max(0, target.offsetTop - pre.clientHeight / 2 + target.offsetHeight / 2),
+    behavior: REDUCED_MOTION.matches ? "auto" : "smooth",
+  });
+}
+
+/** Fold the note away without losing it. Session-only, like everything here. */
+function toggleNote() {
+  const pre = $("note-text");
+  const button = $("note-toggle");
+  const showing = pre.hidden;
+  pre.hidden = !showing;
+  $("notepane").dataset.folded = String(!showing);
+  button.textContent = showing ? "Hide" : "Show";
+  button.setAttribute("aria-expanded", String(showing));
+}
+
+/**
+ * Follow the rows as the doctor scrolls them.
+ *
+ * The LAST row to have crossed the reading line, not the nearest one to it.
+ * Nearest was wrong in a way that felt like a bug: the moment the doctor was
+ * halfway down a row, the next row's top became the closer edge and took over,
+ * so the mark ran a row ahead of the eye the whole way down the list.
+ */
+function followScroll() {
+  const container = $("scroll");
+  const rows = $("rows");
+  if (!container || !rows || !rows.children.length) return;
+
+  const line = container.getBoundingClientRect().top + 28;
+  let best = rows.children[0];
+  for (const el of rows.children) {
+    if (el.getBoundingClientRect().top <= line) best = el;
+  }
+  const id = best.dataset.fieldId;
+  if (id === state.reading) return;
+  state.reading = id;
+  markNote(state.rows.find((r) => r.field_id === id) || null);
+}
+
+function renderRows() {
+  const container = $("rows");
+  // Which rows were already on screen before this render. A row that was here
+  // has not entered, so it must not play an entrance: without this, every row
+  // in the list re-ran pf-rise whenever any one of them changed, and on a
+  // twenty-field claim confirming a single value made the whole screen move.
+  const seen = new Set([...container.children].map((el) => el.dataset.fieldId));
+  container.replaceChildren(
+    ...state.rows.map((row) => {
+      const el = renderRow(row);
+      if (seen.has(row.field_id)) el.classList.add("no-enter");
+      return el;
+    })
+  );
+  // The pane exists once there are values to check against it.
+  const pane = $("notepane");
+  if (pane) pane.hidden = state.rows.length === 0;
+  buildNote();
+  // Already marked, on the first value that needs checking. Marking nothing
+  // until the doctor happened to click a row made the whole thing invisible.
+  const first = state.rows.find((r) => r.needs_review && hasValue(r)) || state.rows[0];
+  state.reading = first ? first.field_id : null;
+  markNote(first || null);
+  // Mapped values on screen move the finished steps under them.
+  placeLedger();
+  updateReviewMeta();
+}
+
+/**
+ * Where the keyboard goes when a Confirm button removes itself.
+ *
+ * Nowhere, unless it is put somewhere: the focused element has just left the
+ * document, so the browser drops focus to <body> and the next Tab starts again
+ * from the top of the panel — which on a long claim means the doctor loses
+ * their place on every single confirm.
+ *
+ * Somewhere IN PLACE, and never the Fill button. The next value still waiting
+ * is what they were going to press anyway; when there is none, they stay on
+ * the row they just confirmed rather than being carried to the bottom of the
+ * claim.
+ */
+function focusAfterConfirm(wrap) {
+  const remaining = [...$("rows").querySelectorAll("button.confirm")];
+  const next =
+    remaining.find(
+      (b) => wrap.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+    ) || remaining[0];
+  // preventScroll throughout. Focus is a keyboard position, not a scroll
+  // instruction, and where the doctor is looking is their decision.
+  if (next) {
+    next.focus({ preventScroll: true });
+    return;
+  }
+  // Nothing left to confirm, and this is where it used to travel to the Fill
+  // button — which scrolled the doctor to the bottom of the claim the instant
+  // they confirmed the last value, ending the read-through they were in the
+  // middle of. Confirming the last one is not the same as being finished.
+  // Staying on the row keeps Tab order sensible and moves nothing.
+  wrap.tabIndex = -1;
+  wrap.focus({ preventScroll: true });
 }
 
 function updateFillButton() {
@@ -1190,29 +1607,67 @@ function renderReport(response) {
     container.append(later);
   }
 
-  // Live controls no schema field claimed. Surfaced rather than hidden: this
-  // is how a portal that grew a question becomes visible, and it is the input
-  // to extending the schema. The doctor fills these by hand today.
-  if (response.report.unknownControls.length) {
-    const block = document.createElement("div");
-    block.className = "report-block is-manual";
-    const heading = document.createElement("h3");
-    heading.textContent = "Fill these yourself";
-    const body = document.createElement("p");
-    body.className = "note";
-    body.textContent = "Questions on this page BreezeFill has no answer for.";
-
-    const unknown = document.createElement("ul");
-    unknown.className = "unknown";
-    for (const control of response.report.unknownControls) {
-      const item = document.createElement("li");
-      item.textContent = control.label || `(unlabelled ${control.type})`;
-      unknown.append(item);
-    }
-    block.append(heading, body, unknown);
-    container.append(block);
-  }
+  // The list of live controls nothing claimed used to be a block here, and it
+  // reported at the end what every field already says about itself — after the
+  // fill, which is the one moment the doctor can no longer act on it while
+  // reading the rows. A question the note could not answer says so on its own
+  // row, where they are already looking. On the live path this was always
+  // empty anyway: every fillable control on the page becomes a question.
 }
+
+/**
+ * Read the page in front of the doctor, and say what is on it.
+ *
+ * No model call, and that is the whole design of this step. Surveying is the
+ * injected script reading labels in the page it is already in; mapping is the
+ * request that leaves the browser. Keeping them apart is what lets the panel
+ * follow a doctor through four wizard sections without four model calls
+ * nobody asked for — it looks at each one and waits to be told to answer it.
+ *
+ * Called when the check step is passed, and again every time the page becomes
+ * a different page.
+ */
+async function scanPage() {
+  $("map-prompt").hidden = true;
+  setStatus($("map-status"), "");
+
+  let fields = [];
+  try {
+    fields = await liveFields();
+  } catch (error) {
+    setStatus($("map-status"), messageFor(error), "error");
+    return;
+  }
+
+  state.pageFields = fields;
+
+  if (!fields.length) {
+    // Not an error. A wizard opens on a verification or a landing section as
+    // often as not, and saying "none here yet" is the honest report — the old
+    // panel called this a failure and stopped.
+    $("prompt-title").textContent = "No questions on this page yet.";
+    $("prompt-why").textContent =
+      "Move to the section of the form that asks about the consultation.";
+    $("map-btn").hidden = true;
+    $("map-prompt").hidden = false;
+    return;
+  }
+
+  // The count sits on the card it is a count of. It used to be on a strip
+  // above this one reading "Watching localhost:8080. 7 questions on it." —
+  // which named the host the extension had noticed, a fact about the extension
+  // rather than about the claim, in a box that cost a doctor a line of screen
+  // on every wizard step.
+  $("prompt-title").textContent =
+    `${fields.length} question${fields.length === 1 ? "" : "s"} on this page.`;
+  $("prompt-why").textContent =
+    "Nothing has been sent yet. Mapping asks the model to answer these from your scrubbed note.";
+  $("map-btn").textContent =
+    `Map ${fields.length === 1 ? "this question" : `these ${fields.length} questions`}`;
+  $("map-btn").hidden = false;
+  $("map-prompt").hidden = false;
+}
+
 
 /**
  * A wizard step rendered on the tab the doctor granted us.
@@ -1231,44 +1686,22 @@ function renderReport(response) {
  */
 async function onPageChanged() {
   await detectForm();
-  if (!state.rows.length) return;
-  setStatus(
-    $("fill-status"),
-    "This page changed — press Fill again to write the fields on this step."
-  );
-}
+  if (state.step !== "page") return;
 
-async function onCheck() {
-  const status = $("fill-status");
-  setStatus(status, "Reading the page…", "busy");
-  try {
-    const plan = fillPlan();
-    const response = await ask({ action: "survey", plan });
+  // The answers on screen belong to the section that has just been left. They
+  // are not offered against the new one: a value mapped for "date of
+  // admission" is not an answer to whatever question happens to sit in the
+  // same position here, and leaving them up would invite a fill that wrote
+  // last section's answers into this one.
+  state.rows = [];
+  state.edited.clear();
+  state.confirmed.clear();
+  renderRows();
+  $("mapped").hidden = true;
+  setStatus($("fill-status"), "");
+  $("fill-report").replaceChildren();
 
-    // Nothing mapped yet: this is a connectivity check, not a match check.
-    // Reporting "matched 0 of 0, will not fill" would read as a failure when
-    // it is actually the answer "yes, I can see this page".
-    if (!plan.length) {
-      setStatus(
-        status,
-        `Connected to ${response.host}. Found ${response.controlCount} fillable field${response.controlCount === 1 ? "" : "s"}. Map a note to see which ones match.`
-      );
-      $("fill-report").replaceChildren();
-      return;
-    }
-
-    const { matched, intended, safeToFill } = response.report;
-    setStatus(
-      status,
-      safeToFill
-        ? `Matched ${matched} of ${intended} fields on ${response.host}.`
-        : `Only matched ${matched} of ${intended} fields on ${response.host}. BreezeFill will not fill a page it does not recognise.`,
-      safeToFill ? null : "error"
-    );
-    renderReport({ ...response, applied: [] });
-  } catch (error) {
-    setStatus(status, error.message, "error");
-  }
+  await scanPage();
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,9 +1807,7 @@ async function onFill() {
 
 $("api-base").value = DEFAULT_API_BASE;
 $("api-base").addEventListener("change", () => loadForms().then(detectForm));
-// Both boxes feed one corpus, so either one changing re-reads the identifiers.
 $("paste").addEventListener("input", scheduleParse);
-$("other-notes").addEventListener("input", scheduleParse);
 for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   // A hand-typed value outranks the parser from here on: re-parsing on the
   // next keystroke in the paste box must not undo a correction.
@@ -1399,9 +1830,8 @@ $("note-next").addEventListener("click", () => {
     $("paste").focus();
     return;
   }
-  showStep("extra");
+  showStep("check");
 });
-$("extra-next").addEventListener("click", () => showStep("details"));
 
 // Fills the paste box only. The name is not written in: the doctor typed it
 // at step 1, and "BreezeFill never guesses this one" would be a strange thing
@@ -1414,15 +1844,39 @@ $("sample-note").addEventListener("click", () => {
 });
 
 $("map-btn").addEventListener("click", onMap);
-$("check-btn").addEventListener("click", onCheck);
+// Leaving the check step is what seals the demographics: they are complete,
+// they are the dictionary, and from here the panel's job is the page.
+$("check-next").addEventListener("click", () => {
+  const missing = REQUIRED_FIELDS.filter((id) => !$(id).value.trim());
+  if (missing.length) {
+    setStatus(
+      $("check-status"),
+      `Still needed: ${missing.map(labelOf).join(", ")}.`,
+      "error"
+    );
+    $(missing[0]).focus();
+    return;
+  }
+  setStatus($("check-status"), "");
+  showStep("page");
+  scanPage();
+});
+$("note-toggle").addEventListener("click", toggleNote);
+// Passive: this only reads geometry and never cancels the scroll.
+$("scroll").addEventListener("scroll", followScroll, { passive: true });
 $("fill-btn").addEventListener("click", onFill);
 $("draft-copy").addEventListener("click", onCopyDraft);
 // Choosing from the picker names the schema whose instructions should sharpen
 // this page's questions. It does not change *what* is filled — the page's own
 // questions, either way — only how well each one is put to the model.
+// Choosing "No form" is as deliberate as choosing one, and sets the same flag:
+// a doctor who took a schema back did so because it was the wrong one, and
+// re-detection putting it straight back on the next wizard step is the change
+// nobody would be told about.
 $("form-id").addEventListener("change", () => {
   state.formChosenByHand = true;
   state.schema = state.forms.find((f) => f.form_id === $("form-id").value) || null;
+  describeSelection(state.schema);
 });
 $("form-override").addEventListener("click", () => {
   $("form-id").hidden = false;
@@ -1460,6 +1914,7 @@ globalThis.breezefillPanel = {
   patientRecord,
   detectForm,
   onPageChanged,
+  scanPage,
   bestCandidate,
   fillPlan,
   draftSchema,
