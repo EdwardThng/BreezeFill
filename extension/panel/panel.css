@@ -1374,6 +1374,17 @@ button.choice:hover {
   cursor: pointer;
 }
 
+/* `display` here outranks the browser's own `[hidden] { display: none }` —
+   author origin beats user-agent origin — so without this rule `hidden = true`
+   in panel.js sets an attribute that changes nothing on screen. That is not a
+   styling nicety: `updateBackToReview` hides this button when the mapping came
+   back with no answers and when the answers are discarded, and neither could
+   take it off the page. Every other block this panel toggles carries the same
+   guard; this one was added later and missed it. */
+.back-to-review[hidden] {
+  display: none;
+}
+
 .back-to-review::before {
   content: "\2039";
   font-size: 15px;
