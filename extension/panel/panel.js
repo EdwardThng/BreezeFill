@@ -1934,6 +1934,13 @@ async function onPageChanged() {
   // admission" is not an answer to whatever question happens to sit in the
   // same position here, and leaving them up would invite a fill that wrote
   // last section's answers into this one.
+  //
+  // Discarding them is right. Discarding them SILENTLY is not, and that is
+  // what happened: a doctor who had read four rows and confirmed one watched
+  // the whole review vanish, with an empty status line and a fresh prompt as
+  // the only sign anything had occurred. Work disappearing with no account of
+  // itself is the one thing a review screen must never do.
+  const discarded = state.rows.length;
   state.rows = [];
   state.edited.clear();
   state.confirmed.clear();
@@ -1943,6 +1950,18 @@ async function onPageChanged() {
   $("fill-report").replaceChildren();
 
   await scanPage();
+
+  // Said on the prompt card rather than the status line, because the card is
+  // amber and mid-panel and this is news. Prepended rather than replacing:
+  // scanPage has already said what is on the new section, and that is what
+  // the doctor does next.
+  if (discarded) {
+    const why = $("prompt-why");
+    why.textContent =
+      "The form moved on, so the answers for the last section were cleared — " +
+      "they are not answers to these questions. " +
+      why.textContent;
+  }
 }
 
 // ---------------------------------------------------------------------------

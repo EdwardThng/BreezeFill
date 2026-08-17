@@ -2489,3 +2489,41 @@ describe("a fill that wrote nothing", () => {
     expect($("fill-status").textContent).toContain("Nothing was filled");
   });
 });
+
+describe("when the form moves to a different section", () => {
+  /** The message content/fill.js sends when the wizard re-renders. */
+  const pageChanged = () =>
+    pageListener({ target: "breezefill-panel", action: "page-changed" }, {}, () => {});
+
+  test("the review is cleared, and the doctor is told it was", async () => {
+    // Clearing is right: a value mapped for "date of admission" is not an
+    // answer to whatever question sits in the same place on the next section,
+    // and leaving it up invites a fill that writes the last section's answers
+    // into this one. Clearing it SILENTLY is the defect — a doctor who had
+    // read the rows and confirmed one watched the whole review vanish with an
+    // empty status line as the only sign anything had happened.
+    const panel = await mapWith([ADMISSION_DATE]);
+    $("rows").querySelector("button.confirm").click();
+    expect($("rows").querySelectorAll(".review-row")).toHaveLength(1);
+
+    pageChanged();
+    await settle();
+    await settle();
+
+    expect(panel.state.rows).toHaveLength(0);
+    expect($("prompt-why").textContent).toContain("The form moved on");
+    expect($("prompt-why").textContent).toContain("not answers to these questions");
+  });
+
+  test("and says nothing about it when there was no review to lose", async () => {
+    const panel = loadPanel();
+    await settle();
+    panel.state.step = "page";
+
+    pageChanged();
+    await settle();
+    await settle();
+
+    expect($("prompt-why").textContent).not.toContain("The form moved on");
+  });
+});
