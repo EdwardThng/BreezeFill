@@ -1288,6 +1288,7 @@ function showStep(key) {
   );
 
   placeLedger();
+  showNotePane();
   $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
@@ -1576,6 +1577,21 @@ function markNote(row) {
   });
 }
 
+/**
+ * The consultation is furniture on the screen where its values are checked,
+ * and nowhere else.
+ *
+ * Two conditions, and the second is the one that was missing: there have to be
+ * values to check it against, AND the doctor has to be on the screen holding
+ * them. Going back to the note step left the pane up beside the paste box, so
+ * the same consultation was on screen twice — once as the thing being edited
+ * and once as a read-only copy of it.
+ */
+function showNotePane() {
+  const pane = $("notepane");
+  if (pane) pane.hidden = state.rows.length === 0 || state.step !== "page";
+}
+
 /** Fold the note away without losing it. Session-only, like everything here. */
 function toggleNote() {
   const pre = $("note-text");
@@ -1625,9 +1641,7 @@ function renderRows() {
       return el;
     })
   );
-  // The pane exists once there are values to check against it.
-  const pane = $("notepane");
-  if (pane) pane.hidden = state.rows.length === 0;
+  showNotePane();
   buildNote();
   // Already marked, on the row at the top of the list — the same rule
   // scrolling uses, so the mark always answers the row the doctor is looking
@@ -2168,6 +2182,7 @@ const privacyReady = loadPrivacy().catch((error) => {
 // closes.
 globalThis.breezefillPanel = {
   onMap,
+  showStep,
   onFill,
   parsePaste,
   pastedText,

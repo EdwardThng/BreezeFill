@@ -2384,3 +2384,21 @@ describe("an inferred value's sentence", () => {
     expect(mark.classList.contains("reasoned")).toBe(true);
   });
 });
+
+describe("where the consultation pane belongs", () => {
+  test("it is up on the screen where the values are checked", async () => {
+    await mapWithNote([QUOTED]);
+
+    expect($("notepane").hidden).toBe(false);
+  });
+
+  test("and down on the step that holds the note itself", async () => {
+    // Going back to the paste box left the pane up beside it, so the same
+    // consultation was on screen twice — once as the thing being edited, once
+    // as a read-only copy of it.
+    const panel = await mapWithNote([QUOTED]);
+    panel.showStep("note");
+
+    expect($("notepane").hidden).toBe(true);
+  });
+});
