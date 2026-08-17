@@ -154,6 +154,15 @@ class TestTheGuardsItKeeps:
         assert "claim_id" not in json.dumps(first)
 
 
+def _version(text: str) -> list[int]:
+    """A version as numbers, so 0.10.0 sorts after 0.9.0.
+
+    Lexical comparison gets that pair backwards, which is the mistake that
+    turns a kill switch into a switch that kills the wrong builds.
+    """
+    return [int(part) for part in text.split(".")]
+
+
 class TestTheKillSwitch:
     """The one gap redacting in the browser cannot close by itself.
 
@@ -170,9 +179,44 @@ class TestTheKillSwitch:
     def test_the_shipped_extension_is_not_already_disowned(self) -> None:
         # A floor above the version in the manifest would refuse every install
         # on the day it shipped.
+        #
+        # NECESSARY BUT NOT SUFFICIENT, and believing otherwise cost a day of
+        # outage. The manifest is what the repo BUILDS; what doctors RUN is what
+        # the store publishes, and the two are different numbers whenever an
+        # upload is pending. This assertion was green throughout 2026-08-16 and
+        # 17 while every public install was being refused. The test below is the
+        # one that actually guards the users.
         manifest = json.loads(
             (Path(main.__file__).resolve().parents[1] / "extension" / "manifest.json").read_text()
         )
-        installed = [int(n) for n in manifest["version"].split(".")]
-        minimum = [int(n) for n in main.MIN_EXTENSION_VERSION.split(".")]
-        assert installed >= minimum
+        installed = _version(manifest["version"])
+        assert installed >= _version(main.MIN_EXTENSION_VERSION)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "KNOWN AND CHOSEN, 2026-08-17: the floor is 0.3.0 and the store still "
+            "publishes 0.2.1, so every public install is refused. The owner chose to "
+            "publish 0.3.0 rather than lower the floor, because 0.2.1 is the build "
+            "that sends identifiers to the server. strict=True means this FAILS THE "
+            "SUITE the moment it starts passing — update PUBLISHED_EXTENSION_VERSION "
+            "when the upload goes live, then delete this marker."
+        ),
+    )
+    def test_the_floor_never_exceeds_the_build_doctors_actually_have(self) -> None:
+        # THE INVARIANT THAT MATTERS. Chrome hands out the published build; the
+        # published build asks /health whether it is still supported; a floor
+        # above it means every panel refuses to send before it does anything.
+        assert _version(main.PUBLISHED_EXTENSION_VERSION) >= _version(main.MIN_EXTENSION_VERSION)
+
+    def test_the_guard_would_actually_catch_an_inversion(self) -> None:
+        # The mechanism, proved separately — because the assertion above is
+        # currently expected to fail, and an xfail proves nothing about whether
+        # the comparison works. Without this, a typo that made `_version` return
+        # a constant would look exactly like the outage.
+        assert _version("0.2.1") < _version("0.3.0")
+        assert not _version("0.2.1") >= _version("0.3.0")
+        # Numeric, not lexical: "0.10.0" is newer than "0.9.0" and a string
+        # comparison says the opposite.
+        assert _version("0.10.0") > _version("0.9.0")
+        assert _version("0.3.0") >= _version("0.3.0")

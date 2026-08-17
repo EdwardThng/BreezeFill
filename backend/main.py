@@ -713,7 +713,25 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
 # Raise it ONLY for a fault that makes the old build unsafe. It stops doctors
 # working, which is the correct response to "that version puts names on the
 # wire" and a wildly disproportionate one to a UI bug.
+#
+# NEVER raise it above PUBLISHED_EXTENSION_VERSION below. That is not a style
+# note: doing it on 2026-08-16 refused every install for a day.
 MIN_EXTENSION_VERSION = "0.3.0"
+
+# What the Chrome Web Store is actually serving. NOT the same as the version in
+# extension/manifest.json, and the difference is the whole reason this exists.
+#
+# Chrome hands out the published build; the published build asks /health whether
+# it is still supported; so a floor above THIS number means every panel refuses
+# to send before it does anything else. The test that was supposed to catch that
+# compared the floor against the repo's manifest — the version nobody is running
+# — and stayed green right through the outage.
+#
+# UPDATE THIS THE DAY AN UPLOAD GOES LIVE, not when it is submitted: a build in
+# review is not a build anyone has. It is a hand-maintained fact about the
+# outside world, which is why it is a constant with a comment rather than
+# something derived — no process here can see the store.
+PUBLISHED_EXTENSION_VERSION = "0.2.1"
 
 
 @app.get("/health")
