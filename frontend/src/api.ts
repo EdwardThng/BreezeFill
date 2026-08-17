@@ -70,3 +70,32 @@ export async function fillPdf(
   );
   return res.blob();
 }
+
+/**
+ * Open a Stripe Checkout for the one plan this product sells.
+ *
+ * Takes no arguments, and that is the point: the price, the quantity and the
+ * address Stripe returns to are all decided on the server, where a caller
+ * cannot reach them.
+ */
+export async function openCheckout(): Promise<string> {
+  const res = await ensureOk(await fetch(`${API_BASE}/checkout`, { method: "POST" }));
+  return (await res.json()).url as string;
+}
+
+/**
+ * A paid checkout session, in; the clinic's licence key, out.
+ *
+ * The server asks Stripe whether the session was really paid before it signs
+ * anything, so this is safe to call with whatever came back in the URL.
+ */
+export async function claimLicence(sessionId: string): Promise<string> {
+  const res = await ensureOk(
+    await fetch(`${API_BASE}/licence/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  );
+  return (await res.json()).licence as string;
+}

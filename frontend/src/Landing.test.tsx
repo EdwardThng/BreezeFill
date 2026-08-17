@@ -9,8 +9,8 @@
  * true. These tests fail if that happens.
  */
 
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import App, { routeOf } from "./App";
 import Landing, {
   DEMO_VIDEO,
@@ -21,7 +21,7 @@ import Landing, {
   STORE_URL,
   subscribeUrl,
 } from "./Landing";
-import Subscribe, { checkoutDone } from "./Subscribe";
+import Subscribe, { sessionOf } from "./Subscribe";
 
 describe("routing", () => {
   test.each([
@@ -389,126 +389,113 @@ describe("the closing region", () => {
  * over a card — and about the honesty of the arrangement, because the gate
  * this page implies does not exist yet.
  */
+// Only the two subscription calls are replaced. Mocking the whole module
+// would take getForms with it, and ClaimApp — rendered by the routing tests
+// above — imports that.
+vi.mock("./api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api")>()),
+  openCheckout: vi.fn(async () => "https://checkout.stripe.com/c/pay/cs_live_x"),
+  claimLicence: vi.fn(async () => "eyJzdWIiOiJzdWJfMSJ9.sig"),
+}));
+// eslint-disable-next-line import/first
+import { claimLicence, openCheckout } from "./api";
+
+/**
+ * The subscribe-then-install funnel.
+ *
+ * What matters here is not layout. It is where the gate actually sits — on a
+ * licence the SERVER signed, never on anything the URL claims — and what the
+ * page says to a doctor who is about to hand over a card.
+ */
 describe("#/get", () => {
-  const at = (hash: string) => {
+  const at = async (hash: string) => {
     window.location.hash = hash;
-    return render(<Subscribe />);
+    const result = render(<Subscribe />);
+    // Let the claim promise settle before anything is asserted.
+    await act(async () => {});
+    return result;
   };
 
-  test("reads a completed checkout off the hash, and nothing else", () => {
-    expect(checkoutDone("#/get?paid=1")).toBe(true);
-    expect(checkoutDone("#/get")).toBe(false);
-    expect(checkoutDone("")).toBe(false);
-    // Not a substring match: a route that merely mentions the word is not a
-    // payment, and this is the check standing between free and "subscribed".
-    expect(checkoutDone("#/get?unpaid=1")).toBe(false);
+  beforeEach(() => {
+    vi.mocked(openCheckout).mockClear();
+    vi.mocked(claimLicence).mockClear();
+    vi.mocked(claimLicence).mockResolvedValue("eyJzdWIiOiJzdWJfMSJ9.sig");
   });
 
-  test("with no payment link, it does not pretend there is one", () => {
-    // The existing rule on the pricing card, applied to the page that now
-    // carries the actual button: no dead control on the one that takes money.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
-    at("#/get");
-    expect(subscribeUrl()).toBe("");
-    expect(screen.queryByRole("link", { name: /^subscribe/i })).toBeNull();
-    expect(screen.getByText(/subscriptions are not open yet/i)).toBeDefined();
-    vi.unstubAllEnvs();
+  test("reads a Stripe session id off the hash, and only a real one", () => {
+    // A `cs_…` is minted by Stripe and cannot be guessed. The old `?paid=1`
+    // was a string anyone could type, which was tolerable while this page was
+    // a funnel and is not now that it hands out a credential.
+    expect(sessionOf("#/get?session_id=cs_live_abc123")).toBe("cs_live_abc123");
+    expect(sessionOf("#/get?session_id=cs_test_9")).toBe("cs_test_9");
+    expect(sessionOf("#/get")).toBe("");
+    expect(sessionOf("#/get?paid=1")).toBe("");
+    expect(sessionOf("#/get?session_id=nonsense")).toBe("");
   });
 
-  test("and the install step stays reachable anyway", () => {
-    // A step 2 gated behind a step 1 that cannot be taken would leave the page
-    // with no way out at all — and the extension is genuinely free right now,
-    // so refusing to link it would be a lie in the other direction.
-    //
-    // Points at the DOWNLOAD while 0.3.0 is in review: the published item is
-    // 0.2.1 and the backend floor is 0.3.0, so a store install refuses to send.
-    // Revert to STORE_URL when the review clears.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
-    at("#/get");
+  test("Subscribe opens a checkout the server created", async () => {
+    // Never a client-built Stripe URL: the price, the quantity and the return
+    // address are all decided server-side where a caller cannot reach them.
+    await at("#/get");
+    screen.getByRole("button", { name: /subscribe/i }).click();
+    await act(async () => {});
+    expect(openCheckout).toHaveBeenCalled();
+  });
+
+  test("the install step is shut until a payment is confirmed", async () => {
+    await at("#/get");
+    expect(screen.queryByRole("link", { name: /download breezefill/i })).toBeNull();
+    expect(screen.getByText(/available once your subscription is confirmed/i)).toBeDefined();
+  });
+
+  test("a session id alone does not open it — the server has to sign", async () => {
+    // THE GATE, in one test. If this ever passes with a rejected claim, the
+    // page is handing out the product to anyone who can type a URL.
+    vi.mocked(claimLicence).mockRejectedValue(new Error("That checkout has not been paid."));
+    await at("#/get?session_id=cs_live_forged");
+
+    expect(screen.queryByRole("link", { name: /download breezefill/i })).toBeNull();
+    expect(screen.getByText(/has not been paid/i)).toBeDefined();
+  });
+
+  test("a confirmed payment shows the licence and opens the install", async () => {
+    await at("#/get?session_id=cs_live_ok");
+
+    expect(claimLicence).toHaveBeenCalledWith("cs_live_ok");
+    expect(screen.getByText("eyJzdWIiOiJzdWJfMSJ9.sig")).toBeDefined();
     expect(
-      screen.getByRole("link", { name: /download breezefill/i })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: /download breezefill/i }).getAttribute("href"),
     ).toBe(DOWNLOAD_URL);
-    vi.unstubAllEnvs();
   });
 
-  test("the install step says what the by-hand install costs the doctor", () => {
-    // The stopgap's whole risk is a doctor downloading a zip and stopping
-    // there. Developer Mode and Load unpacked have to be on the page, and so
-    // does the fact that it will not update itself — otherwise this is a
-    // dead end dressed as an install button.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
-    at("#/get");
-    const step = screen.getByRole("link", { name: /download breezefill/i })
-      .closest("li");
-    expect(step?.textContent).toMatch(/developer mode/i);
-    expect(step?.textContent).toMatch(/load unpacked/i);
-    expect(step?.textContent).toMatch(/will not|not keep it up to date/i);
-    vi.unstubAllEnvs();
+  test("the licence is called a credential where it is handed over", async () => {
+    // It is pasted into panels and quoted in support email. The one moment a
+    // doctor is looking at it is the only chance to say what it is.
+    await at("#/get?session_id=cs_live_ok");
+    expect(document.body.textContent).toMatch(/credential/i);
   });
 
-  test("with a payment link, the store link waits until checkout is done", () => {
-    // The funnel the owner asked for: subscribe first, install second.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
-    at("#/get");
-    expect(
-      screen.getByRole("link", { name: /^subscribe/i }).getAttribute("href"),
-    ).toBe("https://buy.stripe.com/test_123");
-    expect(
-      screen.queryByRole("link", { name: /install from the chrome web store/i }),
-    ).toBeNull();
-    vi.unstubAllEnvs();
+  test("a failed claim is never a dead end", async () => {
+    vi.mocked(claimLicence).mockRejectedValue(new Error("That checkout was not found."));
+    await at("#/get?session_id=cs_live_missing");
+    expect(screen.getByRole("button", { name: /try again/i })).toBeDefined();
   });
 
-  test("and appears once Stripe sends them back", () => {
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
-    at("#/get?paid=1");
-    expect(
-      screen.getByRole("link", { name: /download breezefill/i })
-        .getAttribute("href"),
-    ).toBe(DOWNLOAD_URL);
-    vi.unstubAllEnvs();
-  });
-
-  test("the store link opens safely in a new tab", () => {
-    // Still on the page — as the thing to switch to once the review clears —
-    // just no longer the primary control.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
-    at("#/get");
-    const store = screen.getByRole("link", {
-      name: /the chrome web store/i,
-    });
-    expect(store.getAttribute("href")).toBe(STORE_URL);
-    expect(store.getAttribute("target")).toBe("_blank");
-    // Without noopener the store page gets a handle on this window.
-    expect(store.getAttribute("rel")).toMatch(/noopener/);
-    vi.unstubAllEnvs();
-  });
-
-  test("it never claims a subscription unlocks the extension", () => {
-    // THE IMPORTANT ONE, and the reason it is a test rather than a comment.
-    //
-    // The listing is public, so anyone can install without paying, and the
-    // panel has no licence check yet — so today the extension works whether or
-    // not a doctor subscribes. A page that said otherwise would be taking SGD
-    // 200 a month for something the same doctor could have had free, which is
-    // worse than shipping no paywall at all.
-    //
-    // When the licence gate ships in the panel, this test is the thing that
-    // will fail and force the wording to be reconsidered deliberately.
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123");
-    at("#/get");
+  test("it does not claim the extension is already locked", async () => {
+    // THE HONESTY TEST. FORMFILL_REQUIRE_LICENCE is off, so a copy obtained
+    // another way still works, and a page that implied otherwise would be
+    // selling something the reader could have had free. When the flag goes on,
+    // this is the test that should be revisited deliberately.
+    await at("#/get?session_id=cs_live_ok");
     const body = document.body.textContent!;
-    expect(body).not.toMatch(/unlock|activate|licence key required|required to use/i);
-    expect(body).toMatch(/free to install today|the pilot stays free/i);
-    vi.unstubAllEnvs();
+    expect(body).toMatch(/enforcement is being switched on/i);
+    expect(body).toMatch(/will still work/i);
+    expect(body).toMatch(/not going to backdate/i);
   });
 
-  test("there is a way back to the page that explains the product", () => {
-    vi.stubEnv("VITE_STRIPE_PAYMENT_LINK", "");
-    at("#/get");
+  test("there is a way back to the page that explains the product", async () => {
+    await at("#/get");
     const hrefs = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("#/");
-    vi.unstubAllEnvs();
   });
 });

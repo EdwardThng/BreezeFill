@@ -1,4 +1,6 @@
-import { DOWNLOAD_URL, GET_ROUTE, PRICE, STORE_URL, subscribeUrl } from "./Landing";
+import { useEffect, useState } from "react";
+import { DOWNLOAD_URL, PRICE, STORE_URL } from "./Landing";
+import { openCheckout, claimLicence } from "./api";
 
 /**
  * The one way in: subscribe, then install.
@@ -36,22 +38,19 @@ import { DOWNLOAD_URL, GET_ROUTE, PRICE, STORE_URL, subscribeUrl } from "./Landi
  * listing today is a free one, permanently.
  */
 
-/** Did Stripe just send this doctor back from a completed checkout? */
-export function checkoutDone(hash: string): boolean {
-  return /[?&]paid=1(&|$)/.test(String(hash || ""));
-}
-
 /**
- * Where Stripe should return to.
+ * The checkout Stripe just sent this doctor back from, if any.
  *
- * Absolute, because a Payment Link's redirect is configured in the Stripe
- * dashboard against a real URL and cannot be a fragment on its own. Built from
- * the page's own origin so a preview deploy returns to the preview rather than
- * to production.
+ * A session id, NOT a `?paid=1`. The old flag was a string anyone could type
+ * into the address bar, which was fine while this page was only a funnel and
+ * useless the moment it hands out a credential. A `cs_…` is minted by Stripe,
+ * names one checkout, cannot be guessed — and the server re-checks with Stripe
+ * that it was actually paid before signing anything, so a stolen one is worth
+ * no more than the payment behind it.
  */
-export function returnUrl(): string {
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
-  return `${origin}/${GET_ROUTE}?paid=1`;
+export function sessionOf(hash: string): string {
+  const match = /[?&]session_id=(cs_[A-Za-z0-9_]+)/.exec(String(hash || ""));
+  return match ? match[1] : "";
 }
 
 function Step({
@@ -79,8 +78,54 @@ function Step({
 }
 
 export default function Subscribe() {
-  const paid = checkoutDone(window.location.hash);
-  const stripe = subscribeUrl();
+  const session = sessionOf(window.location.hash);
+
+  /**
+   * The licence, once the server has confirmed the payment behind it.
+   *
+   * Held in component state and nowhere else. It is a credential, and this
+   * page has no business writing one into localStorage on the doctor's behalf
+   * — they copy it into the panel, which is the only place it is needed.
+   */
+  const [licence, setLicence] = useState("");
+  const [claiming, setClaiming] = useState(Boolean(session));
+  const [failed, setFailed] = useState("");
+
+  useEffect(() => {
+    if (!session) return;
+    let live = true;
+    claimLicence(session)
+      .then((key) => live && setLicence(key))
+      // The message, not a generic one: the server distinguishes "not paid"
+      // from "no such checkout" and a doctor who has just been charged needs
+      // to be told which of those happened.
+      .catch((error) => live && setFailed(String(error.message || error)))
+      .finally(() => live && setClaiming(false));
+    return () => {
+      live = false;
+    };
+  }, [session]);
+
+  const [opening, setOpening] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+
+  async function subscribe() {
+    setOpening(true);
+    setCheckoutError("");
+    try {
+      // Straight to Stripe. The session is created server-side so the price
+      // cannot be tampered with on the way.
+      window.location.href = await openCheckout();
+    } catch (error) {
+      setCheckoutError(String((error as Error).message || error));
+      setOpening(false);
+    }
+  }
+
+  // Paid means the server signed a licence for this session. A session id in
+  // the URL is not enough on its own, which is the whole reason the exchange
+  // happens rather than the page trusting what it was handed.
+  const paid = Boolean(licence);
 
   return (
     <div className="landing get-page">
@@ -97,35 +142,54 @@ export default function Subscribe() {
       </header>
 
       <ol className="get-steps">
-        <Step
-          index={1}
-          title="Subscribe"
-          state={paid ? "done" : "open"}
-        >
+        <Step index={1} title="Subscribe" state={paid ? "done" : "open"}>
           {paid ? (
-            <p className="get-note">
-              Thank you — your subscription is active. A receipt is on its way
-              to the address you gave Stripe.
-            </p>
-          ) : stripe ? (
+            <>
+              <p className="get-note">
+                Thank you — your subscription is active. A receipt is on its way
+                to the address you gave Stripe.
+              </p>
+              <p>
+                <strong>This is your licence key.</strong> Paste it into the
+                BreezeFill panel once, under Advanced. Keep it — it is the only
+                copy, and it is a credential: anyone holding it can map claims
+                on your subscription.
+              </p>
+              <code className="licence-key">{licence}</code>
+              <p className="get-note">
+                Lost it? Open the link in your Stripe receipt again and this
+                page will re-issue the same key.
+              </p>
+            </>
+          ) : claiming ? (
+            <p className="get-note">Confirming your payment with Stripe…</p>
+          ) : failed ? (
+            <>
+              {/* Never a dead end. Whatever went wrong, the doctor has either
+                  already paid or has not, and both need a way forward. */}
+              <p className="get-error">{failed}</p>
+              <button className="btn btn-primary btn-large" type="button" onClick={subscribe}>
+                Try again
+              </button>
+            </>
+          ) : (
             <>
               <p>
                 Checkout is handled by Stripe. We never see your card, and the
                 subscription is the only record either of us keeps.
               </p>
-              <a className="btn btn-primary btn-large" href={stripe}>
-                Subscribe — {PRICE.currency} {PRICE.amount}/{PRICE.period}
-              </a>
+              <button
+                className="btn btn-primary btn-large"
+                type="button"
+                onClick={subscribe}
+                disabled={opening}
+              >
+                {opening
+                  ? "Opening Stripe…"
+                  : `Subscribe — ${PRICE.currency} ${PRICE.amount}/${PRICE.period}`}
+              </button>
+              {checkoutError ? <p className="get-error">{checkoutError}</p> : null}
             </>
-          ) : (
-            /* No dead button, the same rule the pricing card follows. Until
-               the payment link exists there is nothing to subscribe to, and a
-               control that looks live and does nothing is at its worst on the
-               one that takes money. */
-            <p className="price-pending">
-              Subscriptions are not open yet. The extension is free to install
-              in the meantime — step 2 is below.
-            </p>
           )}
         </Step>
 
@@ -149,12 +213,12 @@ export default function Subscribe() {
         <Step
           index={2}
           title="Install the current build"
-          /* Shut only while there is something to complete first. With no
-             payment link there is no step 1 to finish, and a step 2 that
-             cannot be reached would leave the page with no way out at all. */
-          state={paid || !stripe ? "open" : "shut"}
+          /* Opens on a licence the SERVER signed, never on a session id in
+             the URL. That is the difference between a funnel and a gate, and
+             it is one line. */
+          state={paid ? "open" : "shut"}
         >
-          {paid || !stripe ? (
+          {paid ? (
             <>
               <p>
                 The Chrome Web Store listing is one version behind while an
@@ -190,7 +254,7 @@ export default function Subscribe() {
             </>
           ) : (
             <p className="get-note">
-              Available once step 1 is complete.
+              Available once your subscription is confirmed.
             </p>
           )}
         </Step>
@@ -203,15 +267,23 @@ export default function Subscribe() {
       <section className="get-honest">
         <h2>What you are paying for, and what you are not</h2>
         <p>
-          BreezeFill is free to install today and the pilot stays free — the
-          listing is public, so nothing here locks the extension. Subscribing
-          funds the work and keeps the backend running; it does not switch
-          anything on that would otherwise be off, and the refusals that make
-          the product trustworthy are identical at every price, including free.
+          Your subscription is what funds this and keeps the backend running.
+          The licence key above is what the BreezeFill panel asks for, and it
+          is checked against your subscription every time a claim is mapped.
         </p>
         <p>
-          If you would rather wait, install it and use it. You will be asked
-          before anything is ever charged.
+          Being straight about one thing: enforcement is being switched on, and
+          until it is, a copy of the extension obtained another way will still
+          work. We are not going to backdate a charge to anyone who installed
+          it while that was true, and you will always be asked before anything
+          is charged.
+        </p>
+        <p>
+          The refusals that make this trustworthy — it never submits, it leaves
+          a field blank rather than guess, identifiers never reach the model
+          that answers the form — are identical at every price, including free.
+          A subscription buys the service, never a change in how carefully it
+          behaves.
         </p>
       </section>
 

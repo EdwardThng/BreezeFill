@@ -1551,3 +1551,26 @@
     gap: 12px;
   }
 }
+
+/* The licence key, on the one screen it is ever shown. Monospace and
+   selectable in one go: it gets copied into a panel, and a key broken across
+   a line by a proportional font is a support email. */
+.landing .licence-key {
+  display: block;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg-raise);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+  user-select: all;
+}
+
+.landing .get-error {
+  margin: 12px 0 0;
+  color: var(--danger, #a3232b);
+  font-size: 14px;
+}
