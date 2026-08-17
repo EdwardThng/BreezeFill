@@ -877,3 +877,15 @@ def test_reasoning_never_reaches_the_output_grammar_as_a_union():
 
     assert item["properties"]["reasoning"] == {"type": "string"}
     assert "reasoning" in item["required"]
+
+
+def test_symptom_timing_is_never_inferred():
+    # The owner's call. A note saying "3 days sore throat, seen 02/08" invites
+    # the arithmetic, and the arithmetic lands 30/07 on a claim form as a
+    # clinical fact — when "3 days" is a patient's estimate the doctor wrote
+    # down loosely, not a date they recorded. The insurer reads the answer as
+    # the doctor's own statement of when the illness started, and a claim can
+    # turn on it: pre-existing-condition windows and policy start dates are
+    # decided by exactly this number.
+    assert "symptom" in SYSTEM_PROMPT.lower()
+    assert "never infer" in SYSTEM_PROMPT.lower()

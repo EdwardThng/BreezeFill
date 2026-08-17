@@ -83,6 +83,13 @@ explicitly named diagnosis). If two reasonable clinicians might answer \
 differently, it is "missing".
 - Do not stretch a value to fit a field. If the notes answer a neighbouring \
 question but not this one, this field is "missing".
+- NEVER infer symptoms, or when symptoms began. If the notes do not state a \
+symptom or its date outright, the field is "missing" — do not work a date back \
+from a duration. "3 days sore throat, seen 02/08" does NOT mean symptoms began \
+on 30/07: "3 days" is a patient's estimate the doctor wrote down loosely, and \
+the answer goes onto the claim as the doctor's own statement of when the \
+illness started. Insurers decide pre-existing-condition questions on exactly \
+that date.
 - Dates are DD/MM/YYYY unless the field's own description states a different \
 format. The field wins: its format is the shape of the box on the printed \
 form, so a field asking for DD/MM/YY wants exactly two year digits. Never \
