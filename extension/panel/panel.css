@@ -653,6 +653,7 @@ details > *:not(summary) {
    browser window is — a fixed pixel height stops being a third the moment the
    doctor resizes anything. */
 .notepane {
+  position: relative;
   flex: 0 0 33%;
   display: flex;
   flex-direction: column;
@@ -737,6 +738,25 @@ details > *:not(summary) {
 }
 
 .notepane-text[hidden] {
+  display: none;
+}
+
+/* The note runs out at the pane's bottom edge with nothing saying there is
+   more of it — at 320px the last visible line is cut mid-sentence and reads
+   as the end. A short fade says "scroll". It sits over blank ground when the
+   note is short enough to fit, so it costs nothing there. */
+.notepane::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 20px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(252, 252, 251, 0), var(--surface));
+}
+
+.notepane[data-folded="true"]::after {
   display: none;
 }
 
