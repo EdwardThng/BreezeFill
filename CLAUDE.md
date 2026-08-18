@@ -339,7 +339,7 @@ set on a host, so it is a deliberate not-yet rather than an oversight.
 
 ---
 
-## Status as of 2026-08-17
+## Status as of 2026-08-18
 
 **Three versions, and they are not the same number.** Confusing them is what
 caused the live outage described below, so keep them apart:
@@ -367,9 +367,44 @@ raised to disown it. Until the review clears, `#/get` step 2 downloads the
 current build from `/download` instead of linking the store; see the header of
 `DOWNLOAD_URL` in `Landing.tsx`, and **revert it the day the review clears.**
 
-**841 tests pass**: 412 backend (1 skipped), 449 extension, 77 website. The
-package to upload is `breezefill-store-v0.3.0.zip`, built and verified
-2026-08-17 — 22 files, 121 KB.
+**1,138 tests pass**: 566 backend (1 skipped, 1 xfailed), 467 extension, 105
+website. The package to upload is `breezefill-store-v0.3.0.zip`, built and
+verified 2026-08-17 — 22 files, 121 KB. **It predates the panel changes of
+2026-08-18** (the portal/PDF fork, the step counter removal) and must be
+rebuilt before it is uploaded.
+
+### What shipped on 2026-08-18 — the PDF half of the product
+
+The owner's father and two other GPs said the work is a *mix*: some claims are
+filled on the insurer's portal, some are PDFs that get printed and filled by
+hand. The extension only ever addressed the first. In one day:
+
+| | |
+|---|---|
+| `POST /forms/upload` | A blank insurer PDF in, a mappable schema out. AcroForm boxes where the PDF has them; **rendered pages read by the model where it does not** — five of the seven real insurer forms have no fields and no text layer |
+| `POST /forms/known` | The same answer from a SHA-256, with no upload at all. 2-3ms, flat across file size |
+| `POST /forms/{id}/proof` | The blank form with every box stamped with its own field id. The review step for geometry, and the only check a doctor can make on a scan |
+| `POST /notes/extract` | A consultation note that arrived as a PDF, as text |
+| The form bank | Blank forms + derived schemas, keyed by the PDF's own bytes. **Not provisioned — see below** |
+| The website | Form picker gone; upload first, notes by kind (paste or several documents), both reversible |
+| The panel | Asks portal-or-PDF before anything else; step counter removed |
+
+**Four bugs found by running it, none of which any test could see**, and each is
+written up where it belongs: a **504** (one model call per page, in series,
+against a 120s `maxDuration`), an **`unknown form_id`** after a full claim was
+typed in (the bank made load-bearing for correctness when it is a cache), the
+**bank doing nothing at all** in production, and the **step-1 label** naming the
+wrong thing. The pattern is worth naming: every one of them was at a boundary
+the test suites stub out — the platform, the clock, the storage, the eye.
+
+**THE FORM BANK IS NOT PROVISIONED.** `vercel blob list-stores` returns nothing
+and `BLOB_READ_WRITE_TOKEN` is unset, so `build_bank()` returns `NullBank` and
+every upload re-derives at a model call per page. Nothing breaks — the client
+carries the schema — but a doctor filling ten claims off one form pays for ten
+reads of it. `GET /health` reports `form_bank` so this is visible. **Deliberately
+left for the owner**: see the design discussion at the very bottom of this file
+before creating anything, because the answer changed once accounts entered the
+picture.
 
 Two threads now run in parallel, and they are independent: **the store
 submission** (below) and **charging for it** (see "Pricing, and the gate that
@@ -2918,3 +2953,171 @@ the module that uses it, and so on). That is fine — correctness is judged at
 the end of the task, not per commit.
 
 Prefer correcting a wrong premise plainly over going along with it.
+
+---
+
+# IMPORTANT — open system design: the cache, and handling users
+
+**Status: discussed 2026-08-18, decided to WAIT, nothing built.** The owner
+asked whether to create the Blob store and said in the same breath that a user
+system was coming. The second answer changes the first, which is why neither
+was built. Read this before creating any store.
+
+## What is actually needed, in the owner's words
+
+> when they first create an account with BreezeFill, they can input their own
+> personal information (name, name of clinic etc). Because every form will
+> require the doctor to fill in some of their own information, if I just ask
+> for that info when they're setting up their accounts those fields will be
+> automatically filled every time they fill an insurance form.
+
+So: **a doctor profile, auto-filled onto forms.** Not logins for their own
+sake, not a dashboard — the feature is "stop retyping my own name and clinic
+on every claim". And the cache is to hold every form in the bank, current and
+future.
+
+## The cache
+
+**It is a pure cache now, and it was not before.** Until the client began
+carrying the schema (2026-08-18), the bank was the only home for an uploaded
+form and losing it produced `unknown form_id` in the middle of a claim. That is
+fixed. Nothing depends on the bank for correctness any more, and nothing should
+be allowed to again — see the guardrail added that day.
+
+**It is worth having, and the reason is the usage pattern rather than the hit
+rate in general.** A doctor uploads *the same form once per patient*. A clinic
+doing ten Great Eastern claims a week pays ten full derives — three Opus calls
+each — for a form that should have been read once, ever. That is the case that
+pays for it, and it is the dominant one.
+
+**The hit needs BYTE-IDENTICAL files**, because the key is
+`sha256(pdf)[:32]`. Within a clinic re-using one saved file that is effectively
+100%. Across clinics it depends on whether both downloaded the same static file
+from the insurer. A re-scanned or re-saved copy misses. If that turns out to
+bite, a fuzzier fingerprint (page count + a digest of widget names or page text)
+is the fix — but **do not loosen it speculatively**: a false match means mapping
+a claim onto the wrong form.
+
+**Store the schemas; think hard before storing the PDFs.** Measured across the
+six curated forms:
+
+```
+6 forms:            53 KB of schema   vs   6.8 MB of PDF
+1,000 banked forms: ~9 MB of schema   vs   ~1.1 GB with the PDFs   (120x)
+```
+
+`get_pdf` is read in exactly ONE place — the fallback in `_blank_form_bytes` for
+when the client did not send the file — and the website always has the file. So
+the PDF copy is close to dead weight today. Dropping it makes the bank small
+enough to live anywhere.
+
+**On Redis specifically.** It fits the access pattern (small keyed JSON, read on
+every upload) and it is the wrong instinct here for two reasons. First, Redis is
+usually priced and sized as a *cache with eviction*, and an evicted schema costs
+a full re-derive — real money, not a slow request. Second, this data wants to be
+durable and is tiny: 9 MB that should never be evicted is a table, not a cache
+tier. **If a database is arriving for the user system, the bank is one table in
+it** and you run one store instead of two. Blob earns its place only if the PDFs
+are kept, which is the thing to avoid.
+
+## The user system, and what it collides with
+
+**Identity already exists and needs no database.** The licence token carries the
+Stripe subscription id; `verify_licence` returns it on every gated request.
+"Which clinic is this" is answered today.
+
+**What does not exist is anywhere to put a profile**, and `licence.py` says in
+its own docstring why that was deliberate:
+
+> `README.md` says publicly that there is no database, and that sentence is why
+> a clinician is being asked to trust this at all. A subscriber table would make
+> it false.
+
+**The public copy has to change before accounts ship, and one file is a store
+review risk.** As of 2026-08-18:
+
+| File | What it says |
+|---|---|
+| `frontend/public/privacy.html` | "Nothing is stored. There is **no database, no account**, and no file on disk" |
+| `README.md` | Now says "zero retention **of patient data**" and documents the form bank — **updated 2026-08-18** |
+| `frontend/src/Landing.tsx` | "There is no database." — and, elsewhere, the wording that survives: "No patient data stored" |
+
+`privacy.html` says **"no account"** explicitly, and it is the document a Chrome
+Web Store reviewer reads with the review in flight. **The promise worth keeping
+is the patient one**, which survives both accounts and the form bank intact: a
+doctor's own professional details and a blank insurer form are neither of them
+patient data. The absolute version survives neither.
+
+Recording an omission honestly: **the form bank already eroded "no database" on
+2026-08-18 and the public copy was not updated at the time.** It stayed
+literally true only because production runs `NullBank`. `README.md` is fixed;
+`privacy.html` and `Landing.tsx` are not, and they must be before a store is
+provisioned or accounts ship.
+
+## The fork nobody has chosen yet
+
+**The profile could live client-side** — `chrome.storage` in the extension,
+`localStorage` on the site. No database, no sessions, no password reset, and the
+doctor's details never leave their machine except to be typed onto a form. Every
+current promise survives untouched.
+
+The cost: it does not follow them between devices, it is lost if they clear
+browser data, and it is re-entered per browser. For a single-machine clinic that
+is nearly free; for a doctor moving between a clinic PC and a laptop it is an
+irritation, and it rules out a dashboard permanently.
+
+Note this would need the `chrome.storage` hard rule amended — it currently holds
+the licence key and nothing else. That rule exists to keep *patient* data off
+disk, and a doctor's own name is not a patient's, so the amendment is defensible
+rather than a loophole. **Amend it deliberately, in that rule's own words, or
+not at all.**
+
+## The part that is safe to build first, whichever way the storage goes
+
+**The mapping layer is storage-agnostic.** A `PractitionerRecord`, an alias
+allowlist, `practitioner.<attr>` as a second deterministic source beside
+`demographics.<attr>`, and `assemble_claim` copying the values in. It works
+identically whether the profile ends up in Postgres or in `localStorage`.
+
+**It is a privacy improvement, not a cost**, for exactly the reason
+`_live_sources` is: marking a control practitioner-sourced *removes its question
+from the mapping call*. Today "Your name (attending doctor)" is sent to the
+model, comes back `missing` because no note answers it, and the doctor writes it
+by hand.
+
+**THE DANGER, AND IT IS THE WHOLE DESIGN.** Of 23 doctor-ish labels across the
+five real forms, only about **6** are the doctor filling the form in:
+
+```
+Your name (attending doctor)       yours        Referring doctor                   NOT yours
+Your MCR number                    yours        Patient's regular doctor           NOT yours
+Attending physician                yours        Doctor who made that diagnosis     NOT yours
+MCR number                         yours        Other doctor consulted beforehand  NOT yours
+Clinic name and address            yours        Previous / referring doctor        NOT yours
+                                                Hospital name (where admitted)     NOT yours
+                                                ...12 more
+```
+
+Auto-filling "Patient's regular doctor" or "Referring doctor" with the current
+doctor's name puts a **false clinical statement on a signed claim** — plausible,
+and invisible in review, which is the exact failure class this product exists to
+prevent and strictly worse than the blank it replaces. So the practitioner alias
+table must be an **exact allowlist**, the same discipline as the patient one,
+and it must refuse the other 17. AIA's own form shows the discriminator it uses:
+it writes "**Your** name (attending doctor)" and "**Your** MCR number".
+
+**Build the allowlist from labels that really appear**, not from the handful
+visible in six schemas. The input wanted is the pilot's actual form set — which
+fields he retypes on every claim.
+
+## Order of work, when this is picked up
+
+1. **Rewrite `privacy.html` and `Landing.tsx`** onto the patient-data promise.
+   Cheapest, unblocks everything, and it is a store-review risk while it is
+   wrong.
+2. **Decide the profile's home** — client-side or a database. This is the fork;
+   everything else follows it.
+3. **Build the practitioner mapping layer.** Storage-agnostic, so it can be done
+   in parallel with 2 and wired to whichever wins.
+4. **Then the bank's storage.** One table in the user database if there is one;
+   Blob with schemas only if there is not. Never both.

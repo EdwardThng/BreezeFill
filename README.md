@@ -21,7 +21,9 @@ BreezeFill turns a pasted clinical note into a filled insurance claim in minutes
 
 - **Demographics never reach the LLM.** They are copied onto the form deterministically and double as the redaction dictionary. This extends to *finding* them: the paste is split by pattern, because a model asked to do it would have read the patient's name before the dictionary that redacts the name existed.
 - **The LLM only ever sees de-identified text.** The token→value mapping lives in server memory for the duration of the request flow and is never sent to any model or written to logs.
-- **Zero retention, literally.** Every endpoint is stateless: the server holds nothing between requests, so patient data exists only for the duration of the request that carried it in. There is no claim store, no session, no id, and no database.
+- **Zero retention of patient data, literally.** Every endpoint is stateless about patients: the server holds nothing between requests, so patient data exists only for the duration of the request that carried it in. There is no claim store, no session and no id.
+
+  **One thing does persist, and it is not a patient.** The *form bank* keeps blank insurer forms uploaded by doctors, and the schemas derived from them — a published document the insurer hands to anyone who asks, plus a description of where its boxes are. It exists because reading a form costs a model call per page and the answer is identical for everyone who ever sends in that same form. A PDF that already has answers in it is refused outright, because that is somebody's completed claim (`form_bank.intake_guard`). If you are auditing this claim, that check is the line, and `tests/test_upload_route.py` asserts such an upload reaches storage as zero files.
 - **No silent guesses.** Every AI-proposed value carries its supporting quote or a `missing` flag, and nothing reaches a PDF without doctor approval. A redaction token can never leak into a generated PDF — it is blocked at three independent layers.
 - **No auto-submission.** BreezeFill fills and stops. On a web form the approved values are written into the insurer's own page and the doctor submits it; on a PDF form the output is a file the doctor reviews, signs and submits. Nothing is ever sent to an insurer on their behalf.
 
@@ -56,12 +58,17 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 
 | Method | Route | Purpose |
 |---|---|---|
-| `GET` | `/forms` | List available form schemas |
+| `GET` | `/forms` | List the curated form schemas. Uploaded forms are deliberately absent — one clinic's upload is not offered to another |
+| `POST` | `/forms/upload` | A blank insurer PDF in, a mappable schema out. Reads the PDF's own AcroForm boxes when it has them, and renders its pages for the model to read when it does not. Refuses a PDF that already has answers in it |
+| `POST` | `/forms/known` | "Have you read this form before?", answered from a SHA-256 with no upload. A 404 means no, and the caller follows it with the real upload |
+| `POST` | `/forms/{id}/proof` | The blank form with every box drawn on it, stamped with its own field id. The review step for geometry, and only meaningful for a form read from a scan |
+| `POST` | `/notes/extract` | A consultation note that arrived as a PDF, as text. The paste box by another route — it extracts and stops |
 | `POST` | `/parse` | Split one pasted block into demographic fields. Patterns only — no model, nothing stored |
 | `POST` | `/map` | Redact + extract against a named schema. Stateless: no `claim_id`, nothing retained. Kept for the PDF UI; the extension no longer uses it |
-| `POST` | `/map-live` | **What the extension calls.** Every question on the page in front of the doctor, each carrying the best instruction available for it — a matching schema's `description` where one exists, the page's own wording where none does. Refuses with `422` when nothing on the page is labelled and `413` when there are more questions than one call can carry |
-| `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call |
-| `GET` | `/health` | Liveness + loaded form count |
+| `POST` | `/map-redacted` | **What the extension actually calls.** Takes no `PatientRecord` — the panel redacted in the tab and kept the token map — so the server never receives the identifiers at all. Every question on the page, each carrying the best instruction available: a matching schema's `description` where one exists, the page's own wording where none does |
+| `POST` | `/map-live` | The same shape but accepting an unredacted note. **No shipping code calls it** — the panel moved to `/map-redacted` when redaction moved into the browser. Live and reachable, so treat it as a route rather than dead code. Refuses with `422` when nothing on the page is labelled and `413` when there are more questions than one call can carry |
+| `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call. For an uploaded form, send the schema and the blank PDF back too |
+| `GET` | `/health` | Liveness, loaded form count, and which form bank is in use. `"NullBank"` means nothing is being cached |
 | `GET` | `/download/breezefill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
 
 ---
@@ -140,6 +147,27 @@ Coverage includes a golden set of synthetic clinical notes asserting zero identi
 
 ## Adding a new insurer form
 
+**Most of the time you do not.** A doctor uploads the blank form at `#/app` and
+the server works out what it is: a hand-authored schema when the PDF is one
+this repo already describes (matched on the file's own bytes), the form bank
+when somebody has sent that form in before, and a fresh read when nobody has. A
+fresh read uses the PDF's own AcroForm boxes where it has them, and renders its
+pages for the model to locate the boxes where it does not.
+
+Two things worth knowing about a form read that way:
+
+- **Expect a messier field list than a hand-authored schema.** Great Eastern's
+  own GHS claim carries 143 raw AcroForm fields where the curated schema has
+  15, and names them things like `undefined_2` and four separate `Day` boxes.
+  What each is for is printed on the page beside it, which is what the intake
+  reads.
+- **A form read from a SCAN has geometry nobody measured.** Check it with
+  `POST /forms/{id}/proof`, which stamps every box with its own field id onto
+  the form itself. The website offers this automatically for scanned forms.
+
+**Hand-author a schema when a form is worth doing properly** — the pilot's
+common forms, anything where the derived version reads badly:
+
 1. Drop the insurer's **fillable (AcroForm) PDF** into `forms/`.
 2. Dump its field names and checkbox export values:
    ```bash
@@ -150,7 +178,9 @@ Coverage includes a golden set of synthetic clinical notes asserting zero identi
    field (`"source": "llm"` plus a `description`). The `description` is the
    instruction the model follows — write it the way you would brief a
    colleague filling in the form.
-4. Restart the backend. The form appears in `GET /forms` and the UI dropdown.
+4. Restart the backend. The form appears in `GET /forms`, and — because
+   `CURATED_BY_PDF` indexes every curated form by its PDF's hash — a doctor who
+   uploads that same file gets your schema rather than a derived one.
 
 A synthetic sample form (`dev_sample_v1`) ships with the repo so the pipeline can be exercised without any real insurer forms; regenerate its PDF with `python scripts/make_dev_form.py`.
 
@@ -175,6 +205,14 @@ filled, just without the sharper instruction.
   fillable PDF's own fields, `overlay` stamps text at coordinates onto a flat
   scan, and `web` fills an insurer's own web form in place through the browser
   extension. A `web` schema has no PDF, so there is nothing to download.
+- **A form read from a scan has geometry no human measured.** An uploaded PDF
+  with no fillable boxes is read by rendering its pages and asking the model
+  where the boxes are. Obvious nonsense is refused, but a box fifteen points too
+  high produces a sensible answer printed across the question above it, and the
+  review screen renders that exactly like a correct one. `POST /forms/{id}/proof`
+  is the check, and the website offers it automatically for these forms.
+  **Whether the model locates boxes well on a real insurer form is not yet
+  established** — every test on that path feeds a stubbed client.
 - **Nothing survives a request.** Losing the browser tab mid-review means starting the claim again, because the server has no copy to resume from. That is the retention model working, not a gap in it.
 - **Data residency is your responsibility.** If regulations require in-region inference, point the model configuration at a regional endpoint before processing real patient data, and verify redaction tests pass in your environment.
 - BreezeFill assists with form completion; the reviewing doctor remains responsible for the accuracy of every submitted form.
