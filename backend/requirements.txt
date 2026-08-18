@@ -5,6 +5,13 @@ pydantic>=2.7
 pypdf>=5.0
 # Runtime, not just test: overlay_fill draws text onto flat scanned forms.
 reportlab>=4.0
+# Runtime as of 2026-08-18, and it was calibration-only before that. Reading a
+# SCANNED blank form means rendering its pages and showing them to the model —
+# five of the seven real insurer forms have no fields and no text layer, so
+# there is nothing else to read. vision_intake.vision_available() checks for it
+# rather than assuming, so a deployment without it refuses scans instead of
+# raising ImportError at the worst moment.
+pymupdf>=1.24
 # Subscriptions. Stripe holds the subscriber list so this backend does not
 # have to hold one — see licensing.py.
 stripe>=10.0

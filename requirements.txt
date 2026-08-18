@@ -12,6 +12,7 @@ anthropic>=0.116
 fastapi>=0.115
 pydantic>=2.7
 pypdf>=5.0
+pymupdf>=1.24
 reportlab>=4.0
 
 # No uvicorn: Vercel provides the ASGI server. It stays in

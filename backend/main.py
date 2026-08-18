@@ -71,6 +71,7 @@ from form_bank import (
 )
 from form_intake import IntakeError, derive_schema, probe_pdf, refusal_for
 from note_intake import NoteIntakeError, extract_note_text
+from vision_intake import derive_overlay_schema, vision_available
 from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
 from redaction import PatientRecord, redact, scrub_patterns
@@ -674,6 +675,29 @@ def map_live(
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
 
+def _blank_form_bytes(schema: FormSchema) -> str | bytes:
+    """Where this form's blank PDF actually is: a path, or the bytes themselves.
+
+    An uploaded form lives in the bank rather than on disk and says so in its
+    own `pdf_path`. It is resolved to bytes rather than downloaded and written
+    out — a serverless filesystem is the wrong place to put a file the request
+    is about to finish with, and the fill layers take bytes for this reason.
+    """
+    banked_key = key_from_form_id(schema.form_id)
+    if banked_key is not None and schema.pdf_path.startswith("bank://"):
+        blank = bank().get_pdf(banked_key)
+        if blank is None:
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "The blank form this claim was mapped against is no longer "
+                    "available. Upload it again to fill it."
+                ),
+            )
+        return blank
+    return str((REPO_ROOT / schema.pdf_path).resolve())
+
+
 @app.post("/forms/{form_id}/pdf")
 def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
     """Final values in, filled PDF out. One request, nothing kept.
@@ -702,25 +726,7 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
 
     by_id = {field.id: request.values.get(field.id) for field in schema.fields}
 
-    # An uploaded form's blank PDF lives in the bank rather than on disk, and
-    # says so in its own pdf_path. Resolved here rather than downloaded and
-    # written out: a serverless filesystem is the wrong place to put a file
-    # this request is going to finish with.
-    source: str | bytes
-    banked_key = key_from_form_id(schema.form_id)
-    if banked_key is not None and schema.pdf_path.startswith("bank://"):
-        blank = bank().get_pdf(banked_key)
-        if blank is None:
-            raise HTTPException(
-                status_code=410,
-                detail=(
-                    "The blank form this claim was mapped against is no longer "
-                    "available. Upload it again to fill it."
-                ),
-            )
-        source = blank
-    else:
-        source = str((REPO_ROOT / schema.pdf_path).resolve())
+    source = _blank_form_bytes(schema)
 
     try:
         if schema.fill_mode == "overlay":
@@ -775,6 +781,11 @@ class UploadFormResponse(BaseModel):
     form_id: str
     display_name: str
     fields: list[UploadedField]
+    # "acroform" when the PDF stated where its own boxes are, "overlay" when a
+    # model had to work them out from a picture of the page. The doctor is
+    # shown the difference, because only one of the two needs its geometry
+    # checked before anything is filled — see /forms/{id}/proof.
+    fill_mode: str
     # True when this exact form had been sent in before and its schema came
     # straight out of the bank. Surfaced because it is the difference between
     # a form that has been used and one being read for the first time.
@@ -819,7 +830,13 @@ def upload_form(
     # A scan, an encrypted file, or a form with nothing to write into. Answered
     # with the reason and what to do next, because "unsupported" tells a doctor
     # holding a form nothing at all.
-    refusal = refusal_for(probe)
+    # Whether a form with no fillable boxes can be read at all depends on
+    # having a rasterizer. Asked here rather than assumed, so a deployment
+    # without PyMuPDF refuses scans the way it always did instead of raising
+    # ImportError on the first doctor who uploads one.
+    can_render = vision_available()
+
+    refusal = refusal_for(probe, can_render=can_render)
     if refusal:
         raise HTTPException(status_code=422, detail=refusal)
 
@@ -836,8 +853,13 @@ def upload_form(
     known = schema is not None
 
     if schema is None:
+        # Two ways to read a blank form, and the PDF decides which. Its own
+        # AcroForm boxes when it has them — exact, and free of any question of
+        # geometry. Its rendered pages when it does not, which is the only
+        # thing left to try on a scan and is why `/proof` exists.
+        derive = derive_schema if probe.fillable else derive_overlay_schema
         try:
-            schema = derive_schema(
+            schema = derive(
                 data,
                 form_id,
                 display_name=display_name,
@@ -862,6 +884,7 @@ def upload_form(
         form_id=schema.form_id,
         display_name=schema.display_name or display_name,
         known=known,
+        fill_mode=schema.fill_mode,
         fields=[
             UploadedField(
                 id=field.id,
@@ -873,6 +896,55 @@ def upload_form(
             )
             for field in schema.fields
         ],
+    )
+
+
+@app.post("/forms/{form_id}/proof")
+def form_proof(form_id: str) -> Response:
+    """The blank form with every box drawn on it, stamped with its own field id.
+
+    THE POINT OF THIS ROUTE. An overlay schema's coordinates were worked out by
+    a model looking at a picture of the page, and nothing downstream can check
+    them: a box 15pt too high produces a perfectly reasonable answer printed
+    across the printed question above it, and the review screen renders that
+    exactly like a correct one. The doctor cannot audit a JSON schema. They can
+    look at their own form with the boxes drawn on it and see in one glance
+    that "date_of_admission" is sitting on the wrong line.
+
+    It is the same trick `scripts/calibrate_overlay.py --proof` uses to check
+    the three hand-calibrated forms, which is where the idea comes from — the
+    field ids ARE the values, so `overlay_fill` needs no special mode.
+
+    An acroform schema does not need it: the PDF stated where its boxes are.
+    Refused explicitly rather than returning something meaningless.
+    """
+    schema = _get_schema(form_id)
+    if schema.fill_mode != "overlay":
+        raise HTTPException(
+            status_code=422,
+            detail="This form has its own fillable boxes, so there is no geometry to check.",
+        )
+
+    blank = _blank_form_bytes(schema)
+    # Every box filled with its own id. A checkbox has no text to draw, so it
+    # gets its mark instead — an empty tick box would be the one kind of box
+    # invisible on the proof sheet.
+    values: dict[str, str | bool | None] = {
+        field.id: (True if field.type == "checkbox" else field.id)
+        for field in schema.fields
+        if field.box is not None
+    }
+    try:
+        pdf_bytes = overlay_fill(blank, schema.boxes, values)
+    except OverlayFillError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{schema.form_id}_boxes.pdf"'
+        },
     )
 
 

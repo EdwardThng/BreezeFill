@@ -24,6 +24,37 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEV_PDF = REPO_ROOT / "forms" / "dev_sample.pdf"
 SCANNED = REPO_ROOT / "forms" / "scans_unsupported" / "henner_prior_agreement.pdf"
 
+
+class StubVision:
+    """The vision call, replaced. Two believable boxes on every page."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.messages = self
+
+    def create(self, **kwargs):
+        self.calls += 1
+        fields = [
+            {"label": "Diagnosis", "description": "", "type": "text",
+             "options": [], "x": 0.1, "y": 0.30, "w": 0.5, "h": 0.02},
+            {"label": "NRIC / FIN", "description": "", "type": "text",
+             "options": [], "x": 0.1, "y": 0.40, "w": 0.5, "h": 0.02},
+        ]
+
+        class Block:
+            type = "text"
+
+            def __init__(self, text):
+                self.text = text
+
+        class Response:
+            stop_reason = "end_turn"
+
+            def __init__(self, text):
+                self.content = [Block(text)]
+
+        return Response(json.dumps({"fields": fields}))
+
 client = TestClient(main.app)
 
 
@@ -97,6 +128,16 @@ def no_model(monkeypatch):
         return real(data, form_id, client=stub, **kwargs)
 
     monkeypatch.setattr(main, "derive_schema", derive)
+
+    # The scanned path too, so a test that reaches it does not call Anthropic.
+    vision = StubVision()
+    real_overlay = main.derive_overlay_schema
+
+    def derive_overlay(data, form_id, **kwargs):
+        return real_overlay(data, form_id, client=vision, **kwargs)
+
+    monkeypatch.setattr(main, "derive_overlay_schema", derive_overlay)
+    stub.vision = vision
     return stub
 
 
@@ -145,13 +186,19 @@ class TestUploadingABlankForm:
 
 
 class TestWhatIsRefused:
-    def test_a_scan_is_refused_with_somewhere_to_go_next(self, bank, no_model) -> None:
+    def test_a_scan_is_refused_when_this_deployment_cannot_render(
+        self, bank, no_model, monkeypatch
+    ) -> None:
+        # PyMuPDF was a calibration-only dependency for most of this project's
+        # life. A deployment without it must refuse a scan the way it always
+        # did, rather than raise ImportError on the first doctor who sends one.
+        monkeypatch.setattr(main, "vision_available", lambda: False)
         response = client.post(
             "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
         )
         assert response.status_code == 422
         assert "scan" in response.json()["detail"]
-        assert no_model.calls == 0, "a scan should cost nothing"
+        assert no_model.calls == 0, "a scan should cost nothing when it cannot be read"
 
     def test_a_filled_claim_is_refused_and_never_banked(self, bank, no_model) -> None:
         filled = fill_pdf(DEV_PDF, {"Text_PatientName": "A Synthetic Patient"})
@@ -236,3 +283,107 @@ class TestAnUploadedFormIsAnOrdinaryForm:
         client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
         listed = [f["form_id"] for f in client.get("/forms").json()]
         assert not any(f.startswith("upload_") for f in listed)
+
+
+class TestAScannedFormTakesTheVisionPath:
+    """Five of the seven real insurer forms have no fields and no text. This is
+    the only way to read them, and the only one whose geometry rests on nothing
+    but the model's word."""
+
+    def test_a_scan_becomes_an_overlay_schema(self, bank, no_model) -> None:
+        response = client.post(
+            "/forms/upload",
+            json={"pdf_base64": b64(SCANNED.read_bytes()), "filename": "henner.pdf"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["fill_mode"] == "overlay"
+        assert {f["label"] for f in body["fields"]} == {"Diagnosis", "NRIC / FIN"}
+
+    def test_the_doctor_is_told_which_kind_of_reading_this_was(self, bank, no_model) -> None:
+        # Only one of the two needs its geometry checked, so the difference has
+        # to reach the surface that decides whether to show a proof sheet.
+        scan = client.post("/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())})
+        fillable = client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
+        assert scan.json()["fill_mode"] == "overlay"
+        assert fillable.json()["fill_mode"] == "acroform"
+
+    def test_a_fillable_form_never_reaches_the_vision_path(self, bank, no_model) -> None:
+        # It costs a model call per page and its geometry is guessed. A PDF
+        # that states where its own boxes are must never be read by looking.
+        client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
+        assert no_model.vision.calls == 0
+
+    def test_a_scanned_form_is_banked_like_any_other(self, bank, no_model) -> None:
+        payload = {"pdf_base64": b64(SCANNED.read_bytes())}
+        client.post("/forms/upload", json=payload)
+        before = no_model.vision.calls
+        second = client.post("/forms/upload", json=payload)
+
+        assert no_model.vision.calls == before, "the second upload paid for vision again"
+        assert second.json()["known"] is True
+
+    def test_the_filled_scan_comes_back_as_a_pdf(self, bank, no_model) -> None:
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+        ).json()
+        diagnosis = next(f for f in uploaded["fields"] if f["label"] == "Diagnosis")
+
+        response = client.post(
+            f"/forms/{uploaded['form_id']}/pdf",
+            json={"values": {diagnosis["id"]: "Acute tonsillitis"}},
+        )
+        assert response.status_code == 200
+        assert response.content.startswith(b"%PDF-")
+
+
+class TestTheProofSheet:
+    """The answer to the one thing review cannot show a doctor: a box that is
+    in the wrong place. They cannot audit a schema; they can look at their own
+    form with the boxes drawn on it."""
+
+    def test_the_proof_sheet_is_the_form_with_the_boxes_stamped_on_it(
+        self, bank, no_model
+    ) -> None:
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+        ).json()
+
+        response = client.post(f"/forms/{uploaded['form_id']}/proof")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content.startswith(b"%PDF-")
+
+    def test_it_is_shown_in_the_browser_rather_than_downloaded(self, bank, no_model) -> None:
+        # A doctor checks it and goes back. Putting it in Downloads beside the
+        # filled forms is a way to sign the wrong file later.
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+        ).json()
+        response = client.post(f"/forms/{uploaded['form_id']}/proof")
+        assert response.headers["content-disposition"].startswith("inline")
+
+    def test_every_field_id_is_stamped_somewhere(self, bank, no_model) -> None:
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+        ).json()
+        proof = client.post(f"/forms/{uploaded['form_id']}/proof").content
+
+        import io
+
+        from pypdf import PdfReader
+
+        text = "".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(proof)).pages)
+        for f in uploaded["fields"]:
+            assert f["id"] in text, f"{f['id']} was not drawn on the proof sheet"
+
+    def test_a_fillable_form_has_no_geometry_to_check(self, bank, no_model) -> None:
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+        ).json()
+        response = client.post(f"/forms/{uploaded['form_id']}/proof")
+        assert response.status_code == 422
+        assert "own fillable boxes" in response.json()["detail"]
+
+    def test_an_unknown_form_is_a_404(self, bank) -> None:
+        assert client.post(f"/forms/upload_{'b' * 32}/proof").status_code == 404

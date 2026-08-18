@@ -186,11 +186,18 @@ SCANNED_REFUSAL = (
 )
 
 
-def refusal_for(probe: PdfProbe) -> str | None:
+def refusal_for(probe: PdfProbe, can_render: bool = False) -> str | None:
     """Why this upload cannot be mapped, or None if it can.
 
     Returned rather than raised: the caller shows it to the doctor, and a
     refusal here is an ordinary answer about an ordinary file, not a fault.
+
+    `can_render` says whether this deployment has a rasterizer, which is what
+    decides the fate of a form with no fillable boxes. With one, the page is
+    rendered and read by `vision_intake`; without one there is nothing left to
+    try. It defaults to False so that the refusal is what happens when nobody
+    has thought about it — a wrong refusal costs a doctor a form, and a wrong
+    acceptance costs them a stamped-on page they cannot see is wrong.
     """
     if probe.encrypted:
         return (
@@ -199,18 +206,23 @@ def refusal_for(probe: PdfProbe) -> str | None:
         )
     if probe.pages == 0:
         return "That PDF has no pages in it."
-    if not probe.fillable and not probe.has_text_layer:
+    if probe.fillable:
+        return None
+    if can_render:
+        # No boxes and no text is a scan, which is now a path rather than a
+        # dead end. No boxes but text present is a flat digital form, and the
+        # same treatment reads it.
+        return None
+    if not probe.has_text_layer:
         return SCANNED_REFUSAL
-    if not probe.fillable:
-        # Readable but not writable. Worth its own message: the doctor can see
-        # text on the page, so "it's a scan" would read as plainly wrong.
-        return (
-            "This form has no fillable boxes — the text is there, but there is "
-            "nowhere to write an answer. BreezeFill can only fill forms with "
-            "form fields in them, for now. Check the insurer's website for a "
-            "fillable version, or send this one to us and we will add it."
-        )
-    return None
+    # Readable but not writable. Worth its own message: the doctor can see
+    # text on the page, so "it's a scan" would read as plainly wrong.
+    return (
+        "This form has no fillable boxes — the text is there, but there is "
+        "nowhere to write an answer. BreezeFill can only fill forms with "
+        "form fields in them, for now. Check the insurer's website for a "
+        "fillable version, or send this one to us and we will add it."
+    )
 
 
 # ---------------------------------------------------------------------------
