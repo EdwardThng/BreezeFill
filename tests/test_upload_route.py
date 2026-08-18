@@ -62,6 +62,18 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def not_curated(data: bytes) -> bytes:
+    """The same form, but not byte-identical to the repo's own copy.
+
+    The upload route recognises a hand-authored form by hashing its PDF, so
+    every test about DERIVING a schema has to use a file that is not one of
+    them. Trailing bytes after %%EOF are ignored by every reader — and this is
+    the realistic case anyway: a form re-saved by a mail client, a scanner or
+    the insurer's own website is the same form with different bytes.
+    """
+    return data + b"\n% a doctor's own copy, not the repo's\n"
+
+
 class StubClient:
     """Anthropic, replaced. Names every box after the PDF field behind it."""
 
@@ -145,7 +157,7 @@ class TestUploadingABlankForm:
     def test_a_fillable_form_comes_back_as_a_list_of_questions(self, bank, no_model) -> None:
         response = client.post(
             "/forms/upload",
-            json={"pdf_base64": b64(DEV_PDF.read_bytes()), "filename": "dev_sample.pdf"},
+            json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes())), "filename": "dev_sample.pdf"},
         )
         assert response.status_code == 200
         body = response.json()
@@ -158,14 +170,14 @@ class TestUploadingABlankForm:
         # Shown to the doctor because these are the boxes answered from what
         # they typed rather than from the note — and they arrive already green.
         response = client.post(
-            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))}
         )
         by_label = {f["label"]: f for f in response.json()["fields"]}
         assert by_label["Patient Name"]["source"] == "demographics.full_name"
         assert by_label["Diagnosis"]["source"] == "llm"
 
     def test_sending_the_same_form_twice_derives_it_once(self, bank, no_model) -> None:
-        payload = {"pdf_base64": b64(DEV_PDF.read_bytes()), "filename": "dev_sample.pdf"}
+        payload = {"pdf_base64": b64(not_curated(DEV_PDF.read_bytes())), "filename": "dev_sample.pdf"}
         first = client.post("/forms/upload", json=payload)
         after_first = no_model.calls
         second = client.post("/forms/upload", json=payload)
@@ -179,7 +191,7 @@ class TestUploadingABlankForm:
     ) -> None:
         # The key is the PDF's bytes. A doctor who renamed the file, or saved
         # it from a different mailbox, must not pay to derive it again.
-        data = b64(DEV_PDF.read_bytes())
+        data = b64(not_curated(DEV_PDF.read_bytes()))
         one = client.post("/forms/upload", json={"pdf_base64": data, "filename": "a.pdf"})
         two = client.post("/forms/upload", json={"pdf_base64": data, "filename": "b.pdf"})
         assert one.json()["form_id"] == two.json()["form_id"]
@@ -194,14 +206,14 @@ class TestWhatIsRefused:
         # did, rather than raise ImportError on the first doctor who sends one.
         monkeypatch.setattr(main, "vision_available", lambda: False)
         response = client.post(
-            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         )
         assert response.status_code == 422
         assert "scan" in response.json()["detail"]
         assert no_model.calls == 0, "a scan should cost nothing when it cannot be read"
 
     def test_a_filled_claim_is_refused_and_never_banked(self, bank, no_model) -> None:
-        filled = fill_pdf(DEV_PDF, {"Text_PatientName": "A Synthetic Patient"})
+        filled = fill_pdf(not_curated(DEV_PDF.read_bytes()), {"Text_PatientName": "A Synthetic Patient"})
         response = client.post("/forms/upload", json={"pdf_base64": b64(filled)})
 
         assert response.status_code == 422
@@ -233,7 +245,7 @@ class TestAnUploadedFormIsAnOrdinaryForm:
 
     def test_the_form_is_found_again_by_its_id_alone(self, bank, no_model) -> None:
         form_id = client.post(
-            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))}
         ).json()["form_id"]
 
         # A different machine would have this and nothing else. Everything
@@ -245,7 +257,7 @@ class TestAnUploadedFormIsAnOrdinaryForm:
 
     def test_the_filled_pdf_comes_back_from_the_banked_blank(self, bank, no_model) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))}
         ).json()
         diagnosis = next(f for f in uploaded["fields"] if f["label"] == "Diagnosis")
 
@@ -259,7 +271,7 @@ class TestAnUploadedFormIsAnOrdinaryForm:
 
     def test_a_fill_for_a_form_no_longer_in_the_bank_says_so(self, bank, no_model) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))}
         ).json()
         schema = main._get_schema(uploaded["form_id"])
         for path in Path(bank.root).glob("*.pdf"):
@@ -280,7 +292,7 @@ class TestAnUploadedFormIsAnOrdinaryForm:
     def test_uploaded_forms_stay_out_of_the_public_picker(self, bank, no_model) -> None:
         # `/forms` is the curated bank a doctor is offered. One clinic's upload
         # is not something to put in front of another's.
-        client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
+        client.post("/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))})
         listed = [f["form_id"] for f in client.get("/forms").json()]
         assert not any(f.startswith("upload_") for f in listed)
 
@@ -293,7 +305,7 @@ class TestAScannedFormTakesTheVisionPath:
     def test_a_scan_becomes_an_overlay_schema(self, bank, no_model) -> None:
         response = client.post(
             "/forms/upload",
-            json={"pdf_base64": b64(SCANNED.read_bytes()), "filename": "henner.pdf"},
+            json={"pdf_base64": b64(not_curated(SCANNED.read_bytes())), "filename": "henner.pdf"},
         )
         assert response.status_code == 200
         body = response.json()
@@ -303,19 +315,19 @@ class TestAScannedFormTakesTheVisionPath:
     def test_the_doctor_is_told_which_kind_of_reading_this_was(self, bank, no_model) -> None:
         # Only one of the two needs its geometry checked, so the difference has
         # to reach the surface that decides whether to show a proof sheet.
-        scan = client.post("/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())})
-        fillable = client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
+        scan = client.post("/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))})
+        fillable = client.post("/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))})
         assert scan.json()["fill_mode"] == "overlay"
         assert fillable.json()["fill_mode"] == "acroform"
 
     def test_a_fillable_form_never_reaches_the_vision_path(self, bank, no_model) -> None:
         # It costs a model call per page and its geometry is guessed. A PDF
         # that states where its own boxes are must never be read by looking.
-        client.post("/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())})
+        client.post("/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))})
         assert no_model.vision.calls == 0
 
     def test_a_scanned_form_is_banked_like_any_other(self, bank, no_model) -> None:
-        payload = {"pdf_base64": b64(SCANNED.read_bytes())}
+        payload = {"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         client.post("/forms/upload", json=payload)
         before = no_model.vision.calls
         second = client.post("/forms/upload", json=payload)
@@ -325,7 +337,7 @@ class TestAScannedFormTakesTheVisionPath:
 
     def test_the_filled_scan_comes_back_as_a_pdf(self, bank, no_model) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         ).json()
         diagnosis = next(f for f in uploaded["fields"] if f["label"] == "Diagnosis")
 
@@ -346,7 +358,7 @@ class TestTheProofSheet:
         self, bank, no_model
     ) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         ).json()
 
         response = client.post(f"/forms/{uploaded['form_id']}/proof")
@@ -358,14 +370,14 @@ class TestTheProofSheet:
         # A doctor checks it and goes back. Putting it in Downloads beside the
         # filled forms is a way to sign the wrong file later.
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         ).json()
         response = client.post(f"/forms/{uploaded['form_id']}/proof")
         assert response.headers["content-disposition"].startswith("inline")
 
     def test_every_field_id_is_stamped_somewhere(self, bank, no_model) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(SCANNED.read_bytes()))}
         ).json()
         proof = client.post(f"/forms/{uploaded['form_id']}/proof").content
 
@@ -379,7 +391,7 @@ class TestTheProofSheet:
 
     def test_a_fillable_form_has_no_geometry_to_check(self, bank, no_model) -> None:
         uploaded = client.post(
-            "/forms/upload", json={"pdf_base64": b64(DEV_PDF.read_bytes())}
+            "/forms/upload", json={"pdf_base64": b64(not_curated(DEV_PDF.read_bytes()))}
         ).json()
         response = client.post(f"/forms/{uploaded['form_id']}/proof")
         assert response.status_code == 422
@@ -387,3 +399,57 @@ class TestTheProofSheet:
 
     def test_an_unknown_form_is_a_404(self, bank) -> None:
         assert client.post(f"/forms/upload_{'b' * 32}/proof").status_code == 404
+
+
+class TestAnUploadOfAFormTheRepoAlreadyDescribes:
+    """The website has no form picker any more, so the only way to reach a
+    hand-authored schema is to upload its PDF. It had better find it."""
+
+    def test_the_hand_written_schema_wins_over_deriving_one(self, bank, no_model) -> None:
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        response = client.post(
+            "/forms/upload", json={"pdf_base64": b64(aia.read_bytes()), "filename": "aia.pdf"}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["form_id"] == "aia_ghs_claim"
+        # 24 curated boxes, not the 98 raw AcroForm fields the PDF carries.
+        assert len(body["fields"]) == 24
+        assert body["known"] is True
+
+    def test_it_costs_no_model_call_at_all(self, bank, no_model) -> None:
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        client.post("/forms/upload", json={"pdf_base64": b64(aia.read_bytes())})
+        assert no_model.calls == 0
+        assert no_model.vision.calls == 0
+
+    def test_a_curated_scan_is_recognised_too(self, bank, no_model) -> None:
+        # The three overlay forms were hand-calibrated box by box. Deriving one
+        # by looking at it would throw away that work and guess at geometry
+        # somebody already measured.
+        response = client.post(
+            "/forms/upload", json={"pdf_base64": b64(SCANNED.read_bytes())}
+        )
+        body = response.json()
+        assert body["form_id"] == "henner_prior_agreement"
+        assert body["fill_mode"] == "overlay"
+        assert no_model.vision.calls == 0
+
+    def test_it_is_not_banked_a_second_time(self, bank, no_model) -> None:
+        # It is already described in the repo. Writing a copy into the bank
+        # would create a second answer to the same question, and the bank's
+        # copy would be the derived one.
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        client.post("/forms/upload", json={"pdf_base64": b64(aia.read_bytes())})
+        assert list(Path(bank.root).glob("*")) == []
+
+    def test_the_filled_pdf_still_comes_back(self, bank, no_model) -> None:
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        uploaded = client.post(
+            "/forms/upload", json={"pdf_base64": b64(aia.read_bytes())}
+        ).json()
+        response = client.post(
+            f"/forms/{uploaded['form_id']}/pdf", json={"values": {}}
+        )
+        assert response.status_code == 200
+        assert response.content.startswith(b"%PDF-")

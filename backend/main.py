@@ -121,6 +121,38 @@ def _load_schemas() -> dict[str, FormSchema]:
 
 FORM_SCHEMAS = _load_schemas()
 
+
+def _curated_by_pdf() -> dict[str, str]:
+    """sha of a hand-authored form's PDF -> its form_id.
+
+    The website's upload flow has no form picker any more: the doctor sends the
+    blank form itself and the server works out what it is. Without this, a
+    doctor uploading the AIA GHS claim would get 98 boxes derived from scratch
+    where a hand-written schema already describes the 24 that matter, with the
+    descriptions someone wrote by hand ("the date the patient FIRST consulted
+    this doctor for this condition, not the latest visit").
+
+    So the curated schemas are checked first, by the PDF's own bytes. A doctor
+    who happens to hold the same file the repo does gets the better schema and
+    never learns there was a choice.
+    """
+    found: dict[str, str] = {}
+    for schema in FORM_SCHEMAS.values():
+        if not schema.pdf_path:
+            continue
+        path = REPO_ROOT / schema.pdf_path
+        try:
+            found[key_for(path.read_bytes())] = schema.form_id
+        except OSError:
+            # A schema pointing at a PDF that is not in this checkout is a
+            # packaging problem, not a request-time one. Skipped rather than
+            # fatal: every other form still works.
+            logger.warning("curated form PDF missing for %s", schema.form_id)
+    return found
+
+
+CURATED_BY_PDF = _curated_by_pdf()
+
 # The bank of schemas derived from uploaded forms. Built once and held, because
 # the Blob backend lists itself on first use and re-listing per request would
 # turn one slow call into one per field. Tests replace it outright.
@@ -792,6 +824,17 @@ class UploadFormResponse(BaseModel):
     known: bool
 
 
+def _uploaded_field(field: FormField) -> UploadedField:
+    return UploadedField(
+        id=field.id,
+        label=field.display_label,
+        description=field.description,
+        type=field.type,
+        options=field.options,
+        source=field.source,
+    )
+
+
 @app.post("/forms/upload", response_model=UploadFormResponse)
 def upload_form(
     request: UploadFormRequest,
@@ -849,6 +892,20 @@ def upload_form(
     form_id = form_id_for(key)
     display_name = display_name_for(request.filename)
 
+    # The hand-authored schemas first. They describe the same PDFs better than
+    # anything derived from one, and a doctor holding the same file the repo
+    # holds should get the good one.
+    curated = CURATED_BY_PDF.get(key)
+    if curated is not None:
+        schema = FORM_SCHEMAS[curated]
+        return UploadFormResponse(
+            form_id=schema.form_id,
+            display_name=schema.display_name or display_name,
+            known=True,
+            fill_mode=schema.fill_mode,
+            fields=[_uploaded_field(field) for field in schema.fields],
+        )
+
     schema = bank().get_schema(key)
     known = schema is not None
 
@@ -885,17 +942,7 @@ def upload_form(
         display_name=schema.display_name or display_name,
         known=known,
         fill_mode=schema.fill_mode,
-        fields=[
-            UploadedField(
-                id=field.id,
-                label=field.display_label,
-                description=field.description,
-                type=field.type,
-                options=field.options,
-                source=field.source,
-            )
-            for field in schema.fields
-        ],
+        fields=[_uploaded_field(field) for field in schema.fields],
     )
 
 
