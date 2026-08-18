@@ -56,7 +56,7 @@
       </span>
       <!-- Overwritten by showStep on the first render; this is what shows for
            the instant before that, so it has to agree with STEPS. -->
-      <span class="step-counter" id="step-counter">Step 1 of 4</span>
+      <span class="step-counter" id="step-counter" hidden>Step 1 of 4</span>
     </header>
 
     <!--
@@ -133,7 +133,40 @@
       <div class="done-rows" id="done-rows"></div>
 
       <!-- Step 1 — the name ---------------------------------------------- -->
-      <section class="step" id="step-name" aria-labelledby="h-name">
+      <!-- Step 0 — which kind of form ---------------------------------- -->
+      <!--
+        Asked before anything else because the two answers need different
+        products, and only one of them is this panel. A doctor filling the
+        insurer's own web form is standing on the page BreezeFill fills; a
+        doctor filling a PDF has nothing on screen for it to write into, and
+        every step below would end in a fill button with no target.
+
+        NOT one of STEPS, deliberately. It is a fork rather than a stage: it
+        collects nothing, nothing can be corrected in it later, and putting it
+        in the counter would make the flow read "Step 2 of 5" for the whole of
+        the work that matters.
+
+        The answer is NOT remembered. `chrome.storage` holds the licence key
+        and nothing else, and a doctor who does portals on Monday and PDFs on
+        Tuesday is the ordinary case rather than the awkward one — see the
+        panel's own comment on saveLicence.
+      -->
+      <section class="step" id="step-route" aria-labelledby="h-route">
+        <h2 id="h-route">Where are you filling this form?</h2>
+        <p class="step-sub">
+          Insurers send both. Which one is in front of you?
+        </p>
+        <button id="route-portal" class="primary" type="button">
+          On the insurer&rsquo;s website
+          <span class="route-sub">This page — BreezeFill fills it in place</span>
+        </button>
+        <button id="route-pdf" class="route-btn" type="button">
+          It&rsquo;s a PDF I print and fill
+          <span class="route-sub">Opens breezefill.com, where you upload the form</span>
+        </button>
+      </section>
+
+      <section class="step" id="step-name" aria-labelledby="h-name" hidden>
         <h2 id="h-name">Who is this claim for?</h2>
         <label class="field">
           <span>Full name</span>

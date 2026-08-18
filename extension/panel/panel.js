@@ -67,6 +67,13 @@
 // real insurer's. That needs an unpacked install, which is where Advanced is.
 const DEFAULT_API_BASE = "https://api.breezefill.com";
 
+// Where a doctor filling a PDF is sent. Not derived from DEFAULT_API_BASE:
+// that is the API's host and this is the website's, and they are separate
+// names on purpose so the API can move without touching installs (see the
+// domain note in CLAUDE.md). A constant for the same reason DEFAULT_API_BASE
+// is one — an installed extension cannot be edited afterwards.
+const SITE_URL = "https://breezefill.com";
+
 // Order matters: the orchestrator expects the other three to have registered
 // themselves on globalThis by the time it runs.
 const INJECT_FILES = [
@@ -2446,6 +2453,44 @@ for (const id of Object.keys(DEMOGRAPHIC_FIELDS)) {
   });
 
 }
+/**
+ * The fork, before anything else: is the form on this page, or is it a PDF?
+ *
+ * Asked because only one of the two answers is this panel. The whole flow
+ * below ends in a fill button that writes into the tab the doctor granted, and
+ * a doctor holding a PDF has no such tab — they would type a name, paste a
+ * note, confirm six answers and then find there was nothing to fill.
+ *
+ * The PDF answer opens the website in a new tab rather than growing a second
+ * product in here. A side panel cannot render a PDF, `chrome.storage` may not
+ * hold one, and the website already does this end to end: upload the blank
+ * form, paste or attach the notes, correct every answer, download it filled.
+ *
+ * `chrome.tabs.create` needs no permission — the `tabs` permission gates
+ * READING a tab's url and title, which this panel deliberately cannot do and
+ * must keep being unable to do.
+ */
+function chooseRoute(kind) {
+  if (kind === "pdf") {
+    const url = `${SITE_URL}/#/app`;
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
+      chrome.tabs.create({ url });
+    }
+    // The panel is deliberately left on the fork rather than advanced. The
+    // doctor's work is now in the other tab, and a panel sitting on step 1
+    // behind it is an invitation to fill in a form twice.
+    return;
+  }
+  $("step-route").hidden = true;
+  // The counter is meaningless until a route is chosen — the fork is not one
+  // of STEPS — so it stays hidden behind it and showStep fills it in.
+  $("step-counter").hidden = false;
+  showStep("name");
+}
+
+$("route-portal").addEventListener("click", () => chooseRoute("portal"));
+$("route-pdf").addEventListener("click", () => chooseRoute("pdf"));
+
 // Advance only on an explicit click — never on typing, and never because the
 // insurer's page changed shape underneath.
 $("name-next").addEventListener("click", () => {

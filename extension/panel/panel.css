@@ -1402,3 +1402,44 @@ button.choice:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---------------------------------------------------------------------------
+   The fork: insurer's website, or a PDF.
+
+   `.route-*` are new names — checked against every class already in this file.
+   The second button is deliberately quieter than `.primary`: on a panel opened
+   by clicking the icon ON an insurer's page, the portal answer is nearly always
+   the right one, and the PDF answer leaves for another tab.
+   --------------------------------------------------------------------------- */
+
+#step-route .primary,
+.route-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.route-btn {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--btn-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.route-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.75;
+}

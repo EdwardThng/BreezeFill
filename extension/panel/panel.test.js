@@ -121,6 +121,10 @@ function loadPanel() {
     runtime_manifest_version: undefined,
     tabs: {
       query: vi.fn().mockResolvedValue([{ id: 1 }]),
+      // Opening a tab needs no permission — `tabs` gates READING a tab's url
+      // and title, which this panel deliberately cannot do. Mocked so the PDF
+      // fork can be asserted on rather than navigating jsdom.
+      create: vi.fn(),
       sendMessage: vi.fn((_tabId, message) =>
         Promise.resolve(page[message.action] || { ok: false })
       ),
@@ -3368,5 +3372,85 @@ describe("the licence key", () => {
     const note = $("licence-note").textContent;
     expect(note).not.toMatch(/active|valid|verified|subscribed/i);
     expect(note).toMatch(/checked when you map/i);
+  });
+});
+
+
+describe("the fork between a portal form and a PDF", () => {
+  /**
+   * The panel asks before it collects anything, because only one of the two
+   * answers is this product. Everything below the fork ends in a fill button
+   * that writes into the granted tab, and a doctor holding a PDF has no such
+   * tab — they would type a name, paste a note, confirm six answers, and then
+   * find there was nothing to fill.
+   */
+
+  test("the panel opens on the fork, not on step 1", async () => {
+    loadPanel();
+    await settle();
+    expect($("step-route").hidden).toBe(false);
+    expect($("step-name").hidden).toBe(true);
+  });
+
+  test("the step counter stays hidden until a route is chosen", async () => {
+    // The fork is not one of STEPS. Numbering it would make the work that
+    // matters read "Step 2 of 5", and leaving the counter showing "Step 1 of 4"
+    // over a question that is not step 1 is worse.
+    loadPanel();
+    await settle();
+    expect($("step-counter").hidden).toBe(true);
+  });
+
+  test("choosing the portal route reveals step 1 and the counter", async () => {
+    loadPanel();
+    await settle();
+    $("route-portal").click();
+
+    expect($("step-route").hidden).toBe(true);
+    expect($("step-name").hidden).toBe(false);
+    expect($("step-counter").hidden).toBe(false);
+    expect($("step-counter").textContent).toBe("Step 1 of 4");
+  });
+
+  test("choosing the portal route opens no tab", async () => {
+    loadPanel();
+    await settle();
+    $("route-portal").click();
+    expect(chrome.tabs.create).not.toHaveBeenCalled();
+  });
+
+  test("choosing the PDF route opens the website's claim flow", async () => {
+    loadPanel();
+    await settle();
+    $("route-pdf").click();
+
+    expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+    const { url } = chrome.tabs.create.mock.calls[0][0];
+    // The website's host, not the API's. They are separate names so the API
+    // can move without touching installs that can never be edited again.
+    expect(url).toBe("https://breezefill.com/#/app");
+  });
+
+  test("the PDF route leaves the panel on the fork rather than advancing it", async () => {
+    // The doctor's work is now in the other tab. A panel sitting on step 1
+    // behind it is an invitation to fill the same claim in twice.
+    loadPanel();
+    await settle();
+    $("route-pdf").click();
+
+    expect($("step-route").hidden).toBe(false);
+    expect($("step-name").hidden).toBe(true);
+  });
+
+  test("neither answer is written to storage", async () => {
+    // chrome.storage holds the licence key and nothing else. A doctor who does
+    // portals on Monday and PDFs on Tuesday is the ordinary case, so there is
+    // nothing here worth remembering even if the rule allowed it.
+    loadPanel();
+    await settle();
+    storageWrites.length = 0;
+    $("route-portal").click();
+    $("route-pdf").click();
+    expect(storageWrites).toEqual([]);
   });
 });
