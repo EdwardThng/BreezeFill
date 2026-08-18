@@ -345,7 +345,7 @@ def derive_overlay_schema(
     is why this path is not finished when this function returns.
     """
     from demographics import sources_for_labels
-    from form_intake import IntakeError, _slug
+    from form_intake import IntakeError, _slug, read_pages_in_parallel
 
     pages = render_pages(data, max_pages=max_pages)
     if not pages:
@@ -353,9 +353,18 @@ def derive_overlay_schema(
 
     client = client or _default_client()
 
+    # Every page at once. A vision call carries an image and is the slowest
+    # thing in this product, so reading a seven-page form in series is seven
+    # times the wall clock for no benefit — the pages do not inform each other.
+    # See MAX_CONCURRENT_PAGES in form_intake for the cap and what it prevents.
+    by_page = read_pages_in_parallel(
+        {page.number: page for page in pages},
+        lambda _number, page: describe_page(page, client, model),
+    )
+
     found: list[tuple[dict[str, Any], FieldBox]] = []
     for page in pages:
-        for raw in describe_page(page, client, model):
+        for raw in by_page.get(page.number) or []:
             label = str(raw.get("label") or "").strip()
             if not label:
                 continue

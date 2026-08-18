@@ -289,6 +289,11 @@ is acceptable. See **Working style** at the end of this file.
 - Use a PDF that is NOT byte-identical to one in `forms/` when testing schema
   derivation; `CURATED_BY_PDF` recognises the repo's own copies and short-
   circuits the whole path.
+- Count the MODEL CALLS a request makes before shipping it, and multiply by the
+  slowest plausible call. One-per-page looked fine in tests that stub the model
+  and 504'd in production on a three-page form.
+- `vercel.json` sets `maxDuration` explicitly. It is not the platform default,
+  so read it rather than assuming the 300s the docs quote.
 
 ---
 
@@ -997,6 +1002,44 @@ Two layers, and the second is the one that matters:
   `fill_mode: "overlay"` only, and opens it in a tab rather than downloading it
   — a proof sheet in Downloads beside the real filled forms is a way to print
   and sign the wrong file.
+
+**A 504 on the first real upload (2026-08-18), and it was a wall-clock bug
+rather than a broken one.** A doctor uploaded a blank Great Eastern form that
+was not in the bank and got a gateway timeout after the read had finished.
+
+Two things compounded, and neither was visible from any test:
+
+- `vercel.json` capped the function at **`maxDuration: 120`** — not the 300s
+  the platform allows.
+- **Both derive paths ran one model call per page, in series.** GE's GHS claim
+  is three pages of 61, 58 and 24 boxes, each call emitting a line per box, so
+  page 2 alone is ~4,000 output tokens. Three of those back to back is minutes.
+
+The pages are independent — that is *why* it is one call per page — so the
+series was wall clock spent for nothing. `read_pages_in_parallel` in
+`form_intake.py` now runs them together, capped at `MAX_CONCURRENT_PAGES = 4`
+so a twelve-page form meets a rate limit instead of a timeout. Measured 3x on a
+three-page form. `maxDuration` is 300 for headroom.
+
+Two properties the tests now pin, because both are invisible until they bite:
+**a page that raises is skipped rather than fatal** (the docstring claimed this
+and only delivered it for model-level refusals — an exception lost the whole
+form), and **field order does not depend on which page finishes first**. The
+second one matters more than it looks: ids are slugged with a collision
+counter, so a form read in a different order each run would attach `date_2` to
+a different box every time, and a banked schema would then disagree with the
+form it came from.
+
+`test_every_page_is_in_flight_before_any_of_them_finishes` uses a
+`threading.Barrier` sized to the page count, so a serial implementation blocks
+and fails. Verified by forcing `MAX_CONCURRENT_PAGES = 1` and watching it go
+red — a concurrency test that has never been seen to fail is not evidence.
+
+**The lever not pulled: `FORMFILL_DERIVE_MODEL` and `FORMFILL_VISION_MODEL`.**
+Both default to `claude-opus-5`, and a cheaper model would roughly halve this
+again. Left on Opus deliberately — naming a box wrongly puts a value in the
+wrong box on a form a doctor signs, which is the same class of error the whole
+product is arranged against. Change it if cost bites, not for speed.
 
 **PyMuPDF is a runtime dependency now**, in both requirements files. It was
 calibration-only and deliberately excluded until today. `vision_available()`

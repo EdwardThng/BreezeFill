@@ -34,6 +34,7 @@ that sentence, and the doctor chose this file, not us.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -45,7 +46,22 @@ from demographics import sources_for_labels
 from mapping import FormField, FormSchema
 from redaction import scrub_patterns
 
+logger = logging.getLogger("formfill.intake")
+
 DERIVE_MODEL = os.environ.get("FORMFILL_DERIVE_MODEL", "claude-opus-5")
+
+# How many pages are read at once.
+#
+# The pages of a form are independent — that is the whole reason this is one
+# call per page — so reading them in series was wall-clock spent for nothing.
+# It cost a live 504: Great Eastern's GHS claim is three pages of 61, 58 and 24
+# boxes, each call emitting a line per box, which ran past `maxDuration` in
+# vercel.json with the work still going.
+#
+# Capped rather than unbounded because a twelve-page form would otherwise fire
+# twelve concurrent Opus calls and meet a rate limit instead of a timeout,
+# which is the same outage wearing a different hat.
+MAX_CONCURRENT_PAGES = 4
 
 # A page with fewer characters than this has no usable text layer. Scanned
 # forms come back at exactly 0; the threshold is not 0 because a scan with a
@@ -511,6 +527,36 @@ def _describe_page(
     return out
 
 
+def read_pages_in_parallel(jobs: dict[int, Any], work) -> dict[int, Any]:
+    """Run `work(page, payload)` for every page at once, keyed by page number.
+
+    Results come back in a dict rather than a list so the caller reassembles
+    them in page order. That ordering is load-bearing: the field ids are
+    slugged with a collision counter, so a form read in a different order every
+    time would produce `date_2` and `date_3` attached to different boxes on
+    each run — and a banked schema would then disagree with the form it was
+    derived from.
+
+    A page that raises is skipped, not fatal. A schema missing one page of a
+    seven-page form is worth more to the doctor than a refusal, and the review
+    screen shows exactly which questions exist.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    out: dict[int, Any] = {}
+    if not jobs:
+        return out
+    with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_PAGES, len(jobs))) as pool:
+        futures = {page: pool.submit(work, page, payload) for page, payload in jobs.items()}
+        for page, future in futures.items():
+            try:
+                out[page] = future.result()
+            except Exception as exc:
+                # Type only. A message from this path can quote the form's text.
+                logger.warning("page %d could not be read: %s", page, type(exc).__name__)
+    return out
+
+
 def _slug(label: str, taken: set[str]) -> str:
     base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:40] or "field"
     candidate, n = base, 2
@@ -549,13 +595,18 @@ def derive_schema(
     for widget in widgets:
         by_page.setdefault(widget.page, []).append(widget)
 
+    # Every page at once. See MAX_CONCURRENT_PAGES for why this is not a loop.
+    by_page_answers = read_pages_in_parallel(
+        by_page,
+        lambda page, widgets: _describe_page(
+            widgets, page_text.get(page, ""), page, client, model
+        ),
+    )
+
     described: list[tuple[Widget, dict[str, Any]]] = []
     for page in sorted(by_page):
-        page_widgets = by_page[page]
-        answers = _describe_page(
-            page_widgets, page_text.get(page, ""), page, client, model
-        )
-        for index, widget in enumerate(page_widgets):
+        answers = by_page_answers.get(page) or {}
+        for index, widget in enumerate(by_page[page]):
             answer = answers.get(f"b{index}")
             if answer and answer.get("include") and str(answer.get("label", "")).strip():
                 described.append((widget, answer))

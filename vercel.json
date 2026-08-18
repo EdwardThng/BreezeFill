@@ -29,7 +29,7 @@
   ],
   "functions": {
     "api/index.py": {
-      "maxDuration": 120,
+      "maxDuration": 300,
       "excludeFiles": "{frontend/**,public/**,node_modules/**,.venv/**,tests/**,docs/**,scripts/**,**/__pycache__/**,**/*.test.js,**/*.pyc}",
       "includeFiles": "{forms/**,backend/schemas/**,extension/**}"
     }

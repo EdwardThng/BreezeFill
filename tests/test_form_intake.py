@@ -280,3 +280,92 @@ class TestDerivingASchema:
         )
         # Three of the four pages carry widgets; page 1 is instructions.
         assert len(client.prompts) == 3
+
+
+class TestThePagesAreReadAtOnce:
+    """Reading them in series cost a live 504 on 2026-08-18.
+
+    Great Eastern's GHS claim is three pages of 61, 58 and 24 boxes, each one a
+    model call emitting a line per box. In series that ran past `maxDuration`
+    in vercel.json with the work still going, and the doctor got a gateway
+    timeout after waiting for the whole of it.
+    """
+
+    GE = REPO_ROOT / "forms" / "ge_ghs_claim.pdf"
+    ONE_FIELD = {"b0": {"label": "Diagnosis", "type": "text", "include": True}}
+
+    def test_every_page_is_in_flight_before_any_of_them_finishes(self) -> None:
+        import threading
+
+        # Three pages of ge_ghs_claim carry widgets. The barrier only releases
+        # once all three have reached the model call, so a serial
+        # implementation blocks here and fails on the timeout — which is
+        # precisely the regression to catch.
+        at_the_model = threading.Barrier(3, timeout=5)
+
+        class Concurrent(StubClient):
+            def create(self, **kwargs):
+                at_the_model.wait()
+                return super().create(**kwargs)
+
+        schema = derive_schema(
+            self.GE.read_bytes(),
+            "upload_x",
+            pdf_path="bank://x.pdf",
+            client=Concurrent(_answer(self.ONE_FIELD)),
+        )
+        assert schema.fields, "nothing came back"
+
+    def test_a_page_that_raises_is_skipped_rather_than_fatal(self) -> None:
+        # The docstring promised this and delivered it only for model-level
+        # refusals; an exception propagated and lost the whole form.
+        import threading
+
+        lock = threading.Lock()
+        seen = []
+
+        class OneBadPage(StubClient):
+            def create(self, **kwargs):
+                with lock:
+                    seen.append(1)
+                    first = len(seen) == 1
+                if first:
+                    raise OSError("the connection dropped")
+                return super().create(**kwargs)
+
+        schema = derive_schema(
+            self.GE.read_bytes(),
+            "upload_x",
+            pdf_path="bank://x.pdf",
+            client=OneBadPage(_answer(self.ONE_FIELD)),
+        )
+        assert len(seen) == 3, "the other pages were not attempted"
+        assert schema.fields, "one dropped connection lost the whole form"
+
+    def test_the_field_order_does_not_depend_on_which_page_finishes_first(self) -> None:
+        # The ids are slugged with a collision counter, so a form read in a
+        # different order each time would attach `date_2` to a different box on
+        # every run — and a banked schema would then disagree with its own form.
+        import random
+        import time
+
+        def jittery(prompt):
+            time.sleep(random.uniform(0, 0.02))
+            return _answer({
+                "b0": {"label": "Date", "type": "date", "include": True},
+                "b1": {"label": "Date", "type": "date", "include": True},
+            })(prompt)
+
+        runs = [
+            [
+                (f.id, f.pdf_field_name)
+                for f in derive_schema(
+                    self.GE.read_bytes(),
+                    "upload_x",
+                    pdf_path="bank://x.pdf",
+                    client=StubClient(jittery),
+                ).fields
+            ]
+            for _ in range(3)
+        ]
+        assert runs[0] == runs[1] == runs[2]
