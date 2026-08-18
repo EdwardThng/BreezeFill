@@ -126,6 +126,10 @@ backend/
   note_intake.py      Uploaded note PDF -> text. HANDLES PHI, unlike
                       form_intake beside it. Extracts and stops: no redaction,
                       no parse, no model
+  vision_intake.py    Uploaded SCANNED form -> overlay FormSchema, by
+                      rendering each page and asking the model where the boxes
+                      are. The only path whose geometry rests on the model's
+                      word — see /forms/{id}/proof
   form_bank.py        The one thing that persists. Blank forms + derived
                       schemas, keyed by the PDF's own hash
   demographics.py     Paste -> demographic fields, patterns only, never a model.
@@ -272,6 +276,13 @@ is acceptable. See **Working style** at the end of this file.
 - Do not add `python-multipart` for a file upload; base64 in a JSON body keeps
   the deployed function's dependency list where it is and matches every other
   route in `main.py`.
+- Render form pages as JPEG, not PNG — a scan is a photograph and PNG is 6.5x
+  the bytes for nothing a model can read.
+- Never render above ~1568px on the long edge: Anthropic downsizes anything
+  larger, so the extra pixels are billed and discarded.
+- Check a model-supplied box by rendering it, not by reading the numbers. A
+  y-flip looks perfectly plausible on any box near the middle of the page and
+  is obvious the moment you stamp one near the top.
 
 ---
 
@@ -892,20 +903,68 @@ deliberately cannot do. The answer is **not remembered**; `chrome.storage` is
 the licence key and nothing else, and a doctor who does portals on Monday and
 PDFs on Tuesday is the ordinary case.
 
-**Still open, and the owner asked for it directly: the vision path.** Rasterize
-each page, have the model locate every field box, convert to the `FieldBox`
-that `overlay_fill` already consumes — its coordinates are already measured
-from the page's TOP-LEFT precisely because that is the frame you calibrate
-against a rendered image, so the conversion is a multiply with no flip. That
-would cover the five scanned forms and is the majority of the real ones. Two
-things to decide before building it: box accuracy is the whole risk (a box 15pt
-high stamps the answer onto the line above), and the mitigation is to show the
-doctor a **proof sheet** — `scripts/calibrate_overlay.py --proof` already
-renders every box stamped with its own field id, and a doctor can spot a
-misplaced box instantly where they could never check a JSON schema. It pairs
-with the bank: the proof step happens once per new form, not once per claim.
-It also needs PyMuPDF promoted from a calibration-only dependency to a runtime
-one.
+**The vision path — built 2026-08-18, and it is what covers the majority of
+real forms.** A scanned blank form is rendered page by page, the model is asked
+to locate every box on the page, and what comes back becomes a `FieldBox`.
+`overlay_fill` needed no change at all: its coordinates were already measured
+from the page's **top-left**, which its own docstring explains is because
+bottom-left "is miserable to calibrate against a rendered image". Top-left is
+how an image is addressed, so the conversion is a multiply with **no flip** —
+verified by eye on `henner_prior_agreement.pdf`, with boxes at y = 0.03, 0.25,
+0.75 and 0.95 landing at the top, a quarter down, three quarters down and the
+bottom.
+
+`backend/vision_intake.py`. Renders at a long edge of 1500px, because Anthropic
+resizes anything above ~1568px and larger is tokens spent on discarded pixels.
+**JPEG, not PNG** — these pages are photographs of paper and the lossless copy
+is 6.5x bigger (1087 KB against 168 KB) for no legibility a model can use.
+`MAX_VISION_PAGES = 12` is a cost guard, since every page is a separate call
+carrying an image.
+
+**The risk this path has and the AcroForm one does not, and what is done about
+it.** A fillable PDF states where its boxes are. Here a model says, and a model
+reads a form well and localises only approximately. A box 15pt high stamps the
+answer onto the ruled line above, and **the review screen renders that exactly
+like a correct answer** — which is the whole problem, because review is where
+every other error on this product gets caught.
+
+Two layers, and the second is the one that matters:
+
+- `_to_box` refuses what is obviously impossible: off-page, inside-out, NaN or
+  infinity, a box over `MAX_BOX_AREA` of the page (a section, not a field), a
+  box too small to write in. A box running a hair past the edge is **clamped**,
+  not refused — a field at the page margin is ordinary.
+- **`POST /forms/{id}/proof` is the review step for geometry**, and it exists
+  because the refusals above cannot catch a box that is merely slightly wrong.
+  It returns the doctor's own form with every box stamped with its own field
+  id — the same trick `scripts/calibrate_overlay.py --proof` uses on the three
+  hand-calibrated forms, and it needed no new fill mode because **the ids are
+  the values**. A doctor cannot audit a JSON schema; they can see that
+  `date_of_admission` is sitting on the wrong line. The website offers it for
+  `fill_mode: "overlay"` only, and opens it in a tab rather than downloading it
+  — a proof sheet in Downloads beside the real filled forms is a way to print
+  and sign the wrong file.
+
+**PyMuPDF is a runtime dependency now**, in both requirements files. It was
+calibration-only and deliberately excluded until today. `vision_available()`
+checks for it rather than assuming, and `refusal_for(probe, can_render=False)`
+**defaults to refusing** — a wrong refusal costs a doctor a form, a wrong
+acceptance costs them a stamped-on page they cannot see is wrong.
+
+**What is NOT verified, and cannot be from here: whether the model actually
+locates boxes well on a real insurer form.** Every test on this path feeds a
+stubbed vision client, so what is proven is the plumbing, the refusals and the
+coordinate conversion — not the accuracy. The first real run wants a person
+looking at a proof sheet for one of the five forms in `scans_unsupported/`, and
+that is the thing to do before this is offered to anyone.
+
+Two other things to keep in view. The filled overlay PDF is returned through
+the function, and `prudential_accident_hosp.pdf` is 2.82 MB before filling
+against **Vercel's 4.5 MB response cap** — the limit with the least headroom in
+the whole product. And a scanned form has no AcroForm fields, so
+`probe_pdf().already_filled` proves less here than on a fillable PDF: a scan of
+a form somebody already completed by hand cannot be detected, and would be
+banked. The residual risk is stated in `derive_overlay_schema`.
 
 **The draft schema is gone, and Advanced is the developer's (2026-08-17).** Two
 removals from the panel, both the owner's call, and they share a reason: the
