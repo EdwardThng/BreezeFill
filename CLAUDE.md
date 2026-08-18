@@ -50,6 +50,22 @@ block is the part that constrains what you may do.
   through the model, and do not "improve" them by adding LLM fallback.
 - **The backend is stateless across forms.** No server-side session state
   carrying data between forms. If you think you need it, stop and ask.
+
+  **One exception exists, and its boundary is the part to defend: the form
+  bank** (`backend/form_bank.py`, added 2026-08-18, the owner's call). It keeps
+  BLANK insurer forms uploaded by doctors, and the schemas derived from them.
+  No patient, no note, no claim, no demographic — a published document the
+  insurer hands to anyone who asks, plus a description of where its boxes are.
+  The rule worth defending was never "no bytes may persist"; it was that
+  nothing about a patient survives the request that carried it in, and that is
+  unchanged.
+
+  `form_bank.intake_guard` is what holds the line: a PDF with values already in
+  its fields is somebody's completed claim, and it is refused for banking
+  outright. `tests/test_upload_route.py` asserts that such an upload reaches
+  storage as zero files. Do not widen what the bank holds, and do not add a
+  second store on the strength of this one — the argument here is about blank
+  forms specifically, not about persistence being fine now.
 - **Field assignment is a scored assignment problem with an ambiguity margin.**
   Every field is scored against every control; a field whose best control beats
   its runner-up by less than `TIE_MARGIN` is refused as ambiguous rather than
@@ -104,6 +120,14 @@ backend/
   redaction.py        Three passes. Pass 1 needs the demographics FIRST — that
                       ordering is the privacy model. Pass 3 is an Anthropic
                       call; see the hard rules
+  form_intake.py      Uploaded BLANK form -> FormSchema. Sends the form to the
+                      model unredacted, which is safe only because it is blank
+                      — probe_pdf is what checks that
+  note_intake.py      Uploaded note PDF -> text. HANDLES PHI, unlike
+                      form_intake beside it. Extracts and stops: no redaction,
+                      no parse, no model
+  form_bank.py        The one thing that persists. Blank forms + derived
+                      schemas, keyed by the PDF's own hash
   demographics.py     Paste -> demographic fields, patterns only, never a model.
                       Also owns the label alias table both directions share
   mapping.py          Structured-output call, FormSchema/FormField, assembly
@@ -236,6 +260,18 @@ is acceptable. See **Working style** at the end of this file.
 - Check whether a class name is already taken before adding a CSS rule for it:
   `.get-steps` was the `#/get` funnel's own `<ol>`, and reusing it for a nested
   list silently removed the numbers.
+- Grep the stylesheet's own token list before using a CSS variable — the panel
+  has `--text`, `--btn-line` and `--muted-strong`, NOT `--ink` or `--bg-raise`,
+  and an undefined var with no fallback drops the whole declaration silently.
+- Read a PDF's widgets per PAGE, not from `get_fields()` alone: page 1 of both
+  real fillable forms carries zero widgets (it is instructions), and
+  `page["/Annots"]` is an `IndirectObject` that needs `.get_object()` before it
+  has a length.
+- `Path(".pdf").stem` is `".pdf"` — pathlib reads a leading dot as a dotfile
+  rather than an extension, so the obvious `stem or fallback` lets it through.
+- Do not add `python-multipart` for a file upload; base64 in a JSON body keeps
+  the deployed function's dependency list where it is and matches every other
+  route in `main.py`.
 
 ---
 
@@ -776,6 +812,100 @@ an unknown property risks `Invalid vercel.json`, and a config that fails to
 parse is a deploy failure this repo has already paid for once (see the BOM
 trap).
 
+
+**Doctors get PDFs as well as portals, so the website takes uploads now
+(2026-08-18).** The owner's call, from his father and two other GPs: the work
+is a *mix* — some claims are filled on the insurer's portal, some are PDFs that
+get printed and filled by hand. The extension only ever addressed the first.
+
+**Most of the second was already built and unadvertised.** `#/app` has done
+pick-a-form → paste → *editable review* → download-filled-PDF since the claim
+store was removed. So the ask — "a way for doctors to edit the outputted filled
+PDF, because not all fields may be filled or some fields may be filled not
+super accurately" — was already answered, and answered better than asked:
+**the values are corrected BEFORE the PDF exists**, not after. That is a plain
+HTML form instead of an in-browser PDF editor, and a wrong value never gets
+rendered at all. Do not replace it with PDF editing.
+
+What was genuinely missing was the two uploads, and they are now:
+
+- `POST /forms/upload` — a blank insurer form the bank has never seen, read
+  into a `FormSchema` by `form_intake.derive_schema`. This is the same move
+  `_live_schema` makes for a web page, with a PDF as the source instead of the
+  DOM, so nothing downstream can tell the difference.
+- `POST /notes/extract` — a note that arrived as a PDF, as text.
+
+**The split that decides everything here, measured rather than guessed.** Of
+the seven real insurer PDFs in `forms/`:
+
+| | AcroForm fields | Text layer |
+|---|---|---|
+| `aia_ghs_claim.pdf` | 98 | yes |
+| `ge_ghs_claim.pdf` | 143 | yes |
+| the five in `scans_unsupported/` | **0** | **0** |
+
+Five of seven are pure images — nothing to enumerate and nothing to read. Those
+are precisely the ones that get printed and filled by hand, because that is
+*why* they get printed. They are **refused, with the reason and a next action**
+("check the insurer's website for a fillable version, which usually exists"),
+rather than half-mapped. `SCANNED_REFUSAL` in `form_intake.py`.
+
+**A raw AcroForm field name is not a label, and often is not anything.** Great
+Eastern's own form has `undefined_2`, `undefined_3`, and `Day`/`Month`/`Year`
+repeated across four different questions — 143 raw boxes where the hand-written
+schema has 15. What each box is for is printed *on the page beside it*, so
+`read_widgets` pairs every widget with the nearest text runs (same line to the
+left first, then the line above) and the model is given that plus the page's
+full text. Expect a messier review screen than the authored schemas produce;
+this reads a form nobody has curated.
+
+**The bank keeps what it derives** — the owner's call, and the reason is that
+the expensive step is per-FORM, not per-claim. Deriving costs a model call per
+page and the answer is identical for every doctor who ever uploads that same
+PDF. Keyed by a hash of the PDF's own bytes, so a renamed file is the same form
+and a different insurer's form with the same filename is not. See the hard rule
+for why this does not breach the statelessness invariant, and `intake_guard`
+for the check that keeps it from doing so.
+
+**The insurer is typed by the doctor, never inferred from the filename.** It
+reaches the form as a demographic — copied deterministically, skipping both the
+model and the review confirm — so a guess there is a wrong value nothing
+downstream checks. Same reasoning as the rejected "scan the note for insurer
+names" in next steps item 9.
+
+**An attached note is APPENDED to whatever was pasted, never substituted.** A
+doctor who pasted a consultation and then attached an operation record meant to
+send both, and losing the first is unrecoverable from that screen.
+
+**The extracted note text is shown in the box rather than sent onward.** A
+PDF's text layer is not always what the page looks like: columns interleave,
+footers repeat, a letter carries the clinic's address. What sits in that box is
+what redaction searches through — the same reasoning that keeps the parsed
+demographics on screen and editable.
+
+**And the panel now asks which kind of form this is, before anything else**
+(the owner's first framing of this whole thread). A fork, not a step: the
+portal answer reveals step 1, the PDF answer opens `breezefill.com/#/app` in a
+new tab and leaves the panel where it is. `chrome.tabs.create` needs no
+permission — `tabs` gates READING a tab's url and title, which this panel
+deliberately cannot do. The answer is **not remembered**; `chrome.storage` is
+the licence key and nothing else, and a doctor who does portals on Monday and
+PDFs on Tuesday is the ordinary case.
+
+**Still open, and the owner asked for it directly: the vision path.** Rasterize
+each page, have the model locate every field box, convert to the `FieldBox`
+that `overlay_fill` already consumes — its coordinates are already measured
+from the page's TOP-LEFT precisely because that is the frame you calibrate
+against a rendered image, so the conversion is a multiply with no flip. That
+would cover the five scanned forms and is the majority of the real ones. Two
+things to decide before building it: box accuracy is the whole risk (a box 15pt
+high stamps the answer onto the line above), and the mitigation is to show the
+doctor a **proof sheet** — `scripts/calibrate_overlay.py --proof` already
+renders every box stamped with its own field id, and a doctor can spot a
+misplaced box instantly where they could never check a JSON schema. It pairs
+with the bank: the proof step happens once per new form, not once per claim.
+It also needs PyMuPDF promoted from a calibration-only dependency to a runtime
+one.
 
 **The draft schema is gone, and Advanced is the developer's (2026-08-17).** Two
 removals from the panel, both the owner's call, and they share a reason: the
@@ -1874,11 +2004,20 @@ omission to "fix".
   as a live route rather than dead code — but do not point the panel back at
   it, because that request is the whole note one step before redaction has a
   dictionary to work with.
-- **The server is stateless. Every route.** The token→value map lives only for
-  the duration of one request, and there is no claim store, session or id
-  behind any endpoint. Do not add one — a shared store would be a database
-  holding patient data, which this product says publicly it does not have, and
-  it would restore the two-machine trap that `--ha=false` used to guard.
+- **The server is stateless about PATIENTS. Every route.** The token→value map
+  lives only for the duration of one request, and there is no claim store,
+  session or id behind any endpoint. Do not add one — a shared store would be a
+  database holding patient data, which this product says publicly it does not
+  have, and it would restore the two-machine trap that `--ha=false` used to
+  guard.
+
+  This wording changed on 2026-08-18 and the change is narrow. The form bank
+  persists blank insurer forms; it holds nothing about a patient, and the
+  upload path is still stateless in the sense that matters — `/forms/upload`
+  and `/forms/{id}/pdf` are separate requests that may land on different
+  machines, and the second finds the form by reading the bank key back out of
+  the form_id rather than by anything having been remembered. See the hard
+  rule for the boundary.
 - **Every question on the page gets attempted.** The bank may not gate a fill:
   the doctor has to submit that form regardless, so a schema miss must cost
   sharpness and never coverage. Do not reintroduce a state where the panel
