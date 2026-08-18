@@ -162,3 +162,21 @@ export async function extractNote(file: File): Promise<string> {
   );
   return (await res.json()).text as string;
 }
+
+/**
+ * The blank form with every box drawn on it, stamped with its own field id.
+ *
+ * Only meaningful for a form read from a SCAN, where the geometry was worked
+ * out by a model looking at a picture of the page and nothing downstream can
+ * check it. A box fifteen points too high produces a perfectly reasonable
+ * answer printed across the question above it, and the review screen renders
+ * that exactly like a correct one.
+ */
+export async function formProof(formId: string): Promise<Blob> {
+  const res = await ensureOk(
+    await fetch(`${API_BASE}/forms/${encodeURIComponent(formId)}/proof`, {
+      method: "POST",
+    }),
+  );
+  return res.blob();
+}

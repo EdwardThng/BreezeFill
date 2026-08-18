@@ -15,9 +15,10 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 vi.mock("./api", () => ({
   uploadForm: vi.fn(),
   extractNote: vi.fn(),
+  formProof: vi.fn(),
 }));
 
-import { extractNote, uploadForm } from "./api";
+import { extractNote, formProof, uploadForm } from "./api";
 import PatientForm from "./PatientForm";
 import type { FormInfo } from "./types";
 
@@ -40,6 +41,7 @@ function uploaded(over = {}) {
     form_id: `upload_${"a".repeat(32)}`,
     display_name: "blank form",
     known: false,
+    fill_mode: "acroform",
     fields: [
       { id: "diagnosis", label: "Diagnosis", description: null, type: "text", options: [], source: "llm" },
     ],
@@ -50,6 +52,7 @@ function uploaded(over = {}) {
 beforeEach(() => {
   vi.mocked(uploadForm).mockReset();
   vi.mocked(extractNote).mockReset();
+  vi.mocked(formProof).mockReset();
 });
 
 describe("uploading a blank form the bank has never seen", () => {
@@ -214,5 +217,66 @@ describe("what still has to be true before anything is mapped", () => {
     const [formId, patient] = onSubmit.mock.calls[0];
     expect(formId).toMatch(/^upload_/);
     expect(patient.insurer).toBe("Prudential");
+  });
+});
+
+
+describe("checking where the boxes are, on a form read from a scan", () => {
+  /**
+   * The only check a doctor can make on geometry a model guessed. A box
+   * fifteen points too high produces a sensible answer printed across the
+   * question above it, and the review screen renders that exactly like a
+   * correct one — so this is not a nicety, it is the review step the scanned
+   * path would otherwise be missing.
+   */
+
+  async function uploadScan(user: ReturnType<typeof userEvent.setup>) {
+    vi.mocked(uploadForm).mockResolvedValue(uploaded({ fill_mode: "overlay" }) as never);
+    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
+    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
+    await user.click(screen.getByRole("button", { name: /read this form/i }));
+  }
+
+  test("a scanned form offers the check, and says why", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    await uploadScan(user);
+
+    expect(await screen.findByText(/that form is a scan/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /where the answers will go/i })).toBeTruthy();
+  });
+
+  test("a fillable form does not offer it", async () => {
+    // Its PDF stated where its own boxes are. There is nothing to check, and
+    // an offer to check it would teach the doctor to ignore the one that matters.
+    vi.mocked(uploadForm).mockResolvedValue(uploaded({ fill_mode: "acroform" }) as never);
+    const user = userEvent.setup();
+    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
+    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
+    await user.click(screen.getByRole("button", { name: /read this form/i }));
+
+    await screen.findByRole("radio", { name: /blank form/i });
+    expect(screen.queryByText(/that form is a scan/i)).toBeNull();
+  });
+
+  test("the proof sheet is fetched for the form that was uploaded", async () => {
+    vi.mocked(formProof).mockResolvedValue(new Blob(["%PDF-"], { type: "application/pdf" }));
+    globalThis.URL.createObjectURL = vi.fn(() => "blob:proof");
+    globalThis.URL.revokeObjectURL = vi.fn();
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+
+    const user = userEvent.setup();
+    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    await uploadScan(user);
+    await user.click(screen.getByRole("button", { name: /where the answers will go/i }));
+
+    await waitFor(() => expect(formProof).toHaveBeenCalledWith(uploaded().form_id));
+    // A tab, not a download: it is a thing to glance at and close, and putting
+    // it in Downloads beside the real filled forms invites signing the wrong one.
+    expect(open).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

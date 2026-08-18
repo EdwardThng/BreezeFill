@@ -639,3 +639,17 @@ code {
   width: 100%;
   font-size: 0.9rem;
 }
+
+/* The geometry check offered only for a form read from a scan. */
+.proof {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #fcd9a5;
+  border-radius: 8px;
+  background: #fffbf2;
+}
+
+.proof .hint {
+  margin-top: 0;
+  color: #8a5a12;
+}

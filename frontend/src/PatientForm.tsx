@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { extractNote, uploadForm } from "./api";
+import { extractNote, formProof, uploadForm } from "./api";
 import type { FormInfo, PatientInput } from "./types";
 
 interface Props {
@@ -211,6 +211,13 @@ function FormUpload({ onUploaded }: { onUploaded: (form: FormInfo) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /**
+   * Set only for a form read from a SCAN. That is the one case where the boxes
+   * were worked out by a model looking at a picture of the page, so it is the
+   * one case with geometry worth checking — a fillable PDF stated where its
+   * own boxes were.
+   */
+  const [proofFor, setProofFor] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const send = async () => {
@@ -238,6 +245,7 @@ function FormUpload({ onUploaded }: { onUploaded: (form: FormInfo) => void }) {
           ? `Read ${result.fields.length} questions — this form was already known.`
           : `Read ${result.fields.length} questions from that form.`,
       );
+      setProofFor(result.fill_mode === "overlay" ? result.form_id : null);
       setOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -253,6 +261,8 @@ function FormUpload({ onUploaded }: { onUploaded: (form: FormInfo) => void }) {
           Not listed? Upload a blank form
         </button>
         {note && <p className="upload-ok">{note}</p>}
+        {proofFor && <ProofCheck formId={proofFor} />}
+        {error && <p className="error">{error}</p>}
       </div>
     );
   }
@@ -290,6 +300,56 @@ function FormUpload({ onUploaded }: { onUploaded: (form: FormInfo) => void }) {
           This takes a few seconds per page the first time a form is seen.
         </p>
       )}
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * The one check a doctor can actually make on a form read from a scan.
+ *
+ * There were no fillable boxes in that PDF, so where each answer goes was
+ * worked out by a model looking at a picture of the page. Nothing downstream
+ * can verify that: a box fifteen points too high produces a sensible answer
+ * printed across the printed question above it, and the review screen shows it
+ * exactly like a correct one. A doctor cannot audit a JSON schema — they can
+ * look at their own form with the boxes drawn on it and see in one glance that
+ * something is sitting on the wrong line.
+ *
+ * Opened in a tab rather than downloaded. It is a thing to glance at and close,
+ * and putting it in Downloads beside the real filled forms is a way to print
+ * and sign the wrong file later.
+ */
+function ProofCheck({ formId }: { formId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const show = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const url = URL.createObjectURL(await formProof(formId));
+      window.open(url, "_blank", "noopener");
+      // Not revoked immediately: the new tab is still loading from it. The
+      // browser drops it when this document goes anyway.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="proof">
+      <p className="hint">
+        That form is a scan, so BreezeFill worked out where each answer goes by
+        reading the page. <strong>Check the boxes before you rely on it</strong>
+        {" "}— every one is drawn on the form with its own name in it.
+      </p>
+      <button type="button" className="upload-open" onClick={show} disabled={busy}>
+        {busy ? "Preparing…" : "Show me where the answers will go"}
+      </button>
       {error && <p className="error">{error}</p>}
     </div>
   );

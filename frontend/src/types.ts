@@ -85,6 +85,13 @@ export interface UploadedForm {
   display_name: string;
   known: boolean;
   fields: UploadedFormField[];
+  /**
+   * "acroform" when the PDF stated where its own boxes are, "overlay" when the
+   * form was a scan and a model had to work them out from a picture of the
+   * page. Only the second needs its geometry checked before anything is
+   * filled, which is what the proof sheet is for.
+   */
+  fill_mode: "acroform" | "overlay";
 }
 
 export interface UploadedFormField {
