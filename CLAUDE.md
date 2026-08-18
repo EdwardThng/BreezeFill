@@ -294,6 +294,11 @@ is acceptable. See **Working style** at the end of this file.
   and 504'd in production on a three-page form.
 - `vercel.json` sets `maxDuration` explicitly. It is not the platform default,
   so read it rather than assuming the 300s the docs quote.
+- Check `GET /health` for `form_bank` before believing anything is cached. A
+  store that was never created reads as `NullBank` and degrades silently, by
+  design.
+- A cache that still uploads the payload is not a fast cache. Hash client-side
+  and ask first when the thing being avoided is proportional to the file.
 
 ---
 
@@ -1040,6 +1045,53 @@ Both default to `claude-opus-5`, and a cheaper model would roughly halve this
 again. Left on Opus deliberately — naming a box wrongly puts a value in the
 wrong box on a form a doctor signs, which is the same class of error the whole
 product is arranged against. Change it if cost bites, not for speed.
+
+**The bank was doing nothing in production, and its failure mode is silent by
+design (found 2026-08-18).** `vercel blob list-stores` returned *No blob
+stores found* and `BLOB_READ_WRITE_TOKEN` was not set, so `build_bank()`
+returned `NullBank`: every upload re-derived from scratch, at a model call per
+page, and nothing was ever kept. The first real scan a doctor sent in was not
+banked.
+
+That is the bank working as specified — it fails open so a storage outage
+cannot stop a doctor working — which is exactly why an unprovisioned store is
+indistinguishable from a working one from outside. **`GET /health` now reports
+`form_bank` as the class name in use.** A name is not a credential, and
+`"NullBank"` is the whole diagnosis.
+
+**To turn it on** (owner's terminal — it creates a billable store):
+`vercel blob create-store breezefill-form-bank`, then confirm
+`BLOB_READ_WRITE_TOKEN` appears in `vercel env ls production`, then redeploy.
+Until that is done, everything below about caching is inert.
+
+**A second upload of a known form no longer sends the PDF at all
+(2026-08-18).** Caching the schema made the second read cheap; it did not make
+it *fast*, because the doctor was still uploading two or three megabytes and
+waiting on a round trip proportional to it, to be told something a
+32-character string settles.
+
+`POST /forms/known` takes a SHA-256 and returns the schema or a 404. The
+browser hashes the file with `crypto.subtle` and asks first; the bytes travel
+only on a miss. Measured **2-3ms server-side, and flat across file size** —
+0.4 MB and 3.0 MB answer identically, because neither is sent.
+
+Three things to keep true:
+
+- **The hashes must agree across the two languages.** `form_bank.key_for` is
+  `sha256(bytes).hexdigest()[:32]`; the browser computes the full digest and
+  the server truncates. Verified by computing both on `ge_ghs_claim.pdf` and
+  comparing. Change one without the other and every hit silently becomes a
+  miss — no error, just the slow path forever.
+- **The ask is an optimisation and must never fail the request.** A 404, a
+  network fault, anything: `uploadForm` falls through to the real upload. An
+  optimisation that can break the thing it optimises is a liability.
+- **`/forms/known` and `/forms/upload` must not drift.** A doctor who took the
+  fast path has to get the same schema, or the fill disagrees with the review.
+  `test_the_answer_matches_what_uploading_would_have_returned` compares them
+  field for field.
+
+The full upload route short-circuits on the hash too, before `probe_pdf` runs
+— parsing a PDF the server can already describe is work with no answer in it.
 
 **PyMuPDF is a runtime dependency now**, in both requirements files. It was
 calibration-only and deliberately excluded until today. `vision_available()`

@@ -202,3 +202,41 @@ class TestChoosingABackend:
         assert isinstance(bank, NullBank)
         assert bank.get_schema(key_for(b"x")) is None
         bank.put(key_for(b"x"), a_schema(), b"pretend")  # must not raise
+
+
+class TestTheBankIsVisibleFromOutside:
+    """Its failure mode is silent by design, so it has to be observable.
+
+    The bank fails open — a storage outage must not stop a doctor working —
+    which means a store that was never provisioned looks identical to a working
+    one from the outside. It shipped that way, and every upload of the same
+    form paid the full derive again.
+    """
+
+    def test_health_names_the_bank_in_use(self, monkeypatch, tmp_path) -> None:
+        from fastapi.testclient import TestClient
+
+        import main
+
+        monkeypatch.setattr(main, "_BANK", LocalBank(tmp_path))
+        body = TestClient(main.app).get("/health").json()
+        assert body["form_bank"] == "LocalBank"
+
+    def test_an_unprovisioned_store_is_visible_as_such(self, monkeypatch) -> None:
+        from fastapi.testclient import TestClient
+
+        import main
+
+        monkeypatch.setattr(main, "_BANK", NullBank())
+        body = TestClient(main.app).get("/health").json()
+        assert body["form_bank"] == "NullBank"
+
+    def test_health_never_reports_the_token(self, monkeypatch) -> None:
+        from fastapi.testclient import TestClient
+
+        import main
+
+        monkeypatch.setattr(main, "_BANK", BlobBank("super-secret-token"))
+        body = TestClient(main.app).get("/health").json()
+        assert "super-secret-token" not in str(body)
+        assert body["form_bank"] == "BlobBank"

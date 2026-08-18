@@ -121,7 +121,28 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * A blank insurer form the bank has never seen, read into a mappable schema.
+ * The SHA-256 of a file, hex, computed in the browser.
+ *
+ * Matches `form_bank.key_for` on the server, which takes the first 32
+ * characters of the same digest. Changing either without the other silently
+ * turns every cache hit into a miss.
+ */
+async function sha256(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * A blank insurer form, read into a mappable schema.
+ *
+ * **Asks before it uploads.** Reading a form nobody has sent in before costs a
+ * model call per page and takes a while; reading one that has been sent in
+ * before costs nothing and should feel like nothing. So the file is hashed
+ * here and the server is asked whether it already knows it — a few hundred
+ * bytes — and the PDF itself only travels on a miss. A doctor re-using the
+ * same insurer's form, which is the normal case, never uploads it twice.
  *
  * The PDF must be BLANK. The server refuses one that already has answers in
  * it — that is a patient's completed claim, and this is the one route in the
@@ -131,6 +152,23 @@ export async function uploadForm(
   file: File,
   insurer: string,
 ): Promise<UploadedForm> {
+  try {
+    const known = await fetch(
+      `${API_BASE}/forms/known?filename=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sha256: await sha256(file) }),
+      },
+    );
+    if (known.ok) return known.json();
+    // Anything else — a 404 saying nobody has sent this form in, or a network
+    // fault — falls through to the upload. This is an optimisation, and an
+    // optimisation that can fail the request is a liability rather than a win.
+  } catch {
+    // Deliberately swallowed, same reason.
+  }
+
   const res = await ensureOk(
     await fetch(`${API_BASE}/forms/upload`, {
       method: "POST",

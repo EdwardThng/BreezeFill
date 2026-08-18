@@ -824,6 +824,67 @@ class UploadFormResponse(BaseModel):
     known: bool
 
 
+def _known_form(key) -> FormSchema | None:
+    """A form this server can already describe, by content hash, or None.
+
+    Two sources, curated first. The hand-authored schemas describe the same
+    PDFs better than anything derived from one — 24 named boxes on the AIA GHS
+    claim against the 98 raw AcroForm fields it actually carries — so a doctor
+    holding the file the repo holds gets the good one.
+    """
+    curated = CURATED_BY_PDF.get(key)
+    if curated is not None:
+        return FORM_SCHEMAS[curated]
+    return bank().get_schema(key)
+
+
+def _upload_response(
+    schema: FormSchema, display_name: str, *, known: bool
+) -> UploadFormResponse:
+    return UploadFormResponse(
+        form_id=schema.form_id,
+        display_name=schema.display_name or display_name,
+        known=known,
+        fill_mode=schema.fill_mode,
+        fields=[_uploaded_field(field) for field in schema.fields],
+    )
+
+
+class KnownFormRequest(BaseModel):
+    # The SHA-256 of the blank PDF, as the browser computed it. 64 hex chars;
+    # the server uses the first 32, which is what `key_for` produces.
+    sha256: str
+
+
+@app.post("/forms/known", response_model=UploadFormResponse)
+def known_form(request: KnownFormRequest, filename: str = "") -> UploadFormResponse:
+    """Is this form already described? Answered from a hash, with no upload.
+
+    THE POINT OF THIS ROUTE IS THAT THE PDF STAYS IN THE BROWSER. A doctor
+    sending in a form the server has read before was uploading two or three
+    megabytes and waiting on a round trip proportional to it, to be told
+    something a 32-character string settles. Now the browser hashes the file
+    locally and asks first; the bytes only travel on a miss.
+
+    A 404 means "not known", which is an ordinary answer rather than a fault —
+    the caller follows it with the real upload.
+
+    Nothing here can be a disclosure: a hash of a blank insurer form identifies
+    a published document, and the route returns only what `/forms/upload` would
+    have returned for the same file. It is deliberately NOT licence-gated, for
+    the same reason `/parse` is not — it spends nothing and answers no clinical
+    question.
+    """
+    key = (request.sha256 or "").strip().lower()[:32]
+    if not re.fullmatch(r"[0-9a-f]{32}", key):
+        raise HTTPException(status_code=422, detail="not a valid form fingerprint")
+
+    schema = _known_form(key)
+    if schema is None:
+        raise HTTPException(status_code=404, detail="this form has not been read before")
+    return _upload_response(schema, display_name_for(filename), known=True)
+
+
 def _uploaded_field(field: FormField) -> UploadedField:
     return UploadedField(
         id=field.id,
@@ -865,6 +926,16 @@ def upload_form(
             detail=f"That PDF is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
         )
 
+    # The hash first, before the PDF is parsed at all. A form this server has
+    # already read is answered from its bytes without opening them, which is
+    # what makes a second upload of the same form fast rather than merely
+    # cheaper — and it is safe because the key IS the content: a byte-identical
+    # PDF is the same blank form that was checked when it was first banked.
+    key = key_for(data)
+    known = _known_form(key)
+    if known is not None:
+        return _upload_response(known, display_name_for(request.filename), known=True)
+
     try:
         probe = probe_pdf(data)
     except IntakeError as exc:
@@ -888,62 +959,36 @@ def upload_form(
     except IntakeRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
-    key = key_for(data)
     form_id = form_id_for(key)
     display_name = display_name_for(request.filename)
 
-    # The hand-authored schemas first. They describe the same PDFs better than
-    # anything derived from one, and a doctor holding the same file the repo
-    # holds should get the good one.
-    curated = CURATED_BY_PDF.get(key)
-    if curated is not None:
-        schema = FORM_SCHEMAS[curated]
-        return UploadFormResponse(
-            form_id=schema.form_id,
-            display_name=schema.display_name or display_name,
-            known=True,
-            fill_mode=schema.fill_mode,
-            fields=[_uploaded_field(field) for field in schema.fields],
+    # Two ways to read a blank form, and the PDF decides which. Its own
+    # AcroForm boxes when it has them — exact, and free of any question of
+    # geometry. Its rendered pages when it does not, which is the only
+    # thing left to try on a scan and is why `/proof` exists.
+    derive = derive_schema if probe.fillable else derive_overlay_schema
+    try:
+        schema = derive(
+            data,
+            form_id,
+            display_name=display_name,
+            insurer=request.insurer,
+            pdf_path=f"bank://{key}.pdf",
         )
+    except IntakeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception as exc:
+        # Type only. A message or traceback from this path can quote the
+        # form's own text, and the same rule applies to it as to a note.
+        logger.error("form derivation failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=502, detail="That form could not be read just now."
+        ) from None
 
-    schema = bank().get_schema(key)
-    known = schema is not None
-
-    if schema is None:
-        # Two ways to read a blank form, and the PDF decides which. Its own
-        # AcroForm boxes when it has them — exact, and free of any question of
-        # geometry. Its rendered pages when it does not, which is the only
-        # thing left to try on a scan and is why `/proof` exists.
-        derive = derive_schema if probe.fillable else derive_overlay_schema
-        try:
-            schema = derive(
-                data,
-                form_id,
-                display_name=display_name,
-                insurer=request.insurer,
-                pdf_path=f"bank://{key}.pdf",
-            )
-        except IntakeError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from None
-        except Exception as exc:
-            # Type only. A message or traceback from this path can quote the
-            # form's own text, and the same rule applies to it as to a note.
-            logger.error("form derivation failed: %s", type(exc).__name__)
-            raise HTTPException(
-                status_code=502, detail="That form could not be read just now."
-            ) from None
-
-        # Best effort, always. The doctor already has their schema; this only
-        # decides whether the next one waits for it too.
-        bank().put(key, schema, data)
-
-    return UploadFormResponse(
-        form_id=schema.form_id,
-        display_name=schema.display_name or display_name,
-        known=known,
-        fill_mode=schema.fill_mode,
-        fields=[_uploaded_field(field) for field in schema.fields],
-    )
+    # Best effort, always. The doctor already has their schema; this only
+    # decides whether the next one waits for it too.
+    bank().put(key, schema, data)
+    return _upload_response(schema, display_name, known=False)
 
 
 @app.post("/forms/{form_id}/proof")
@@ -1228,6 +1273,15 @@ def health() -> dict:
             and os.environ.get("STRIPE_PRICE_ID")
             and os.environ.get("FORMFILL_LICENCE_SECRET")
         ),
+        # Which bank this deployment has, by class name. "NullBank" means
+        # nothing is kept — every upload re-derives, at a model call per page.
+        #
+        # Reported because that failure is SILENT BY DESIGN: the bank fails
+        # open so a storage outage cannot stop a doctor working, which also
+        # means an unprovisioned store looks exactly like a working one from
+        # the outside. It shipped that way and cost a doctor the full derive on
+        # every upload of the same form. A name is not a credential.
+        "form_bank": type(bank()).__name__,
     }
 
 

@@ -453,3 +453,80 @@ class TestAnUploadOfAFormTheRepoAlreadyDescribes:
         )
         assert response.status_code == 200
         assert response.content.startswith(b"%PDF-")
+
+
+class TestAskingWithoutUploading:
+    """The second time a form is sent in, the PDF should not travel at all.
+
+    A doctor waiting on a 3 MB upload to be told something a 32-character
+    string settles is the difference between "cached" and "fast".
+    """
+
+    def sha(self, data: bytes) -> str:
+        import hashlib
+
+        return hashlib.sha256(data).hexdigest()
+
+    def test_a_curated_form_is_recognised_from_its_hash_alone(self, bank, no_model) -> None:
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        response = client.post(
+            "/forms/known", json={"sha256": self.sha(aia.read_bytes())}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["form_id"] == "aia_ghs_claim"
+        assert len(body["fields"]) == 24
+        assert body["known"] is True
+
+    def test_a_banked_form_is_recognised_from_its_hash_alone(self, bank, no_model) -> None:
+        data = not_curated(DEV_PDF.read_bytes())
+        uploaded = client.post("/forms/upload", json={"pdf_base64": b64(data)}).json()
+
+        response = client.post("/forms/known", json={"sha256": self.sha(data)})
+        assert response.status_code == 200
+        assert response.json()["form_id"] == uploaded["form_id"]
+
+    def test_a_form_nobody_has_sent_in_is_a_plain_404(self, bank, no_model) -> None:
+        # An ordinary answer, not a fault: the caller follows it with the
+        # real upload.
+        response = client.post("/forms/known", json={"sha256": "f" * 64})
+        assert response.status_code == 404
+
+    def test_it_costs_no_model_call_and_no_upload(self, bank, no_model) -> None:
+        aia = REPO_ROOT / "forms" / "aia_ghs_claim.pdf"
+        client.post("/forms/known", json={"sha256": self.sha(aia.read_bytes())})
+        assert no_model.calls == 0
+        assert no_model.vision.calls == 0
+
+    def test_a_fingerprint_that_is_not_one_is_refused(self, bank) -> None:
+        for bad in ["", "nonsense", "../../etc/passwd", "g" * 64, "abc"]:
+            assert client.post("/forms/known", json={"sha256": bad}).status_code == 422
+
+    def test_the_answer_matches_what_uploading_would_have_returned(
+        self, bank, no_model
+    ) -> None:
+        # The two routes must not drift: a doctor who takes the fast path has
+        # to get the same schema, or the fill will disagree with the review.
+        data = not_curated(DEV_PDF.read_bytes())
+        uploaded = client.post("/forms/upload", json={"pdf_base64": b64(data)}).json()
+        asked = client.post("/forms/known", json={"sha256": self.sha(data)}).json()
+
+        assert asked["form_id"] == uploaded["form_id"]
+        assert asked["fill_mode"] == uploaded["fill_mode"]
+        assert asked["fields"] == uploaded["fields"]
+
+
+class TestTheHitPathDoesNoWorkItDoesNotNeedTo:
+    def test_a_known_form_is_not_parsed_again_on_upload(self, bank, no_model, monkeypatch) -> None:
+        # Even the full upload route short-circuits on the hash now. Probing a
+        # PDF the server can already describe is work with no answer in it.
+        data = not_curated(DEV_PDF.read_bytes())
+        client.post("/forms/upload", json={"pdf_base64": b64(data)})
+
+        def explode(*args, **kwargs):
+            raise AssertionError("a known form was parsed again")
+
+        monkeypatch.setattr(main, "probe_pdf", explode)
+        response = client.post("/forms/upload", json={"pdf_base64": b64(data)})
+        assert response.status_code == 200
+        assert response.json()["known"] is True
