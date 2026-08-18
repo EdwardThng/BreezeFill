@@ -1447,6 +1447,11 @@ button.choice:hover {
 /* Back to the fork. Quiet and non-destructive — it discards nothing, so it
    must not read like a control that does. */
 .back {
+  /* Explicitly block and left-aligned: a bare <button> is inline-block, and
+     the step sections centre their inline children, which put this in the
+     middle of the panel looking like a heading. */
+  display: block;
+  text-align: left;
   margin: 0 0 14px;
   padding: 0;
   border: 0;

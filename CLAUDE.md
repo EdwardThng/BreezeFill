@@ -283,6 +283,12 @@ is acceptable. See **Working style** at the end of this file.
 - Check a model-supplied box by rendering it, not by reading the numbers. A
   y-flip looks perfectly plausible on any box near the middle of the page and
   is obvious the moment you stamp one near the top.
+- A bare `<button>` is inline-block, and the panel's step sections centre their
+  inline children — set `display: block` on any new text-style control there or
+  it lands in the middle looking like a heading.
+- Use a PDF that is NOT byte-identical to one in `forms/` when testing schema
+  derivation; `CURATED_BY_PDF` recognises the repo's own copies and short-
+  circuits the whole path.
 
 ---
 
@@ -823,6 +829,45 @@ an unknown property risks `Invalid vercel.json`, and a config that fails to
 parse is a deploy failure this repo has already paid for once (see the BOM
 trap).
 
+
+**The website's claim flow was restructured around the upload (2026-08-18, the
+owner's call, same day as the upload path itself).** Three changes and one
+consequence:
+
+- **The form picker is gone.** Section 1 is the blank form itself. A doctor
+  holding a claim form does not know or care whether this repo has a schema for
+  it, and asking them to find their insurer in a list of six is a question the
+  file answers. **`CURATED_BY_PDF` in `main.py` is what makes that safe**: an
+  upload is hashed against the hand-authored forms' own PDFs first, so sending
+  in `aia_ghs_claim.pdf` returns the 24-field curated schema rather than 98
+  boxes derived from scratch, and the three overlay forms keep their measured
+  geometry instead of having it guessed. It costs no model call and is not
+  re-banked. Consequence: **every test about DERIVING a schema must use a PDF
+  that is not byte-identical to the repo's** — `not_curated()` in
+  `tests/test_upload_route.py` appends a comment after `%%EOF`, which is also
+  the realistic case, since a form re-saved by a mail client differs.
+- **The notes are asked for by kind**, paste or documents, rather than a paste
+  box with a file input tucked underneath. Two normal situations, not a main
+  path and a fallback.
+- **Several documents, not one.** A discharge summary, an operation record and
+  a referral are one consultation's worth of evidence. One unreadable scan
+  names itself and the rest still go through.
+
+Both choices are reversible, and **neither back button discards anything** —
+the notes box is the same box in both modes. That is why they are styled quiet
+rather than as warnings. The panel has one too, on step 1 only: past there a
+name and a note have been entered, and a control that throws those away to
+re-ask an answered question is a trap rather than a way out.
+
+The consequence: **`ClaimApp` no longer fetches `/forms` at all**, so a
+connectivity failure surfaces on the upload the doctor actually tried rather
+than as a banner about a list they never saw. `GET /forms` still exists and
+still filters `internal`, but nothing in the website calls it.
+
+**Filenames are never inserted into the note text.** It is tempting to label
+each attachment in the box, and a filename like `TanWeiMing_discharge.pdf`
+carries exactly the thing pass 2 cannot catch. The names are listed in the UI
+and kept out of what gets mapped.
 
 **Doctors get PDFs as well as portals, so the website takes uploads now
 (2026-08-18).** The owner's call, from his father and two other GPs: the work
