@@ -70,6 +70,7 @@ from form_bank import (
     key_from_form_id,
 )
 from form_intake import IntakeError, derive_schema, probe_pdf, refusal_for
+from note_intake import NoteIntakeError, extract_note_text
 from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
 from redaction import PatientRecord, redact, scrub_patterns
@@ -873,6 +874,55 @@ def upload_form(
             for field in schema.fields
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Reading a note that arrived as a PDF
+# ---------------------------------------------------------------------------
+
+
+class ExtractNoteRequest(BaseModel):
+    pdf_base64: str
+
+
+class ExtractNoteResponse(BaseModel):
+    text: str
+
+
+@app.post("/notes/extract", response_model=ExtractNoteResponse)
+def extract_note(request: ExtractNoteRequest) -> ExtractNoteResponse:
+    """A consultation note that arrived as a PDF, as text.
+
+    **This route carries PHI**, unlike `/forms/upload` beside it. It is the
+    paste box by another route, and the text it returns is shown back to the
+    doctor and edited there before anything is mapped — so redaction happens
+    exactly where it happens for a paste, and nothing here is a step around it.
+
+    Not licence-gated, for the same reason `/parse` is not: it makes no model
+    call and spends nothing. The gate is on the routes that do.
+    """
+    import base64
+    import binascii
+
+    try:
+        data = base64.b64decode(request.pdf_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=422, detail="That upload was not readable.") from None
+
+    if not data:
+        raise HTTPException(status_code=422, detail="That file was empty.")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"That PDF is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+
+    try:
+        return ExtractNoteResponse(text=extract_note_text(data))
+    except NoteIntakeError as exc:
+        # The message is authored in note_intake and contains no document
+        # content — that is a rule stated there, not an accident here.
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 # The oldest extension build this server will answer a mapping request from.
