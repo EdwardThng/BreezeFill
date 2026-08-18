@@ -60,6 +60,16 @@ from mapping import (
     map_fields,
     MappedField,
 )
+from form_bank import (
+    IntakeRefused,
+    build_bank,
+    display_name_for,
+    form_id_for,
+    intake_guard,
+    key_for,
+    key_from_form_id,
+)
+from form_intake import IntakeError, derive_schema, probe_pdf, refusal_for
 from overlay_fill import OverlayFillError, overlay_fill
 from pdf_fill import PdfFillError, fill_pdf
 from redaction import PatientRecord, redact, scrub_patterns
@@ -109,12 +119,39 @@ def _load_schemas() -> dict[str, FormSchema]:
 
 FORM_SCHEMAS = _load_schemas()
 
+# The bank of schemas derived from uploaded forms. Built once and held, because
+# the Blob backend lists itself on first use and re-listing per request would
+# turn one slow call into one per field. Tests replace it outright.
+_BANK = None
+
+
+def bank():
+    global _BANK
+    if _BANK is None:
+        _BANK = build_bank()
+    return _BANK
+
 
 def _get_schema(form_id: str) -> FormSchema:
+    """A form by id, whether it was hand-authored or uploaded.
+
+    The two live in different places and are found differently. A hand-authored
+    schema is in `FORM_SCHEMAS`, loaded from disk at import. An uploaded one is
+    in the bank, and is found by reading its key back out of the form_id — no
+    lookup table, nothing remembered from the request that uploaded it, so a
+    fill can land on a different machine than the map did.
+    """
     schema = FORM_SCHEMAS.get(form_id)
-    if schema is None:
-        raise HTTPException(status_code=404, detail=f"unknown form_id: {form_id}")
-    return schema
+    if schema is not None:
+        return schema
+
+    key = key_from_form_id(form_id)
+    if key is not None:
+        banked = bank().get_schema(key)
+        if banked is not None:
+            return banked
+
+    raise HTTPException(status_code=404, detail=f"unknown form_id: {form_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -664,13 +701,32 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
 
     by_id = {field.id: request.values.get(field.id) for field in schema.fields}
 
-    pdf_path = (REPO_ROOT / schema.pdf_path).resolve()
+    # An uploaded form's blank PDF lives in the bank rather than on disk, and
+    # says so in its own pdf_path. Resolved here rather than downloaded and
+    # written out: a serverless filesystem is the wrong place to put a file
+    # this request is going to finish with.
+    source: str | bytes
+    banked_key = key_from_form_id(schema.form_id)
+    if banked_key is not None and schema.pdf_path.startswith("bank://"):
+        blank = bank().get_pdf(banked_key)
+        if blank is None:
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "The blank form this claim was mapped against is no longer "
+                    "available. Upload it again to fill it."
+                ),
+            )
+        source = blank
+    else:
+        source = str((REPO_ROOT / schema.pdf_path).resolve())
+
     try:
         if schema.fill_mode == "overlay":
-            pdf_bytes = overlay_fill(pdf_path, schema.boxes, by_id)
+            pdf_bytes = overlay_fill(source, schema.boxes, by_id)
         else:
             named = {field.pdf_field_name: by_id[field.id] for field in schema.fields}
-            pdf_bytes = fill_pdf(pdf_path, named)
+            pdf_bytes = fill_pdf(source, named)
     except (PdfFillError, OverlayFillError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -680,6 +736,142 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
         headers={
             "Content-Disposition": f'attachment; filename="{schema.form_id}_filled.pdf"'
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Uploading a form the bank has never seen
+# ---------------------------------------------------------------------------
+
+# A blank claim form. The cap is generous next to the largest real one in this
+# repo (2.9 MB) and small next to Vercel's 100 MB body limit — it is here to
+# refuse a mistake, not to ration.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+
+class UploadFormRequest(BaseModel):
+    # Base64 rather than multipart, so this route needs no new dependency on
+    # the deployed function and looks like every other route in this file.
+    pdf_base64: str
+    filename: str = ""
+    insurer: str | None = None
+
+
+class UploadedField(BaseModel):
+    """One box, as the doctor will see it listed before they map anything."""
+
+    id: str
+    label: str
+    description: str | None = None
+    type: str
+    options: list[str] = []
+    # "llm" or "demographics.<attr>". Shown so a doctor can see which boxes are
+    # answered from what they typed rather than from the note.
+    source: str
+
+
+class UploadFormResponse(BaseModel):
+    form_id: str
+    display_name: str
+    fields: list[UploadedField]
+    # True when this exact form had been sent in before and its schema came
+    # straight out of the bank. Surfaced because it is the difference between
+    # a form that has been used and one being read for the first time.
+    known: bool
+
+
+@app.post("/forms/upload", response_model=UploadFormResponse)
+def upload_form(
+    request: UploadFormRequest,
+    authorization: str | None = Header(default=None),
+) -> UploadFormResponse:
+    """A blank insurer form in, a mappable schema out.
+
+    Nothing about a patient passes through here. What is read is the form's own
+    boxes and printed text, and what may be kept is the same — see
+    `form_bank`'s header for why that is not a hole in the statelessness rule,
+    and `intake_guard` for the check that keeps it from becoming one.
+    """
+    _require_licence(authorization)
+
+    import base64
+    import binascii
+
+    try:
+        data = base64.b64decode(request.pdf_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=422, detail="That upload was not readable.") from None
+
+    if not data:
+        raise HTTPException(status_code=422, detail="That file was empty.")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"That PDF is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+
+    try:
+        probe = probe_pdf(data)
+    except IntakeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    # A scan, an encrypted file, or a form with nothing to write into. Answered
+    # with the reason and what to do next, because "unsupported" tells a doctor
+    # holding a form nothing at all.
+    refusal = refusal_for(probe)
+    if refusal:
+        raise HTTPException(status_code=422, detail=refusal)
+
+    try:
+        intake_guard(probe.already_filled)
+    except IntakeRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    key = key_for(data)
+    form_id = form_id_for(key)
+    display_name = display_name_for(request.filename)
+
+    schema = bank().get_schema(key)
+    known = schema is not None
+
+    if schema is None:
+        try:
+            schema = derive_schema(
+                data,
+                form_id,
+                display_name=display_name,
+                insurer=request.insurer,
+                pdf_path=f"bank://{key}.pdf",
+            )
+        except IntakeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except Exception as exc:
+            # Type only. A message or traceback from this path can quote the
+            # form's own text, and the same rule applies to it as to a note.
+            logger.error("form derivation failed: %s", type(exc).__name__)
+            raise HTTPException(
+                status_code=502, detail="That form could not be read just now."
+            ) from None
+
+        # Best effort, always. The doctor already has their schema; this only
+        # decides whether the next one waits for it too.
+        bank().put(key, schema, data)
+
+    return UploadFormResponse(
+        form_id=schema.form_id,
+        display_name=schema.display_name or display_name,
+        known=known,
+        fields=[
+            UploadedField(
+                id=field.id,
+                label=field.display_label,
+                description=field.description,
+                type=field.type,
+                options=field.options,
+                source=field.source,
+            )
+            for field in schema.fields
+        ],
     )
 
 
