@@ -40,7 +40,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi import Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from licence import LicenceError, mint_licence, verify_licence
 
@@ -166,15 +166,33 @@ def bank():
     return _BANK
 
 
-def _get_schema(form_id: str) -> FormSchema:
-    """A form by id, whether it was hand-authored or uploaded.
+def _get_schema(form_id: str, carried: FormSchema | None = None) -> FormSchema:
+    """A form by id — carried by the caller, hand-authored, or banked.
 
-    The two live in different places and are found differently. A hand-authored
-    schema is in `FORM_SCHEMAS`, loaded from disk at import. An uploaded one is
-    in the bank, and is found by reading its key back out of the form_id — no
-    lookup table, nothing remembered from the request that uploaded it, so a
-    fill can land on a different machine than the map did.
+    THE ORDER MATTERS, AND THE FIRST ENTRY IS THE FIX FOR A LIVE BUG.
+
+    `carried` is the schema the client was handed by `/forms/upload` and sent
+    back. It wins for an uploaded form because it is the only source that
+    cannot go missing: on 2026-08-18 a doctor uploaded a form, filled in the
+    notes, and got `unknown form_id: upload_9868ee…` — the server had derived
+    that schema, returned an id for it, and then thrown it away, because the
+    bank was a `NullBank` and `put()` did nothing.
+
+    The bug underneath was not the unprovisioned store. It was that the bank
+    had been made load-bearing for CORRECTNESS when it is only ever a speed
+    cache: a Blob outage, an eviction, or a store nobody created all produce
+    the same 404 in the middle of a claim. A schema the client is holding
+    cannot be evicted, and this is the same shape `/map-redacted` already uses,
+    where the browser sends the page's fields and the server builds a schema
+    for one request.
+
+    A carried schema is only honoured for an `upload_*` id. The hand-authored
+    forms are described in this repository and a caller does not get to
+    redefine what `aia_ghs_claim` means.
     """
+    if carried is not None and key_from_form_id(form_id) is not None:
+        return carried
+
     schema = FORM_SCHEMAS.get(form_id)
     if schema is not None:
         return schema
@@ -185,7 +203,14 @@ def _get_schema(form_id: str) -> FormSchema:
         if banked is not None:
             return banked
 
-    raise HTTPException(status_code=404, detail=f"unknown form_id: {form_id}")
+    raise HTTPException(
+        status_code=404,
+        detail=(
+            f"unknown form_id: {form_id}. If you uploaded this form, send it "
+            "again — the server keeps no copy of an uploaded form between "
+            "requests unless it was banked."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +221,9 @@ def _get_schema(form_id: str) -> FormSchema:
 class CreateClaimRequest(BaseModel):
     form_id: str
     patient: PatientRecord
+    # The schema the client was handed by /forms/upload, sent back. Only
+    # honoured for an `upload_*` id — see _get_schema for why it wins there.
+    schema_: FormSchema | None = Field(default=None, alias="schema")
 
 
 class MapResponse(BaseModel):
@@ -293,6 +321,13 @@ class FillPdfRequest(BaseModel):
     """
 
     values: dict[str, str | bool | None] = {}
+    # The schema the client was handed by /forms/upload, sent back.
+    schema_: FormSchema | None = Field(default=None, alias="schema")
+    # The blank form itself, for an uploaded form the bank does not hold. The
+    # browser still has the file the doctor chose, and re-sending it is the
+    # difference between a fill that works without any storage and one that
+    # depends on it. Ignored for a form this repo or the bank can open.
+    pdf_base64: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +454,7 @@ def map_claim(
     # Gated with the other two model routes. A gate on one door is not a gate:
     # this one spends exactly the same money, and `curl` reaches it identically.
     _require_licence(authorization)
-    schema = _get_schema(request.form_id)
+    schema = _get_schema(request.form_id, request.schema_)
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
 
@@ -707,27 +742,56 @@ def map_live(
     return MapResponse(form_id=schema.form_id, fields=_review_rows(schema, request.patient))
 
 
-def _blank_form_bytes(schema: FormSchema) -> str | bytes:
+def _blank_form_bytes(schema: FormSchema, carried: str | None = None) -> str | bytes:
     """Where this form's blank PDF actually is: a path, or the bytes themselves.
 
-    An uploaded form lives in the bank rather than on disk and says so in its
-    own `pdf_path`. It is resolved to bytes rather than downloaded and written
-    out — a serverless filesystem is the wrong place to put a file the request
-    is about to finish with, and the fill layers take bytes for this reason.
+    A hand-authored form is a file in this checkout. An uploaded one is not: it
+    lives in the bank, or — when the caller sent it back — in this request.
+
+    The carried copy is checked FIRST for an uploaded form, for the same reason
+    the carried schema is (see `_get_schema`): the browser still has the file
+    the doctor chose, and a fill that works with no storage at all beats one
+    that depends on a store being provisioned and reachable.
+
+    Resolved to bytes rather than written out — a serverless filesystem is the
+    wrong place to put a file the request is about to finish with, and the fill
+    layers take bytes for this reason.
     """
     banked_key = key_from_form_id(schema.form_id)
-    if banked_key is not None and schema.pdf_path.startswith("bank://"):
-        blank = bank().get_pdf(banked_key)
-        if blank is None:
+    if banked_key is None or not schema.pdf_path.startswith("bank://"):
+        return str((REPO_ROOT / schema.pdf_path).resolve())
+
+    if carried:
+        import base64
+        import binascii
+
+        try:
+            data = base64.b64decode(carried, validate=True)
+        except (binascii.Error, ValueError):
             raise HTTPException(
-                status_code=410,
-                detail=(
-                    "The blank form this claim was mapped against is no longer "
-                    "available. Upload it again to fill it."
-                ),
+                status_code=422, detail="That form was not readable."
+            ) from None
+        # The key IS the content hash, so this proves the bytes are the form
+        # the schema was derived from. Without the check a caller could pair
+        # one form's boxes with another form's pages, and an overlay fill would
+        # stamp answers at coordinates measured on a different document.
+        if key_for(data) != banked_key:
+            raise HTTPException(
+                status_code=422,
+                detail="That PDF is not the form these answers were mapped against.",
             )
-        return blank
-    return str((REPO_ROOT / schema.pdf_path).resolve())
+        return data
+
+    blank = bank().get_pdf(banked_key)
+    if blank is None:
+        raise HTTPException(
+            status_code=410,
+            detail=(
+                "The blank form this claim was mapped against is no longer "
+                "available. Upload it again to fill it."
+            ),
+        )
+    return blank
 
 
 @app.post("/forms/{form_id}/pdf")
@@ -738,7 +802,7 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
     an AcroForm field by the PDF's own name, an overlay field by its box. That
     is why this needs no memory of the mapping call that produced the values.
     """
-    schema = _get_schema(form_id)
+    schema = _get_schema(form_id, request.schema_)
 
     # A web form has no PDF to return: the extension writes the values into the
     # insurer's own page and the doctor submits it there. Refused explicitly
@@ -758,7 +822,7 @@ def fill_form_pdf(form_id: str, request: FillPdfRequest) -> Response:
 
     by_id = {field.id: request.values.get(field.id) for field in schema.fields}
 
-    source = _blank_form_bytes(schema)
+    source = _blank_form_bytes(schema, request.pdf_base64)
 
     try:
         if schema.fill_mode == "overlay":
@@ -818,6 +882,15 @@ class UploadFormResponse(BaseModel):
     # shown the difference, because only one of the two needs its geometry
     # checked before anything is filled — see /forms/{id}/proof.
     fill_mode: str
+    # The whole schema, for the client to hold and hand back.
+    #
+    # Opaque to the browser — it renders `fields` above and never reads this —
+    # but it is what makes the next two requests work without the server having
+    # remembered anything. Returned for uploaded forms only: a hand-authored
+    # one is in this repository and every deployment already has it.
+    schema_: FormSchema | None = Field(default=None, serialization_alias="schema")
+
+    model_config = {"populate_by_name": True}
     # True when this exact form had been sent in before and its schema came
     # straight out of the bank. Surfaced because it is the difference between
     # a form that has been used and one being read for the first time.
@@ -847,6 +920,7 @@ def _upload_response(
         known=known,
         fill_mode=schema.fill_mode,
         fields=[_uploaded_field(field) for field in schema.fields],
+        schema_=schema if key_from_form_id(schema.form_id) else None,
     )
 
 

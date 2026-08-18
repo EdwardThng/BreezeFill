@@ -299,6 +299,9 @@ is acceptable. See **Working style** at the end of this file.
   design.
 - A cache that still uploads the payload is not a fast cache. Hash client-side
   and ask first when the thing being avoided is proportional to the file.
+- Never let a cache become the only home for something a later request needs.
+  If losing it 404s a doctor mid-claim, it is not a cache — give the client the
+  copy and let the cache be an optimisation.
 
 ---
 
@@ -1045,6 +1048,41 @@ Both default to `claude-opus-5`, and a cheaper model would roughly halve this
 again. Left on Opus deliberately — naming a box wrongly puts a value in the
 wrong box on a form a doctor signs, which is the same class of error the whole
 product is arranged against. Change it if cost bites, not for speed.
+
+**`unknown form_id: upload_9868ee…` — the bank had been made load-bearing for
+CORRECTNESS (2026-08-18).** A doctor uploaded a form, watched it scan, pasted
+the notes, filled in the patient, and got a 404 from `/map`. The server had
+derived that schema, handed back an id for it, and thrown it away.
+
+The unprovisioned store below is what triggered it, and it was **not the bug**.
+The bug is that the bank is a SPEED CACHE and had been wired as the only place
+an uploaded schema lived, so a Blob outage, an eviction, or a store nobody
+created all produce the same 404 in the middle of a claim — after the doctor
+has typed everything in.
+
+**The client carries what the server did not keep.** `/forms/upload` returns
+the whole schema alongside the summary; `/map` and `/forms/{id}/pdf` accept it
+back, plus the blank PDF itself for the fill. This is the same shape
+`/map-redacted` has always used, where the browser sends the page's fields and
+the server builds a schema for one request. The bank is now purely an
+optimisation, which is what it should have been.
+
+Four rules that keep it safe, all asserted:
+
+- **A carried schema is honoured for an `upload_*` id only.** What
+  `aia_ghs_claim` means is decided in this repository, not by a caller.
+- **A carried PDF must hash to the key in the form_id.** The key IS the content
+  hash, so this is checkable — and without it a caller could pair one form's
+  boxes with another form's pages, which on an overlay form stamps answers at
+  coordinates measured on a different document.
+- **A curated form carries nothing back.** Every deployment has it; shipping a
+  schema and a multi-megabyte PDF for it is bytes for nothing.
+- **The 404 that remains says what to do** ("send it again"), because the
+  caller can fix it and the old message could not be acted on.
+
+Verified end to end over HTTP against a `NullBank` server: the old request
+404s, the carried one returns a real filled PDF, and a mismatched PDF is
+refused 422.
 
 **The bank was doing nothing in production, and its failure mode is silent by
 design (found 2026-08-18).** `vercel blob list-stores` returned *No blob

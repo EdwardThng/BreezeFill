@@ -3,7 +3,15 @@ import { extractNote, formProof, uploadForm } from "./api";
 import type { PatientInput, UploadedForm } from "./types";
 
 interface Props {
-  onSubmit: (formId: string, patient: PatientInput) => void;
+  onSubmit: (
+    formId: string,
+    patient: PatientInput,
+    /**
+     * What the server will need again and has not kept: the schema it derived,
+     * and the blank PDF itself. Both null for a form this repo describes.
+     */
+    form: { schema: unknown | null; blankForm: File | null },
+  ) => void;
 }
 
 type Draft = Omit<PatientInput, "insurer">;
@@ -31,6 +39,9 @@ const EMPTY: Draft = {
  */
 export default function PatientForm({ onSubmit }: Props) {
   const [form, setForm] = useState<UploadedForm | null>(null);
+  // The file itself, kept because the fill needs the blank PDF back and this
+  // browser is the only thing that reliably still has it.
+  const [blankForm, setBlankForm] = useState<File | null>(null);
   const [insurer, setInsurer] = useState("");
   const [draft, setDraft] = useState<Draft>(EMPTY);
 
@@ -51,13 +62,19 @@ export default function PatientForm({ onSubmit }: Props) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready || !form) return;
-    onSubmit(form.form_id, {
-      ...draft,
-      insurer: insurer.trim(),
-      phone: draft.phone?.trim() || null,
-      address: draft.address?.trim() || null,
-      policy_number: draft.policy_number?.trim() || null,
-    });
+    onSubmit(
+      form.form_id,
+      {
+        ...draft,
+        insurer: insurer.trim(),
+        phone: draft.phone?.trim() || null,
+        address: draft.address?.trim() || null,
+        policy_number: draft.policy_number?.trim() || null,
+      },
+      // Only what the server lacks. A curated form carries no schema back and
+      // its PDF is already in the deployment, so neither is sent.
+      { schema: form.schema, blankForm: form.schema ? blankForm : null },
+    );
   };
 
   const addNotes = (text: string) =>
@@ -79,8 +96,14 @@ export default function PatientForm({ onSubmit }: Props) {
           form={form}
           insurer={insurer}
           onInsurer={setInsurer}
-          onUploaded={setForm}
-          onCleared={() => setForm(null)}
+          onUploaded={(read, file) => {
+            setForm(read);
+            setBlankForm(file);
+          }}
+          onCleared={() => {
+            setForm(null);
+            setBlankForm(null);
+          }}
         />
       </section>
 
@@ -174,7 +197,7 @@ function FormUpload({
   form: UploadedForm | null;
   insurer: string;
   onInsurer: (value: string) => void;
-  onUploaded: (form: UploadedForm) => void;
+  onUploaded: (form: UploadedForm, file: File) => void;
   onCleared: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -187,7 +210,7 @@ function FormUpload({
     setBusy(true);
     setError(null);
     try {
-      onUploaded(await uploadForm(file, insurer));
+      onUploaded(await uploadForm(file, insurer), file);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

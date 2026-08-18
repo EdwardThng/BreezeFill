@@ -92,6 +92,18 @@ export interface UploadedForm {
    * filled, which is what the proof sheet is for.
    */
   fill_mode: "acroform" | "overlay";
+  /**
+   * The whole schema, for this browser to hold and hand back.
+   *
+   * Opaque — nothing here reads it — but it is what makes the map and the fill
+   * work without the server having remembered anything between requests. Null
+   * for a form this repo already describes, which every deployment has.
+   *
+   * Holding it is not an optimisation. A doctor whose form was derived and
+   * then not banked (no store provisioned, a Blob outage, an eviction) used to
+   * get `unknown form_id` after typing the whole claim in.
+   */
+  schema: unknown | null;
 }
 
 export interface UploadedFormField {

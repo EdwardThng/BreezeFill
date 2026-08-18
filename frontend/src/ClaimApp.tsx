@@ -23,6 +23,22 @@ const STEP_OF: Record<Stage["name"], number> = { input: 1, review: 2, done: 3 };
  * is not advertised.
  */
 export default function ClaimApp() {
+  /**
+   * The uploaded form, held for as long as the claim is being worked on.
+   *
+   * The server keeps no copy of an uploaded form between requests unless a
+   * bank is provisioned, so the schema and the blank PDF travel with the map
+   * and the fill. This browser is the only thing that reliably has them, and a
+   * doctor who typed in a whole claim should not lose it to a storage
+   * decision — which is exactly what `unknown form_id: upload_…` was.
+   *
+   * Both are null for a form this repo already describes; the server has those.
+   */
+  const [carried, setCarried] = useState<{
+    schema: unknown | null;
+    blankForm: File | null;
+  }>({ schema: null, blankForm: null });
+
   const [stage, setStage] = useState<Stage>({ name: "input" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +48,16 @@ export default function ClaimApp() {
   // the picker went. Connectivity now surfaces on the first thing they try,
   // which is the upload, rather than as a banner about a list they never saw.
 
-  const handleCreate = async (formId: string, patient: PatientInput) => {
+  const handleCreate = async (
+    formId: string,
+    patient: PatientInput,
+    form: { schema: unknown | null; blankForm: File | null },
+  ) => {
+    setCarried(form);
     setBusy(true);
     setError(null);
     try {
-      const claim = await mapClaim(formId, patient);
+      const claim = await mapClaim(formId, patient, form.schema);
       setStage({ name: "review", claim });
       window.scrollTo({ top: 0 });
     } catch (e) {
@@ -53,7 +74,12 @@ export default function ClaimApp() {
     setBusy(true);
     setError(null);
     try {
-      const blob = await fillPdf(claim.form_id, values);
+      const blob = await fillPdf(
+        claim.form_id,
+        values,
+        carried.schema,
+        carried.blankForm,
+      );
       const fileName = `${claim.form_id}_filled.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -74,6 +100,14 @@ export default function ClaimApp() {
   // stage is the whole of it.
   const handleDiscard = () => {
     setError(null);
+    setStage({ name: "input" });
+  };
+
+  const startAnother = () => {
+    // The next claim is a different form as often as not, and a stale blank
+    // PDF paired with a fresh schema is refused by the server anyway — it
+    // checks the bytes hash to the form the answers were mapped against.
+    setCarried({ schema: null, blankForm: null });
     setStage({ name: "input" });
   };
 
@@ -136,9 +170,7 @@ export default function ClaimApp() {
             Nothing was saved. The server kept no copy of this patient at any
             point — it read the note, returned the answers, and forgot both.
           </p>
-          <button onClick={() => setStage({ name: "input" })}>
-            Start another claim
-          </button>
+          <button onClick={startAnother}>Start another claim</button>
         </div>
       )}
     </main>

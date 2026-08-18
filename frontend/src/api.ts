@@ -39,12 +39,16 @@ export async function getForms(): Promise<FormInfo[]> {
 export async function mapClaim(
   formId: string,
   patient: PatientInput,
+  schema?: unknown | null,
 ): Promise<ClaimResponse> {
   const res = await ensureOk(
     await fetch(`${API_BASE}/map`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ form_id: formId, patient }),
+      // The schema goes back with the claim for an uploaded form. The server
+      // keeps no copy between requests unless a bank is provisioned, and a
+      // doctor should not lose a typed-in claim to a storage decision.
+      body: JSON.stringify({ form_id: formId, patient, schema: schema ?? null }),
     }),
   );
   return res.json();
@@ -60,12 +64,21 @@ export async function mapClaim(
 export async function fillPdf(
   formId: string,
   values: Record<string, string | boolean | null>,
+  schema?: unknown | null,
+  blankForm?: File | null,
 ): Promise<Blob> {
   const res = await ensureOk(
     await fetch(`${API_BASE}/forms/${encodeURIComponent(formId)}/pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ values }),
+      body: JSON.stringify({
+        values,
+        schema: schema ?? null,
+        // The blank form itself, for an uploaded one. The server checks it
+        // hashes to the form these answers were mapped against before it
+        // writes a single value into it.
+        pdf_base64: blankForm ? await fileToBase64(blankForm) : null,
+      }),
     }),
   );
   return res.blob();

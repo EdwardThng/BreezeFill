@@ -530,3 +530,108 @@ class TestTheHitPathDoesNoWorkItDoesNotNeedTo:
         response = client.post("/forms/upload", json={"pdf_base64": b64(data)})
         assert response.status_code == 200
         assert response.json()["known"] is True
+
+
+class TestTheClaimSurvivesWithNoBankAtAll:
+    """The bug of 2026-08-18: `unknown form_id: upload_9868ee…`.
+
+    A doctor uploaded a form, pasted the notes, filled in the patient, and got
+    a 404 from /map. The server had derived that schema, handed back an id for
+    it, and thrown it away — `bank().put()` was a no-op because no Blob store
+    had been created.
+
+    The unprovisioned store was not the bug. The bug was that the bank had been
+    made load-bearing for CORRECTNESS when it is only ever a speed cache: an
+    outage, an eviction or a store nobody made all produce the same 404 in the
+    middle of a claim. A schema the client is holding cannot be evicted.
+    """
+
+    @pytest.fixture
+    def no_bank(self, monkeypatch):
+        from form_bank import NullBank
+
+        monkeypatch.setattr(main, "_BANK", NullBank())
+        return NullBank()
+
+    def upload(self, data: bytes) -> dict:
+        return client.post("/forms/upload", json={"pdf_base64": b64(data)}).json()
+
+    def test_the_upload_hands_back_the_whole_schema(self, no_bank, no_model) -> None:
+        body = self.upload(not_curated(DEV_PDF.read_bytes()))
+        assert body["schema"] is not None
+        assert body["schema"]["form_id"] == body["form_id"]
+        assert body["schema"]["fill_mode"] == "acroform"
+
+    def test_a_curated_form_carries_no_schema_back(self, no_bank, no_model) -> None:
+        # It is in this repository; every deployment already has it, and
+        # shipping it to the browser is bytes for nothing.
+        body = self.upload(DEV_PDF.read_bytes())
+        assert body["schema"] is None
+
+    def test_the_form_is_found_again_from_the_carried_schema(self, no_bank, no_model) -> None:
+        body = self.upload(not_curated(DEV_PDF.read_bytes()))
+        # Exactly the request that 404'd: nothing on the server remembers this
+        # form, and there is no bank to have kept it.
+        found = main._get_schema(body["form_id"], main.FormSchema.model_validate(body["schema"]))
+        assert found.form_id == body["form_id"]
+
+    def test_without_the_carried_schema_it_is_still_a_404(self, no_bank, no_model) -> None:
+        # The positive case above is worthless without this: it proves the
+        # carried copy is what rescued it, not something else.
+        body = self.upload(not_curated(DEV_PDF.read_bytes()))
+        with pytest.raises(main.HTTPException) as caught:
+            main._get_schema(body["form_id"], None)
+        assert caught.value.status_code == 404
+
+    def test_the_404_tells_the_caller_what_to_do(self, no_bank) -> None:
+        with pytest.raises(main.HTTPException) as caught:
+            main._get_schema(f"upload_{'c' * 32}", None)
+        assert "send it again" in caught.value.detail
+
+    def test_the_pdf_fills_from_the_carried_form(self, no_bank, no_model) -> None:
+        data = not_curated(DEV_PDF.read_bytes())
+        body = self.upload(data)
+        diagnosis = next(f for f in body["fields"] if f["label"] == "Diagnosis")
+
+        response = client.post(
+            f"/forms/{body['form_id']}/pdf",
+            json={
+                "values": {diagnosis["id"]: "Acute tonsillitis"},
+                "schema": body["schema"],
+                "pdf_base64": b64(data),
+            },
+        )
+        assert response.status_code == 200
+        assert response.content.startswith(b"%PDF-")
+
+    def test_a_carried_pdf_that_is_not_that_form_is_refused(self, no_bank, no_model) -> None:
+        # The key is the content hash, so this is checkable. Without it a
+        # caller could pair one form's boxes with another form's pages, and an
+        # overlay fill would stamp answers at coordinates measured elsewhere.
+        body = self.upload(not_curated(DEV_PDF.read_bytes()))
+        response = client.post(
+            f"/forms/{body['form_id']}/pdf",
+            json={
+                "values": {},
+                "schema": body["schema"],
+                "pdf_base64": b64(not_curated(SCANNED.read_bytes())),
+            },
+        )
+        assert response.status_code == 422
+        assert "not the form" in response.json()["detail"]
+
+    def test_a_caller_cannot_redefine_a_hand_authored_form(self, no_bank) -> None:
+        # A carried schema is honoured for an `upload_*` id only. What
+        # `aia_ghs_claim` means is decided in this repository.
+        forged = main.FormSchema(
+            form_id="aia_ghs_claim",
+            pdf_path="bank://x.pdf",
+            fill_mode="acroform",
+            fields=[
+                main.FormField(
+                    id="x", pdf_field_name="X", type="text", source="llm", label="X"
+                )
+            ],
+        )
+        assert main._get_schema("aia_ghs_claim", forged).form_id == "aia_ghs_claim"
+        assert len(main._get_schema("aia_ghs_claim", forged).fields) == 24

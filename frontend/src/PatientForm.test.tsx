@@ -32,6 +32,7 @@ function uploaded(over = {}) {
     display_name: "GHS claim form",
     known: false,
     fill_mode: "acroform",
+    schema: { form_id: `upload_${"a".repeat(32)}`, fill_mode: "acroform", fields: [] },
     fields: [
       {
         id: "diagnosis",
@@ -409,5 +410,80 @@ describe("what still has to be true before anything is mapped", () => {
     expect(formId).toBe(uploaded().form_id);
     expect(patient.insurer).toBe("Prudential");
     expect(patient.clinical_text).toContain("acute tonsillitis");
+  });
+});
+
+describe("what has to travel with the claim", () => {
+  /**
+   * The bug of 2026-08-18: `unknown form_id: upload_9868ee…`. The server
+   * derived a schema, handed back an id for it, and threw it away — nothing
+   * had been banked because no Blob store existed. A doctor lost a whole
+   * typed-in claim to a storage decision.
+   *
+   * So the schema and the blank PDF go WITH the claim. This browser is the
+   * only thing that reliably still has them.
+   */
+
+  async function completeClaim(onSubmit: ReturnType<typeof vi.fn>, over = {}) {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={onSubmit} />);
+
+    vi.mocked(uploadForm).mockResolvedValue(uploaded(over) as never);
+    await user.upload(formInput(), pdf("blank_form.pdf"));
+    await screen.findByText(/questions found/i);
+
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    await user.type(notesBox(), "Seen 03/07/2026, acute tonsillitis.");
+    await user.type(screen.getByLabelText(/patient name/i), "Synthetic Patient");
+    await user.type(screen.getByLabelText(/nric/i), "S8012345D");
+    await user.type(screen.getByLabelText(/date of birth/i), "1978-03-14");
+    await user.click(screen.getByRole("button", { name: /read the notes/i }));
+  }
+
+  test("an uploaded form sends its schema and the file back", async () => {
+    const onSubmit = vi.fn();
+    await completeClaim(onSubmit);
+
+    const carried = onSubmit.mock.calls[0][2];
+    expect(carried.schema).toEqual(uploaded().schema);
+    expect(carried.blankForm).toBeInstanceOf(File);
+    expect(carried.blankForm.name).toBe("blank_form.pdf");
+  });
+
+  test("a form the repo already describes sends neither", async () => {
+    // The server has it. Shipping a schema and a multi-megabyte PDF back for
+    // a form every deployment already holds is bytes for nothing.
+    const onSubmit = vi.fn();
+    await completeClaim(onSubmit, { schema: null });
+
+    const carried = onSubmit.mock.calls[0][2];
+    expect(carried.schema).toBeNull();
+    expect(carried.blankForm).toBeNull();
+  });
+
+  test("backing out of the form drops the file with it", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={onSubmit} />);
+
+    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
+    await user.upload(formInput(), pdf("first.pdf"));
+    await screen.findByText(/questions found/i);
+    await user.click(screen.getByRole("button", { name: /use a different form/i }));
+
+    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
+    await user.upload(formInput(), pdf("second.pdf"));
+    await screen.findByText(/questions found/i);
+
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    await user.type(notesBox(), "Seen 03/07/2026.");
+    await user.type(screen.getByLabelText(/patient name/i), "Synthetic Patient");
+    await user.type(screen.getByLabelText(/nric/i), "S8012345D");
+    await user.type(screen.getByLabelText(/date of birth/i), "1978-03-14");
+    await user.click(screen.getByRole("button", { name: /read the notes/i }));
+
+    // The second form's file, not the first. A stale blank paired with a fresh
+    // schema is refused by the server, but arriving there at all is a bug.
+    expect(onSubmit.mock.calls[0][2].blankForm.name).toBe("second.pdf");
   });
 });
