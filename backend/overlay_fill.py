@@ -128,7 +128,7 @@ def _draw_check(c: canvas.Canvas, box: FieldBox, page_height: float) -> None:
 
 
 def overlay_fill(
-    pdf_path: str | Path,
+    pdf: str | Path | bytes,
     boxes: dict[str, FieldBox],
     values: dict[str, str | bool | None],
 ) -> bytes:
@@ -137,7 +137,11 @@ def overlay_fill(
     Keys of both dicts are field ids. A value of None, "", or False draws
     nothing — a blank the doctor completes by hand.
     """
-    reader = PdfReader(str(pdf_path))
+    # Bytes as well as a path: a form derived from an upload lives in the bank
+    # rather than on disk, and is filled without ever being written down.
+    reader = PdfReader(
+        io.BytesIO(bytes(pdf)) if isinstance(pdf, (bytes, bytearray)) else str(pdf)
+    )
     page_count = len(reader.pages)
 
     unknown = sorted(set(values) - set(boxes))

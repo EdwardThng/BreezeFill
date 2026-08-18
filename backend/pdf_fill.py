@@ -79,20 +79,33 @@ def _flatten_comb_fields(page, updates: dict[str, str]) -> None:
                 del field["/MaxLen"]
 
 
-def fill_pdf(pdf_path: str | Path, values: dict[str, str | bool | None]) -> bytes:
+def _open_source(pdf: str | Path | bytes) -> tuple[object, str]:
+    """A thing pypdf can read, plus a name safe to put in an error message.
+
+    Accepts raw bytes as well as a path because a form from the bank never
+    lands on disk — it is fetched over HTTP and filled in memory. The name is
+    generic in that case: there is no filename to leak and none worth quoting.
+    """
+    if isinstance(pdf, (bytes, bytearray)):
+        return io.BytesIO(bytes(pdf)), "the uploaded form"
+    path = Path(pdf)
+    if not path.exists():
+        raise PdfFillError(f"form PDF not found: {path.name}")
+    return str(path), path.name
+
+
+def fill_pdf(pdf: str | Path | bytes, values: dict[str, str | bool | None]) -> bytes:
     """Fill AcroForm fields by PDF field name and return the filled PDF bytes.
 
     values: {pdf_field_name: value}. None leaves the field blank. Booleans
     are only valid for checkbox fields; strings only for text fields.
     """
-    pdf_path = Path(pdf_path)
-    if not pdf_path.exists():
-        raise PdfFillError(f"form PDF not found: {pdf_path.name}")
+    source, pdf_name = _open_source(pdf)
 
-    reader = PdfReader(str(pdf_path))
+    reader = PdfReader(source)
     pdf_fields = reader.get_fields() or {}
     if not pdf_fields:
-        raise PdfFillError(f"{pdf_path.name} has no AcroForm fields")
+        raise PdfFillError(f"{pdf_name} has no AcroForm fields")
 
     unknown = sorted(set(values) - set(pdf_fields))
     if unknown:
@@ -116,7 +129,9 @@ def fill_pdf(pdf_path: str | Path, values: dict[str, str | bool | None]) -> byte
                 raise PdfFillError(f"field {name!r} is not a checkbox; got a boolean")
             updates[name] = value
 
-    writer = PdfWriter(clone_from=str(pdf_path))
+    if isinstance(source, io.BytesIO):
+        source.seek(0)
+    writer = PdfWriter(clone_from=source)
     writer.set_need_appearances_writer(True)
     for page in writer.pages:
         if page.get("/Annots"):
