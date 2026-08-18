@@ -1423,7 +1423,6 @@ function showStep(key) {
   placeLedger();
   showNotePane();
   updateBackToReview();
-  $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
   // Not scrollIntoView: on a panel this narrow it fights the user's own
   // scrolling. Setting the container's scrollTop puts the new step where the
   // last one was without hijacking anything.
@@ -1565,11 +1564,6 @@ function placeLedger() {
   else scroll.prepend(rows);
 }
 
-function updateProgress() {
-  const index = STEPS.findIndex((s) => s.key === state.step);
-  if (index >= 0) $("step-counter").textContent = `Step ${index + 1} of ${STEPS.length}`;
-}
-
 /**
  * The readiness line, the bar and the Fill button — everything about the
  * review except the rows themselves.
@@ -1605,7 +1599,6 @@ function updateReviewMeta() {
   if (bar) bar.style.transform = `scaleX(${needing === 0 ? 1 : done / needing})`;
 
   updateFillButton();
-  updateProgress();
 }
 
 /**
@@ -2401,7 +2394,6 @@ async function onFill() {
       // sat stacked saying the same thing in different words.
       setStatus(status, "");
       state.filled = true;
-      updateProgress();
     }
     renderReport(response);
   } catch (error) {
@@ -2482,9 +2474,6 @@ function chooseRoute(kind) {
     return;
   }
   $("step-route").hidden = true;
-  // The counter is meaningless until a route is chosen — the fork is not one
-  // of STEPS — so it stays hidden behind it and showStep fills it in.
-  $("step-counter").hidden = false;
   showStep("name");
 }
 
@@ -2502,7 +2491,6 @@ $("route-back").addEventListener("click", () => {
   showStep("name");
   $("step-name").hidden = true;
   $("step-route").hidden = false;
-  $("step-counter").hidden = true;
 });
 
 // Advance only on an explicit click — never on typing, and never because the

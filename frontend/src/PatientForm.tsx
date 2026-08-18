@@ -201,9 +201,14 @@ function FormUpload({
     return (
       <div className="chosen">
         <p className="chosen-name">
+          {/* The tick is the completion signal. What replaced the "Reading
+              the form…" line is already proof it finished, but a doctor who
+              looked away during a seven-page scan comes back to a card and
+              has to work out whether it is a result or a status. */}
+          <span className="chosen-tick" aria-hidden="true">✓</span>
           <strong>{form.display_name}</strong>
           <span className="chosen-sub">
-            {form.fields.length} questions found
+            Read — {form.fields.length} questions found
             {form.known ? " — this form was already known" : ""}
           </span>
         </p>

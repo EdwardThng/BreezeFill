@@ -853,6 +853,14 @@ consequence:
   a referral are one consultation's worth of evidence. One unreadable scan
   names itself and the rest still go through.
 
+**The step counter is gone from the panel (2026-08-18, the owner's call).** It
+read "Step 1 of 4" in the header's top right. The panel already shows where you
+are — each finished step collapses into a one-line summary that reopens it, so
+the position is on screen as structure rather than as a number — and the
+counter was the one piece of chrome the fork could not be numbered into without
+making the work that matters read "Step 2 of 5". `updateProgress()` went with
+it: with nothing to write to, it was a function that did nothing, called twice.
+
 Both choices are reversible, and **neither back button discards anything** —
 the notes box is the same box in both modes. That is why they are styled quiet
 rather than as warnings. The panel has one too, on step 1 only: past there a

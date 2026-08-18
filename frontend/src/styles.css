@@ -635,6 +635,12 @@ code {
   margin: 0;
 }
 
+.chosen-tick {
+  margin-right: 6px;
+  font-weight: 700;
+  color: #15803d;
+}
+
 .chosen-sub {
   display: block;
   margin-top: 3px;

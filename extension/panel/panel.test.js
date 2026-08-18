@@ -3392,13 +3392,14 @@ describe("the fork between a portal form and a PDF", () => {
     expect($("step-name").hidden).toBe(true);
   });
 
-  test("the step counter stays hidden until a route is chosen", async () => {
-    // The fork is not one of STEPS. Numbering it would make the work that
-    // matters read "Step 2 of 5", and leaving the counter showing "Step 1 of 4"
-    // over a question that is not step 1 is worse.
+  test("the panel carries no step counter at all", async () => {
+    // Removed 2026-08-18, the owner's call. The panel is four steps that
+    // collapse into one-line summaries as they finish, so where you are is
+    // already on screen — the counter restated it in the corner and was the
+    // one piece of chrome the fork could not be numbered into.
     loadPanel();
     await settle();
-    expect($("step-counter").hidden).toBe(true);
+    expect($("step-counter")).toBeNull();
   });
 
   test("choosing the portal route reveals step 1 and the counter", async () => {
@@ -3408,8 +3409,6 @@ describe("the fork between a portal form and a PDF", () => {
 
     expect($("step-route").hidden).toBe(true);
     expect($("step-name").hidden).toBe(false);
-    expect($("step-counter").hidden).toBe(false);
-    expect($("step-counter").textContent).toBe("Step 1 of 4");
   });
 
   test("choosing the portal route opens no tab", async () => {
@@ -3450,7 +3449,6 @@ describe("the fork between a portal form and a PDF", () => {
 
     expect($("step-route").hidden).toBe(false);
     expect($("step-name").hidden).toBe(true);
-    expect($("step-counter").hidden).toBe(true);
   });
 
   test("going back keeps a name already typed", async () => {

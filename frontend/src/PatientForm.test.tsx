@@ -129,6 +129,76 @@ describe("section 1 — the blank insurance form", () => {
   });
 });
 
+describe("what the doctor sees while the form is being read", () => {
+  /**
+   * A 7-page scan is seven model calls, so this line can be on screen for the
+   * better part of a minute. What matters is that it is not the LAST thing
+   * they see — a progress message with no ending is indistinguishable from a
+   * hang, and the doctor's next move is to click the thing again.
+   */
+
+  function deferred() {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  test("the reading line appears, then is replaced by the result", async () => {
+    const gate = deferred();
+    vi.mocked(uploadForm).mockReturnValue(gate.promise as never);
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(formInput(), pdf());
+
+    // While it runs.
+    expect(screen.getByText(/reading the form/i)).toBeTruthy();
+
+    gate.resolve(uploaded({ fields: [uploaded().fields[0], uploaded().fields[0]] }));
+
+    // After. The line is GONE, and what replaced it says what was found —
+    // which is a better completion signal than "done" because it is also the
+    // thing the doctor needs to know.
+    expect(await screen.findByText(/2 questions found/i)).toBeTruthy();
+    expect(screen.queryByText(/reading the form/i)).toBeNull();
+  });
+
+  test("a failure also clears the reading line, and says why", async () => {
+    // The other way it can end. Leaving "Reading the form…" up next to an
+    // error would read as still working.
+    const gate = deferred();
+    vi.mocked(uploadForm).mockReturnValue(gate.promise as never);
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(formInput(), pdf());
+    expect(screen.getByText(/reading the form/i)).toBeTruthy();
+
+    gate.reject(new Error("That PDF is password-protected."));
+
+    expect(await screen.findByText(/password-protected/i)).toBeTruthy();
+    expect(screen.queryByText(/reading the form/i)).toBeNull();
+  });
+
+  test("the picker is disabled while it reads, and usable again after", async () => {
+    // Re-attaching mid-read would start a second call on the same file.
+    const gate = deferred();
+    vi.mocked(uploadForm).mockReturnValue(gate.promise as never);
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(formInput(), pdf());
+    expect((formInput() as HTMLInputElement).disabled).toBe(true);
+
+    gate.reject(new Error("nope"));
+    await waitFor(() => expect((formInput() as HTMLInputElement).disabled).toBe(false));
+  });
+});
+
 describe("section 2 — how the doctor has the notes", () => {
   test("the choice is asked before either input appears", () => {
     render(<PatientForm onSubmit={vi.fn()} />);
