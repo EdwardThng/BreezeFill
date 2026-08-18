@@ -46,8 +46,8 @@ from licence import LicenceError, mint_licence, verify_licence
 
 from demographics import (
     ParsedDemographics,
-    demographic_field_for_label,
     parse_demographics,
+    sources_for_labels,
 )
 from mapping import (
     FormField,
@@ -451,36 +451,19 @@ def _live_sources(fields: list[LiveField]) -> list[str]:
     the clearest case: it is required at step 1, so it is ALWAYS known, and it
     was the one field guaranteed to be left blank.
 
-    Three rules, all of them refusals:
+    The two rules that decide it live in `sources_for_labels`, shared with the
+    uploaded-PDF intake path so a refusal cannot exist on one route and not the
+    other. The rule this function adds on top is the one that is specific to a
+    live page:
 
-    - A label resolves only through `demographic_field_for_label`, which is
-      exact against the shared alias table. An unrecognised label stays `llm`.
     - **A repeating entry is never demographic.** `instance` means the question
       is asked once per entry — several dependants, several admissions — and
-      one patient record cannot answer the second one. These stay `llm`.
-    - **Two controls wanting the same demographic yields neither.** A form with
-      "Name" in the patient block and "Name" again in the physician block gives
-      no way to tell which is which from the label alone, and filling both puts
-      the patient's name in the doctor's box. The same refusal `locate.js`
-      makes over three identical "Date Of Birth" labels.
-
-    The privacy property is unchanged and worth stating, because this looks
-    like it moves data toward the model and does the opposite: a demographic
-    field is answered by `assemble_claim` copying from the record, so marking a
-    control demographic REMOVES its question from the mapping call.
+      one patient record cannot answer the second one. Passing `None` for those
+      is how that is said to the shared helper.
     """
-    resolved: list[str | None] = [
-        None
-        if field.instance is not None
-        else demographic_field_for_label(field.label)
-        for field in fields
-    ]
-
-    seen = Counter(name for name in resolved if name)
-    return [
-        f"demographics.{name}" if name and seen[name] == 1 else "llm"
-        for name in resolved
-    ]
+    return sources_for_labels(
+        [None if field.instance is not None else field.label for field in fields]
+    )
 
 
 def _live_schema(fields: list[LiveField]) -> FormSchema:

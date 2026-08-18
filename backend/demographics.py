@@ -50,6 +50,8 @@ here is a final answer; it is a first draft of one.
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Sequence
 from datetime import date
 
 from pydantic import BaseModel
@@ -1391,3 +1393,40 @@ def parse_demographics(text: str, known_name: str = "") -> ParsedDemographics:
     choices = {f: c for f, c in choices.items() if f not in values}
 
     return ParsedDemographics(**values, sources=sources, choices=choices)
+
+
+def sources_for_labels(labels: Sequence[str | None]) -> list[str]:
+    """Form control labels -> the `source` each schema field should carry.
+
+    Returns `"demographics.<attr>"` for a control the patient record can answer
+    and `"llm"` for everything else, in the order given. A `None` entry is
+    never demographic — callers pass it for a control they already know one
+    patient record cannot answer (a repeating entry, say).
+
+    This is shared rather than reimplemented per intake path, and the reason is
+    the second rule below. Both rules are refusals, and a refusal that exists
+    on one path and not another is worse than one that exists nowhere: it makes
+    the safe behaviour look like a property of the product when it is a
+    property of whichever route the doctor happened to take.
+
+    - A label resolves only through `demographic_field_for_label`, which is
+      exact against the alias table. An unrecognised label stays `llm`.
+    - **Two controls wanting the same demographic yields neither.** A form with
+      "Name" in the patient block and "Name" again in the physician block gives
+      no way to tell which is which from the label alone, and filling both puts
+      the patient's name in the doctor's box.
+
+    The privacy property is worth stating, because this looks like it moves
+    data toward the model and does the opposite: a demographic field is
+    answered by copying from the record, so marking a control demographic
+    REMOVES its question from the mapping call.
+    """
+    resolved = [
+        None if label is None else demographic_field_for_label(label)
+        for label in labels
+    ]
+    seen = Counter(name for name in resolved if name)
+    return [
+        f"demographics.{name}" if name and seen[name] == 1 else "llm"
+        for name in resolved
+    ]
