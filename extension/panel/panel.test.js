@@ -3442,6 +3442,44 @@ describe("the fork between a portal form and a PDF", () => {
     expect($("step-name").hidden).toBe(true);
   });
 
+  test("the fork can be returned to from step 1", async () => {
+    loadPanel();
+    await settle();
+    $("route-portal").click();
+    $("route-back").click();
+
+    expect($("step-route").hidden).toBe(false);
+    expect($("step-name").hidden).toBe(true);
+    expect($("step-counter").hidden).toBe(true);
+  });
+
+  test("going back keeps a name already typed", async () => {
+    // The fork collects nothing, so there is nothing of the doctor's to lose,
+    // and a name typed before they realised they had the wrong route should
+    // still be there when they come back to it.
+    loadPanel();
+    await settle();
+    $("route-portal").click();
+    $("full-name").value = "Synthetic Patient";
+    $("route-back").click();
+    $("route-portal").click();
+
+    expect($("full-name").value).toBe("Synthetic Patient");
+  });
+
+  test("the way back is not offered past step 1", async () => {
+    // By then a note has been pasted too, and a control that throws that away
+    // to re-ask a question already answered is a trap rather than a way out.
+    loadPanel();
+    await settle();
+    $("route-portal").click();
+    $("full-name").value = "Synthetic Patient";
+    $("name-next").click();
+
+    expect($("step-name").hidden).toBe(true);
+    expect($("route-back").closest("section").hidden).toBe(true);
+  });
+
   test("neither answer is written to storage", async () => {
     // chrome.storage holds the licence key and nothing else. A doctor who does
     // portals on Monday and PDFs on Tuesday is the ordinary case, so there is

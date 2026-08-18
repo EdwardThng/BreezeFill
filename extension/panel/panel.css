@@ -1443,3 +1443,22 @@ button.choice:hover {
   font-weight: 400;
   opacity: 0.75;
 }
+
+/* Back to the fork. Quiet and non-destructive — it discards nothing, so it
+   must not read like a control that does. */
+.back {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.back:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

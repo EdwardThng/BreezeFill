@@ -167,6 +167,14 @@
       </section>
 
       <section class="step" id="step-name" aria-labelledby="h-name" hidden>
+        <!-- Back to the fork. Only on step 1: past here the doctor has typed
+             a name and pasted a note, and a control that throws that away to
+             re-ask a question they already answered is a trap rather than a
+             way out. Leaving for the PDF route from step 3 is a new tab and
+             a fresh start anyway. -->
+        <button id="route-back" class="back" type="button">
+          &larr; This form is a PDF, not this page
+        </button>
         <h2 id="h-name">Who is this claim for?</h2>
         <label class="field">
           <span>Full name</span>

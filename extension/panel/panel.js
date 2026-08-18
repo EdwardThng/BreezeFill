@@ -2491,6 +2491,20 @@ function chooseRoute(kind) {
 $("route-portal").addEventListener("click", () => chooseRoute("portal"));
 $("route-pdf").addEventListener("click", () => chooseRoute("pdf"));
 
+/**
+ * Back to the fork, for a doctor who answered it wrongly.
+ *
+ * Nothing is cleared. The fork collects nothing, so there is nothing of theirs
+ * to lose, and a name typed before they realised they had the wrong route
+ * should still be there when they come back to it.
+ */
+$("route-back").addEventListener("click", () => {
+  showStep("name");
+  $("step-name").hidden = true;
+  $("step-route").hidden = false;
+  $("step-counter").hidden = true;
+});
+
 // Advance only on an explicit click — never on typing, and never because the
 // insurer's page changed shape underneath.
 $("name-next").addEventListener("click", () => {
