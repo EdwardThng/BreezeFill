@@ -559,3 +559,83 @@ code {
   background: #eef0f4;
   font-size: 0.9em;
 }
+
+/* ---------------------------------------------------------------------------
+   Uploading a blank form, and attaching notes as a PDF.
+
+   `.upload*` names are new — checked against every class already in this file,
+   because this stylesheet is GLOBALLY scoped and shared with the landing page,
+   which is how `.step` and `.pill` came to collide.
+   --------------------------------------------------------------------------- */
+
+.upload {
+  margin-top: 16px;
+}
+
+.upload-open {
+  padding: 8px 14px;
+  border: 1px dashed #9aa4b2;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.upload-open:hover:not(:disabled) {
+  border-color: #1a6fb8;
+  background: #f1f6fb;
+  color: #1a6fb8;
+}
+
+.upload-open-panel {
+  padding: 16px;
+  border: 1px solid #d7dce4;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.upload-open-panel > label {
+  margin-top: 12px;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.upload-cancel {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.upload-cancel:hover:not(:disabled) {
+  background: #eef2f7;
+}
+
+.upload-ok {
+  margin-top: 10px;
+  color: #15803d;
+  font-size: 0.9rem;
+}
+
+.upload-note {
+  display: block;
+  font-size: 0.9rem;
+  color: #475569;
+  font-weight: 400;
+}
+
+.upload-note > span {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.upload input[type="file"] {
+  display: block;
+  width: 100%;
+  font-size: 0.9rem;
+}

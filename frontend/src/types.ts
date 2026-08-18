@@ -71,3 +71,28 @@ export interface PatientInput {
   insurer: string;
   clinical_text: string;
 }
+
+/**
+ * What POST /forms/upload returns for a blank form the bank had never seen.
+ *
+ * `known` says the schema came straight out of the bank rather than being
+ * derived — the same form, sent in by somebody else before. It is surfaced
+ * because it is the difference between a form that has been used and one being
+ * read for the first time, and the doctor should be told which they have.
+ */
+export interface UploadedForm {
+  form_id: string;
+  display_name: string;
+  known: boolean;
+  fields: UploadedFormField[];
+}
+
+export interface UploadedFormField {
+  id: string;
+  label: string;
+  description: string | null;
+  type: FieldType;
+  options: string[];
+  /** "llm", or "demographics.<attr>" for a box answered from what was typed. */
+  source: string;
+}

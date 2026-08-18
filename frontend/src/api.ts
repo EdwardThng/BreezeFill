@@ -1,4 +1,4 @@
-import type { ClaimResponse, FormInfo, PatientInput } from "./types";
+import type { ClaimResponse, FormInfo, PatientInput, UploadedForm } from "./types";
 
 // Empty means "same origin", which is right when the backend serves this
 // bundle. Set VITE_API_URL at build time when the site is hosted separately —
@@ -98,4 +98,67 @@ export async function claimLicence(sessionId: string): Promise<string> {
     }),
   );
   return (await res.json()).licence as string;
+}
+
+/**
+ * A File from an <input type="file">, as base64 with no data: prefix.
+ *
+ * FileReader rather than `btoa(String.fromCharCode(...bytes))`: the spread
+ * form blows the argument limit and throws on anything past a few hundred KB,
+ * which is every real insurance form.
+ */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : "");
+    };
+    reader.onerror = () => reject(new Error("That file could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * A blank insurer form the bank has never seen, read into a mappable schema.
+ *
+ * The PDF must be BLANK. The server refuses one that already has answers in
+ * it — that is a patient's completed claim, and this is the one route in the
+ * product that keeps what it is given.
+ */
+export async function uploadForm(
+  file: File,
+  insurer: string,
+): Promise<UploadedForm> {
+  const res = await ensureOk(
+    await fetch(`${API_BASE}/forms/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pdf_base64: await fileToBase64(file),
+        filename: file.name,
+        insurer: insurer.trim() || null,
+      }),
+    }),
+  );
+  return res.json();
+}
+
+/**
+ * A consultation note that arrived as a PDF, as text.
+ *
+ * The text comes back to be shown in the notes box rather than sent onward —
+ * a PDF's text layer is not always what the page looks like, and what sits in
+ * that box is what redaction searches through.
+ */
+export async function extractNote(file: File): Promise<string> {
+  const res = await ensureOk(
+    await fetch(`${API_BASE}/notes/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pdf_base64: await fileToBase64(file) }),
+    }),
+  );
+  return (await res.json()).text as string;
 }
