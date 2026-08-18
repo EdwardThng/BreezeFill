@@ -1,4 +1,6 @@
-const STEPS = ["Patient & notes", "Check the answers", "Download"];
+// Step 1 is the form, the notes AND the patient since the picker went — the
+// label names the first thing asked for rather than trying to list all three.
+const STEPS = ["Form & notes", "Check the answers", "Download"];
 
 /** Three numbered steps so a first-time user can see where they are and what
  *  is still coming. */
