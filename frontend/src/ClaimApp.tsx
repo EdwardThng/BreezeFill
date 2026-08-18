@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { fillPdf, getForms, mapClaim } from "./api";
+import { useState } from "react";
+import { fillPdf, mapClaim } from "./api";
 import PatientForm from "./PatientForm";
 import ReviewScreen from "./ReviewScreen";
 import Stepper from "./Stepper";
-import type { ClaimResponse, FormInfo, PatientInput } from "./types";
+import type { ClaimResponse, PatientInput } from "./types";
 
 type Stage =
   | { name: "input" }
@@ -23,21 +23,14 @@ const STEP_OF: Record<Stage["name"], number> = { input: 1, review: 2, done: 3 };
  * is not advertised.
  */
 export default function ClaimApp() {
-  const [forms, setForms] = useState<FormInfo[] | null>(null);
   const [stage, setStage] = useState<Stage>({ name: "input" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getForms()
-      .then(setForms)
-      .catch(() =>
-        setError(
-          "Can't reach the BreezeFill server. Check your internet connection, " +
-            "then reload this page.",
-        ),
-      );
-  }, []);
+  // No form list is fetched any more. The doctor sends in the blank form and
+  // the server works out what it is — see the header of PatientForm for why
+  // the picker went. Connectivity now surfaces on the first thing they try,
+  // which is the upload, rather than as a banner about a list they never saw.
 
   const handleCreate = async (formId: string, patient: PatientInput) => {
     setBusy(true);
@@ -111,13 +104,7 @@ export default function ClaimApp() {
       {stage.name === "input" && (
         <>
           {error && <div className="error">{error}</div>}
-          {forms === null && !error && <p className="hint">Loading forms…</p>}
-          {forms !== null && forms.length === 0 && (
-            <p className="hint">No insurance forms are set up on the server yet.</p>
-          )}
-          {forms !== null && forms.length > 0 && (
-            <PatientForm forms={forms} onSubmit={handleCreate} />
-          )}
+          <PatientForm onSubmit={handleCreate} />
         </>
       )}
 
@@ -163,8 +150,8 @@ function Header() {
     <header>
       <h1>BreezeFill</h1>
       <p>
-        Paste your clinical notes, check what's been filled in, download the
-        insurance form ready to sign.
+        Upload the empty insurance form, add your notes, check what's been
+        filled in, download it ready to sign.
       </p>
     </header>
   );

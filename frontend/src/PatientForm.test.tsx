@@ -1,11 +1,11 @@
 /**
- * The input screen, and specifically the two things it can now be given as a
- * PDF: a blank insurer form the bank has never seen, and the consultation note
- * itself.
+ * The PDF claim flow: the blank form in, the notes in, then who it is for.
  *
  * The properties worth pinning are the ones that would be invisible if they
- * broke — an attached note that silently replaced a pasted one, or an insurer
- * quietly inferred from a filename and copied onto a claim without review.
+ * broke — a wrong turn a doctor cannot back out of, an attached document that
+ * silently replaced a pasted note, one unreadable scan costing the other three,
+ * or an insurer quietly inferred from a filename and copied onto a claim
+ * without review.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -20,16 +20,6 @@ vi.mock("./api", () => ({
 
 import { extractNote, formProof, uploadForm } from "./api";
 import PatientForm from "./PatientForm";
-import type { FormInfo } from "./types";
-
-const FORMS: FormInfo[] = [
-  {
-    form_id: "ge_ghs_claim",
-    display_name: "GHS claim form",
-    insurer: "Great Eastern",
-    fields: [],
-  },
-];
 
 const pdf = (name = "blank_form.pdf") =>
   new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], name, {
@@ -39,15 +29,26 @@ const pdf = (name = "blank_form.pdf") =>
 function uploaded(over = {}) {
   return {
     form_id: `upload_${"a".repeat(32)}`,
-    display_name: "blank form",
+    display_name: "GHS claim form",
     known: false,
     fill_mode: "acroform",
     fields: [
-      { id: "diagnosis", label: "Diagnosis", description: null, type: "text", options: [], source: "llm" },
+      {
+        id: "diagnosis",
+        label: "Diagnosis",
+        description: null,
+        type: "text",
+        options: [],
+        source: "llm",
+      },
     ],
     ...over,
   };
 }
+
+const formInput = () => screen.getByLabelText(/blank form \(pdf\)/i);
+const notesBox = () =>
+  screen.getByRole("textbox", { name: /clinical notes|what was read/i });
 
 beforeEach(() => {
   vi.mocked(uploadForm).mockReset();
@@ -55,24 +56,45 @@ beforeEach(() => {
   vi.mocked(formProof).mockReset();
 });
 
-describe("uploading a blank form the bank has never seen", () => {
-  test("the panel is shut until it is asked for", () => {
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /upload a blank form/i })).toBeTruthy();
-    expect(screen.queryByLabelText(/blank form \(pdf\)/i)).toBeNull();
+async function sendForm(user: ReturnType<typeof userEvent.setup>, over = {}) {
+  vi.mocked(uploadForm).mockResolvedValue(uploaded(over) as never);
+  await user.upload(formInput(), pdf());
+  return screen.findByText(/questions found/i);
+}
+
+describe("section 1 — the blank insurance form", () => {
+  test("the form is uploaded, not picked from a list", () => {
+    // The picker is gone on purpose. A doctor holding a claim form does not
+    // know whether this repo has a schema for it, and the file answers the
+    // question they would otherwise have been asked.
+    render(<PatientForm onSubmit={vi.fn()} />);
+    expect(formInput()).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 
-  test("an uploaded form joins the list and is selected", async () => {
-    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
+  test("what came back is reported, with how many questions", async () => {
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user);
+    expect(screen.getByText(/GHS claim form/)).toBeTruthy();
+    expect(screen.getByText(/1 questions found/)).toBeTruthy();
+  });
 
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
+  test("a form the server already knew says so", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user, { known: true });
+    expect(screen.getByText(/already known/i)).toBeTruthy();
+  });
 
-    const choice = await screen.findByRole("radio", { name: /blank form/i });
-    expect((choice as HTMLInputElement).checked).toBe(true);
+  test("the wrong form can be backed out of", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user);
+
+    await user.click(screen.getByRole("button", { name: /use a different form/i }));
+    expect(formInput()).toBeTruthy();
+    expect(screen.queryByText(/questions found/i)).toBeNull();
   });
 
   test("the insurer is asked for, never taken from the filename", async () => {
@@ -81,202 +103,241 @@ describe("uploading a blank form the bank has never seen", () => {
     // person who knows, not guessed from what the file happened to be called.
     vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    render(<PatientForm onSubmit={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf("AIA_claim.pdf"));
     await user.type(screen.getByLabelText(/insurer/i), "AIA");
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
+    await user.upload(formInput(), pdf("great_eastern_claim.pdf"));
 
     await waitFor(() => expect(uploadForm).toHaveBeenCalled());
     expect(vi.mocked(uploadForm).mock.calls[0][1]).toBe("AIA");
   });
 
-  test("the doctor is told not to upload a form they already filled in", async () => {
-    const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
+  test("the doctor is told not to send a form they already filled in", () => {
+    render(<PatientForm onSubmit={vi.fn()} />);
     expect(screen.getByText(/already filled in/i)).toBeTruthy();
   });
 
   test("a refusal from the server is shown rather than swallowed", async () => {
     vi.mocked(uploadForm).mockRejectedValue(
-      new Error("This form is a scan — an image of a page."),
+      new Error("That PDF is password-protected."),
     );
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    render(<PatientForm onSubmit={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
-
-    expect(await screen.findByText(/is a scan/i)).toBeTruthy();
-  });
-
-  test("re-uploading the same form does not list it twice", async () => {
-    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
-    const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-
-    for (let i = 0; i < 2; i++) {
-      await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-      await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-      await user.click(screen.getByRole("button", { name: /read this form/i }));
-      await screen.findByRole("radio", { name: /blank form/i });
-    }
-    // The id is a hash of the PDF, so the same file is the same form.
-    expect(screen.getAllByRole("radio", { name: /blank form/i })).toHaveLength(1);
+    await user.upload(formInput(), pdf());
+    expect(await screen.findByText(/password-protected/i)).toBeTruthy();
   });
 });
 
-describe("attaching the notes as a PDF", () => {
-  test("the extracted text lands in the notes box for checking", async () => {
+describe("section 2 — how the doctor has the notes", () => {
+  test("the choice is asked before either input appears", () => {
+    render(<PatientForm onSubmit={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /type or paste/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /upload documents/i })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /clinical notes/i })).toBeNull();
+  });
+
+  test("choosing paste gives a box to paste into", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    expect(notesBox()).toBeTruthy();
+  });
+
+  test("choosing upload gives a file picker that takes several", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /upload documents/i }));
+    const input = screen.getByLabelText(/documents \(pdf\)/i) as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+  });
+
+  test("a wrong choice can be backed out of", async () => {
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /upload documents/i }));
+    await user.click(screen.getByRole("button", { name: /a different way/i }));
+
+    expect(screen.getByRole("button", { name: /type or paste/i })).toBeTruthy();
+    expect(screen.queryByLabelText(/documents \(pdf\)/i)).toBeNull();
+  });
+
+  test("going back keeps what was already entered", async () => {
+    // Nothing is discarded by changing the answer — it is the same box either
+    // way — so the back button needs no warning and must not act like one.
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    await user.type(notesBox(), "Seen 03/07/2026, acute tonsillitis.");
+    await user.click(screen.getByRole("button", { name: /a different way/i }));
+    await user.click(screen.getByRole("button", { name: /upload documents/i }));
+
+    expect((notesBox() as HTMLTextAreaElement).value).toContain("acute tonsillitis");
+  });
+});
+
+describe("attaching documents", () => {
+  async function chooseUpload(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /upload documents/i }));
+    return screen.getByLabelText(/documents \(pdf\)/i);
+  }
+
+  test("the extracted text lands in the box for checking", async () => {
     // Shown, not sent onward. A PDF's text layer is not always what the page
     // looks like, and this box is what redaction searches through.
     vi.mocked(extractNote).mockResolvedValue("Dx acute tonsillitis. MC 2 days.");
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    render(<PatientForm onSubmit={vi.fn()} />);
 
-    await user.upload(screen.getByLabelText(/attach the notes as a pdf/i), pdf("note.pdf"));
-
-    const box = await screen.findByPlaceholderText(/paste the patient's notes/i);
-    expect((box as HTMLTextAreaElement).value).toContain("acute tonsillitis");
+    await user.upload(await chooseUpload(user), pdf("discharge.pdf"));
+    await waitFor(() =>
+      expect((notesBox() as HTMLTextAreaElement).value).toContain("acute tonsillitis"),
+    );
   });
 
-  test("an attachment is added to what was pasted, never over it", async () => {
-    // A doctor who pasted a consultation and then attached a discharge summary
-    // meant to send both, and losing the first is unrecoverable from here.
+  test("several documents are read, and all of them are kept", async () => {
+    // A discharge summary, an operation record and a referral are one
+    // consultation's worth of evidence. Making the doctor choose between them
+    // means the mapper answering from a fraction of what they have.
+    vi.mocked(extractNote)
+      .mockResolvedValueOnce("Discharge summary text.")
+      .mockResolvedValueOnce("Operation record text.");
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(await chooseUpload(user), [
+      pdf("discharge.pdf"),
+      pdf("operation.pdf"),
+    ]);
+
+    await waitFor(() => expect(extractNote).toHaveBeenCalledTimes(2));
+    const value = (notesBox() as HTMLTextAreaElement).value;
+    expect(value).toContain("Discharge summary text.");
+    expect(value).toContain("Operation record text.");
+  });
+
+  test("each attachment is listed by name", async () => {
+    vi.mocked(extractNote).mockResolvedValue("text");
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(await chooseUpload(user), [
+      pdf("discharge.pdf"),
+      pdf("referral.pdf"),
+    ]);
+    expect(await screen.findByText("discharge.pdf")).toBeTruthy();
+    expect(screen.getByText("referral.pdf")).toBeTruthy();
+  });
+
+  test("one unreadable document does not cost the others", async () => {
+    vi.mocked(extractNote)
+      .mockRejectedValueOnce(new Error("There is no readable text in that PDF."))
+      .mockResolvedValueOnce("Operation record text.");
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={vi.fn()} />);
+
+    await user.upload(await chooseUpload(user), [pdf("scan.pdf"), pdf("operation.pdf")]);
+
+    expect(await screen.findByText(/scan\.pdf: .*no readable text/i)).toBeTruthy();
+    await waitFor(() =>
+      expect((notesBox() as HTMLTextAreaElement).value).toContain(
+        "Operation record text.",
+      ),
+    );
+  });
+
+  test("an attachment is added to what was typed, never over it", async () => {
     vi.mocked(extractNote).mockResolvedValue("Discharge summary text.");
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
+    render(<PatientForm onSubmit={vi.fn()} />);
 
-    const box = screen.getByPlaceholderText(/paste the patient's notes/i);
-    await user.type(box, "Pasted consultation.");
-    await user.upload(screen.getByLabelText(/attach the notes as a pdf/i), pdf("note.pdf"));
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    await user.type(notesBox(), "Typed consultation.");
+    await user.click(screen.getByRole("button", { name: /a different way/i }));
+    await user.upload(await chooseUpload(user), pdf("discharge.pdf"));
 
     await waitFor(() =>
-      expect((box as HTMLTextAreaElement).value).toContain("Discharge summary"),
+      expect((notesBox() as HTMLTextAreaElement).value).toContain("Discharge summary"),
     );
-    expect((box as HTMLTextAreaElement).value).toContain("Pasted consultation.");
-  });
-
-  test("a scanned note is refused with the reason, and the box is untouched", async () => {
-    vi.mocked(extractNote).mockRejectedValue(
-      new Error("There is no readable text in that PDF."),
-    );
-    const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-
-    const box = screen.getByPlaceholderText(/paste the patient's notes/i);
-    await user.type(box, "Pasted consultation.");
-    await user.upload(screen.getByLabelText(/attach the notes as a pdf/i), pdf("scan.pdf"));
-
-    expect(await screen.findByText(/no readable text/i)).toBeTruthy();
-    expect((box as HTMLTextAreaElement).value).toBe("Pasted consultation.");
+    expect((notesBox() as HTMLTextAreaElement).value).toContain("Typed consultation.");
   });
 });
-
-describe("what still has to be true before anything is mapped", () => {
-  test("an uploaded form does not skip the required patient details", async () => {
-    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
-    const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
-    await screen.findByRole("radio", { name: /blank form/i });
-
-    const submit = screen.getByRole("button", { name: /read the notes/i });
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/still needed/i).textContent).toContain("patient name");
-  });
-
-  test("the insurer typed at upload is what reaches the claim", async () => {
-    vi.mocked(uploadForm).mockResolvedValue(uploaded() as never);
-    const onSubmit = vi.fn();
-    const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={onSubmit} />);
-
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.type(screen.getByLabelText(/insurer/i), "Prudential");
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
-    await screen.findByRole("radio", { name: /blank form/i });
-
-    await user.type(screen.getByLabelText(/patient name/i), "Synthetic Patient");
-    await user.type(screen.getByLabelText(/nric/i), "S8012345D");
-    await user.type(screen.getByLabelText(/date of birth/i), "1978-03-14");
-    await user.type(
-      screen.getByPlaceholderText(/paste the patient's notes/i),
-      "Seen 03/07/2026, acute tonsillitis.",
-    );
-    await user.click(screen.getByRole("button", { name: /read the notes/i }));
-
-    expect(onSubmit).toHaveBeenCalled();
-    const [formId, patient] = onSubmit.mock.calls[0];
-    expect(formId).toMatch(/^upload_/);
-    expect(patient.insurer).toBe("Prudential");
-  });
-});
-
 
 describe("checking where the boxes are, on a form read from a scan", () => {
-  /**
-   * The only check a doctor can make on geometry a model guessed. A box
-   * fifteen points too high produces a sensible answer printed across the
-   * question above it, and the review screen renders that exactly like a
-   * correct one — so this is not a nicety, it is the review step the scanned
-   * path would otherwise be missing.
-   */
-
-  async function uploadScan(user: ReturnType<typeof userEvent.setup>) {
-    vi.mocked(uploadForm).mockResolvedValue(uploaded({ fill_mode: "overlay" }) as never);
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
-  }
-
   test("a scanned form offers the check, and says why", async () => {
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-    await uploadScan(user);
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user, { fill_mode: "overlay" });
 
-    expect(await screen.findByText(/that form is a scan/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /where the answers will go/i })).toBeTruthy();
+    expect(screen.getByText(/that form is a scan/i)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /where the answers will go/i }),
+    ).toBeTruthy();
   });
 
   test("a fillable form does not offer it", async () => {
-    // Its PDF stated where its own boxes are. There is nothing to check, and
-    // an offer to check it would teach the doctor to ignore the one that matters.
-    vi.mocked(uploadForm).mockResolvedValue(uploaded({ fill_mode: "acroform" }) as never);
+    // Its PDF stated where its own boxes are. An offer to check something that
+    // cannot be wrong teaches the doctor to click past the one that can.
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-
-    await user.click(screen.getByRole("button", { name: /upload a blank form/i }));
-    await user.upload(screen.getByLabelText(/blank form \(pdf\)/i), pdf());
-    await user.click(screen.getByRole("button", { name: /read this form/i }));
-
-    await screen.findByRole("radio", { name: /blank form/i });
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user, { fill_mode: "acroform" });
     expect(screen.queryByText(/that form is a scan/i)).toBeNull();
   });
 
   test("the proof sheet is fetched for the form that was uploaded", async () => {
-    vi.mocked(formProof).mockResolvedValue(new Blob(["%PDF-"], { type: "application/pdf" }));
+    vi.mocked(formProof).mockResolvedValue(
+      new Blob(["%PDF-"], { type: "application/pdf" }),
+    );
     globalThis.URL.createObjectURL = vi.fn(() => "blob:proof");
     globalThis.URL.revokeObjectURL = vi.fn();
     const open = vi.fn();
     vi.stubGlobal("open", open);
 
     const user = userEvent.setup();
-    render(<PatientForm forms={FORMS} onSubmit={vi.fn()} />);
-    await uploadScan(user);
+    render(<PatientForm onSubmit={vi.fn()} />);
+    await sendForm(user, { fill_mode: "overlay" });
     await user.click(screen.getByRole("button", { name: /where the answers will go/i }));
 
     await waitFor(() => expect(formProof).toHaveBeenCalledWith(uploaded().form_id));
-    // A tab, not a download: it is a thing to glance at and close, and putting
-    // it in Downloads beside the real filled forms invites signing the wrong one.
+    // A tab, not a download: putting it in Downloads beside the real filled
+    // forms invites printing and signing the wrong one.
     expect(open).toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("what still has to be true before anything is mapped", () => {
+  test("the form is named among what is still missing", () => {
+    render(<PatientForm onSubmit={vi.fn()} />);
+    const submit = screen.getByRole("button", { name: /read the notes/i });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/still needed/i).textContent).toContain(
+      "the blank insurance form",
+    );
+  });
+
+  test("a complete claim reaches onSubmit with the uploaded form and typed insurer", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<PatientForm onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText(/insurer/i), "Prudential");
+    await sendForm(user);
+
+    await user.click(screen.getByRole("button", { name: /type or paste/i }));
+    await user.type(notesBox(), "Seen 03/07/2026, acute tonsillitis.");
+
+    await user.type(screen.getByLabelText(/patient name/i), "Synthetic Patient");
+    await user.type(screen.getByLabelText(/nric/i), "S8012345D");
+    await user.type(screen.getByLabelText(/date of birth/i), "1978-03-14");
+    await user.click(screen.getByRole("button", { name: /read the notes/i }));
+
+    expect(onSubmit).toHaveBeenCalled();
+    const [formId, patient] = onSubmit.mock.calls[0];
+    expect(formId).toBe(uploaded().form_id);
+    expect(patient.insurer).toBe("Prudential");
+    expect(patient.clinical_text).toContain("acute tonsillitis");
   });
 });
