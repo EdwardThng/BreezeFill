@@ -17,7 +17,7 @@ from one pasted block to values in the page. No insurer portal yet, and
 RoboForm is plain HTML, so nothing there says anything about a
 framework-rendered field.
 
-252 tests pass against jsdom and synthetic fixtures. Running it in a browser
+467 tests pass against jsdom and synthetic fixtures. Running it in a browser
 has already found several things the suite could not — see the table in
 `../CLAUDE.md` — so read a green suite as "the logic holds", never as
 readiness.
@@ -56,14 +56,44 @@ persists only the licence key, never a note).
 
 | File | Role |
 |---|---|
-| `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`, no `storage`. Declares `icons` and `action.default_icon` from `icons/`. |
+| `manifest.json` | MV3. No content scripts, no default host permissions, no `tabs`. Declares `storage` as of 2026-08-17, for the licence key and nothing else. Declares `icons` and `action.default_icon` from `icons/`. |
 | `icons/` | Generated — see `assets/logo/`, never hand-edited. The toolbar icon is the doctor's access grant, not decoration. |
 | `background.js` | Opens the side panel on action click. Nothing else, deliberately. |
-| `panel/` | The doctor's surface: name → note → other notes → check details → review → fill, one step at a time. Holds the claim in memory. `STEPS` and `showStep()` move visibility only — every input stays in the DOM, so stepping back loses nothing and the panel can still be driven directly. Design: `docs/design/breezefill-panel/`. |
+| `panel/` | The doctor's surface. A fork first — *portal or PDF?* — then name → note → other notes → check details → review → fill, one step at a time. Holds the claim in memory. `STEPS` and `showStep()` move visibility only — every input stays in the DOM, so stepping back loses nothing and the panel can still be driven directly. Design: `docs/design/breezefill-panel/`. |
 | `content/fill.js` | Injected on gesture. Wires dump → locate → apply. The only code that touches the insurer's page. |
 | `learn/dump.js` | Learn mode, plus the control collection and label scrubbing the filler reuses. |
 | `fill/locate.js` | Joins schema fields to live controls by label. Refuses when ambiguous. Also what identifies a form: the same measurement, read at a looser threshold. |
 | `fill/apply.js` | Writes values past a framework's value tracker. Never overwrites an answer already in a control, never puts the same option in two instances of one repeating question, never clicks a page button, never submits. |
+
+### The fork, before anything else
+
+Added 2026-08-18. The panel opens by asking **where the form is** — the
+insurer's own website, or a PDF the doctor prints and fills.
+
+Only one of those answers is this extension. Everything below the fork ends in
+a fill button that writes into the granted tab, so a doctor holding a PDF would
+type a name, paste a note, confirm six answers and only then discover there was
+nothing to fill. The PDF answer opens `breezefill.com/#/app` in a new tab, where
+the blank form is uploaded and read, and leaves the panel where it is — a panel
+sitting on step 1 behind that tab is an invitation to fill the same claim twice.
+
+Three properties worth keeping:
+
+- **It is not one of `STEPS`.** It is a fork, not a stage: it collects nothing
+  and nothing in it can be corrected later, so numbering it would make the work
+  that matters read "Step 2 of 5". The step counter was removed entirely on the
+  same day — the panel already shows position as structure, since each finished
+  step collapses into a one-line summary that reopens it.
+- **The answer is not remembered.** `chrome.storage` holds the licence key and
+  nothing else, and a doctor who does portals on Monday and PDFs on Tuesday is
+  the ordinary case rather than the awkward one.
+- **`chrome.tabs.create` needs no permission.** The `tabs` permission gates
+  *reading* a tab's url and title, which this panel deliberately cannot do and
+  must keep being unable to do.
+
+There is a way back from step 1 and from nowhere later: past there a name and a
+note have been entered, and a control that discards those to re-ask an answered
+question is a trap rather than a way out.
 
 ### What it can reach, and when
 

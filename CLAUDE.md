@@ -299,6 +299,12 @@ is acceptable. See **Working style** at the end of this file.
   design.
 - A cache that still uploads the payload is not a fast cache. Hash client-side
   and ask first when the thing being avoided is proportional to the file.
+- Check the store zip's contents, not its filename, before uploading: unzip it
+  and grep for something you added or removed since. The version in the name
+  says nothing about when it was built.
+- Diff the live route list against README's API table after adding a route —
+  `/checkout` and `/licence/claim` shipped undocumented and were only found by
+  enumerating `app.routes`.
 - Never let a cache become the only home for something a later request needs.
   If losing it 404s a doctor mid-claim, it is not a cache — give the client the
   copy and let the cache be an optimisation.
@@ -370,8 +376,10 @@ current build from `/download` instead of linking the store; see the header of
 **1,138 tests pass**: 566 backend (1 skipped, 1 xfailed), 467 extension, 105
 website. The package to upload is `breezefill-store-v0.3.0.zip`, built and
 verified 2026-08-17 — 22 files, 121 KB. **It predates the panel changes of
-2026-08-18** (the portal/PDF fork, the step counter removal) and must be
-rebuilt before it is uploaded.
+2026-08-18 and this is verified, not inferred** — unzipping it shows
+`step-route` absent and `step-counter` still present, against a zip built
+17 Aug 18:44 and a panel last changed 18 Aug 21:37. **Rebuild before uploading**;
+`docs/chrome-web-store-submission.md` now opens with the same warning.
 
 ### What shipped on 2026-08-18 — the PDF half of the product
 
@@ -396,6 +404,14 @@ typed in (the bank made load-bearing for correctness when it is a cache), the
 **bank doing nothing at all** in production, and the **step-1 label** naming the
 wrong thing. The pattern is worth naming: every one of them was at a boundary
 the test suites stub out — the platform, the clock, the storage, the eye.
+
+**FastAPI's interactive docs are public in production** (found 2026-08-19).
+`https://api.breezefill.com/docs` returns 200, as do `/redoc` and
+`/openapi.json`. No data is exposed — only the API's shape — but that shape now
+includes `/checkout` and `/licence/claim`. Turning them off is one argument to
+`FastAPI(...)`. Recorded rather than changed, because it is a decision about
+what the API advertises and not obviously the wrong one for a product with a
+store reviewer reading it.
 
 **THE FORM BANK IS NOT PROVISIONED.** `vercel blob list-stores` returns nothing
 and `BLOB_READ_WRITE_TOKEN` is unset, so `build_bank()` returns `NullBank` and
@@ -3121,3 +3137,20 @@ fields he retypes on every claim.
    in parallel with 2 and wired to whichever wins.
 4. **Then the bank's storage.** One table in the user database if there is one;
    Blob with schemas only if there is not. Never both.
+
+---
+
+## Reference — the system design document
+
+**https://claude.ai/code/artifact/416cfc07-d618-4779-93a0-b5f9c4d9db74**
+
+Written 2026-08-19, traced from the source rather than from these notes: every
+path a consultation note can take, which process each step runs in, and where
+the trust boundaries sit. It covers the three dataflows (portal claim, PDF
+claim, reading a blank form), all four Anthropic call sites, the complete list
+of what persists, and the failure modes.
+
+Private until shared. **It is a snapshot, not a live view** — it does not
+update itself, so treat a disagreement between it and the code as the document
+being out of date, and republish it from the same file path rather than
+creating a second one.

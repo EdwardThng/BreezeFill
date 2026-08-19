@@ -27,6 +27,25 @@ listing has to survive a reviewer installing it and trying it.
 
 ## 0. What the `.zip` is
 
+> ### STOP — the zip on disk is STALE as of 2026-08-19
+>
+> The file sitting in the repo root was built **2026-08-17 18:44**. The panel
+> was last changed **2026-08-18 21:37**. Verified by unzipping it:
+>
+> | | packaged build | repo |
+> |---|---|---|
+> | The portal / PDF fork (`step-route`) | **absent** | present |
+> | The removed step counter (`step-counter`) | **still there** | gone |
+>
+> Uploading it would ship a panel that does not match this repository, consume
+> the `0.3.0` version number, and restart the review clock on the wrong build.
+> **Rebuild with the command below before you touch the dashboard**, then
+> re-run the verification in section 0.1.
+>
+> A version is consumed by an upload attempt even when the review rejects it,
+> so if `0.3.0` comes back as taken, cut `0.3.1` in `extension/manifest.json`,
+> the zip filename **and** `MIN_EXTENSION_VERSION` together.
+
 `breezefill-store-v0.3.0.zip` in the repo root **is the extension itself** —
 the thing the store hosts and installs. It is not a screenshot bundle and not a
 backup. On the dashboard it goes in *"Upload new package"*, and everything else

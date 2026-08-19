@@ -69,7 +69,16 @@ tests/      pytest suite (runs fully offline — LLM calls are stubbed)
 | `POST` | `/map-live` | The same shape but accepting an unredacted note. **No shipping code calls it** — the panel moved to `/map-redacted` when redaction moved into the browser. Live and reachable, so treat it as a route rather than dead code. Refuses with `422` when nothing on the page is labelled and `413` when there are more questions than one call can carry |
 | `POST` | `/forms/{id}/pdf` | Fill the PDF with final values and return it. Send every field — nothing is remembered from the mapping call. For an uploaded form, send the schema and the blank PDF back too |
 | `GET` | `/health` | Liveness, loaded form count, and which form bank is in use. `"NullBank"` means nothing is being cached |
+| `POST` | `/checkout` | Open a Stripe Checkout for the one plan this product sells. Takes no arguments — the price, quantity and return address are all decided server-side, where a caller cannot reach them |
+| `POST` | `/licence/claim` | A paid Stripe checkout session in, a signed licence token out. The server asks Stripe whether that session was really paid before it signs anything, so minting is on proof of payment rather than on demand |
 | `GET` | `/download/breezefill-extension.zip` | The extension, zipped from the running source so a download is never older than the server |
+
+FastAPI also serves `/docs`, `/redoc` and `/openapi.json`, and **they are
+public in production** — `https://api.breezefill.com/docs` returns 200. They
+expose no data, only the API's shape, but that shape now includes the licence
+and checkout routes. Disabling them is one argument to `FastAPI(...)`; leaving
+them is a decision rather than an oversight, and it should be made rather than
+inherited.
 
 ---
 
