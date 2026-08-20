@@ -27,6 +27,14 @@ the database this product says it does not have. If a token ever needs killing
 sooner than its expiry, the lever is rotating the signing secret, which
 invalidates every token at once and is a blunt instrument by design.
 
+DO NOT REUSE THIS AS THE CREDENTIAL FOR A DOCTOR'S PROFILE, or for anything
+else holding personal data. It was suggested on 2026-08-19 and rejected on the
+strength of the paragraph directly above: no revocation short of rotating the
+secret for everyone, a 30-day window, and a token that by design gets pasted
+into support email. Those are fine costs for a paywall and disqualifying for
+PII. It is also per-SUBSCRIPTION, so it cannot tell two doctors at one clinic
+apart. See the IMPORTANT section at the end of CLAUDE.md.
+
 WHAT A TOKEN CARRIES: a Stripe subscription id and two timestamps. Nothing else.
 No email, no name, no clinic. The payload is base64, not encryption — anyone
 holding the token can read it — and a token gets pasted into panels, quoted in

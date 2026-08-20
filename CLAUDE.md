@@ -2972,12 +2972,27 @@ Prefer correcting a wrong premise plainly over going along with it.
 
 ---
 
-# IMPORTANT — open system design: the cache, and handling users
+# IMPORTANT — open system design: the cache, the database, and auth
 
-**Status: discussed 2026-08-18, decided to WAIT, nothing built.** The owner
-asked whether to create the Blob store and said in the same breath that a user
-system was coming. The second answer changes the first, which is why neither
-was built. Read this before creating any store.
+**Status: discussed 2026-08-18 and 19. NOTHING BUILT, NOTHING COMMITTED.** Read
+this before creating any store, table or account system.
+
+What is settled, and it is only two things:
+
+- **There will be a doctor profile**, entered once and auto-filled onto forms.
+  The owner's feature, and the reason any of this is being discussed.
+- **It needs real authentication.** The owner's call, and correct — see "the
+  licence token cannot be the credential for PII" below for why the credential
+  already in the product does not stretch to cover it.
+
+What is open: whether to use Supabase at all, which auth, where the profile
+physically lives, and how many doctors share one subscription. That last one is
+listed as step 0 in the order of work because it decides the others.
+
+The sequence that produced this: the owner asked whether to create the Blob
+store, said in the same breath that a user system was coming, and the second
+answer changed the first — a cache and a database are not two decisions when
+one is nine megabytes of JSON.
 
 ## What is actually needed, in the owner's words
 
@@ -3126,13 +3141,159 @@ it writes "**Your** name (attending doctor)" and "**Your** MCR number".
 visible in six schemas. The input wanted is the pilot's actual form set — which
 fields he retypes on every claim.
 
+## Supabase, evaluated 2026-08-19 — NOT YET COMMITTED
+
+The owner asked whether Supabase could hold both the form bank and doctor
+profiles. It can, and the shape below is what was worked out. **Nothing is
+decided and nothing is built** — the DB choice is still open and the auth
+choice is explicitly deferred.
+
+**One project, one Postgres database, two tables — not two databases.** They
+never join, which is the evidence they are genuinely independent rather than
+one thing. A second storage primitive (a Supabase Storage bucket) enters only
+if the blank PDFs are kept, and they probably should not be.
+
+**The two kinds of data have OPPOSITE sharing rules, and that is what shapes
+the design:**
+
+| | Form bank | Doctor profile |
+|---|---|---|
+| Who reads a row | **everyone** | **only that doctor** |
+| Is it PII | no — a published insurer document | **yes** |
+| Value comes from | being *shared* across clinics | being *private* |
+| Keyed by | `sha256(pdf)` | the doctor |
+
+The trap: applying Supabase's usual "users see only their own rows" policy to
+the form bank by reflex turns it into a per-clinic cache and destroys the whole
+reason it exists — one doctor uploads the Great Eastern form and *every* clinic
+should benefit.
+
+**Two practical notes.** Vercel functions plus Postgres exhausts connection
+pools; **PostgREST over plain HTTP** avoids it entirely, needs no driver and no
+new dependency, and is the same shape `BlobBank` already uses — `SupabaseBank`
+would implement the same three methods and `build_bank()` would pick it up from
+an env var. And **Supabase offers Singapore**, so the doctor's PII would sit
+in-region, unlike the Anthropic inference.
+
+## The licence token cannot be the credential for PII
+
+**The correction that matters, made 2026-08-19.** It was suggested here that
+the existing licence token could double as the account credential, since it
+already carries a Stripe subscription id and `verify_licence` returns it on
+every gated request. **That was wrong, and `licence.py` disqualifies it in its
+own docstring:**
+
+> **a leaked token keeps working until it expires.** Revocation IS expiry [...]
+> There is deliberately no revocation list
+>
+> a token gets pasted into panels, quoted in support email and pasted into chat
+> transcripts
+
+Every one of those is a fine trade for a **paywall** — worst case somebody gets
+free mapping for 30 days. Every one is disqualifying for a credential that
+unlocks a doctor's name, MCR number and clinic address. It is also
+per-*subscription*, so it cannot tell two doctors at one clinic apart.
+
+**So there are two credentials answering two different questions**, and neither
+replaces the other:
+
+| | Licence token | A real session |
+|---|---|---|
+| Answers | *is this clinic paid up?* | *which doctor is this?* |
+| Gates | the model routes | the profile |
+| Revocation | expiry only, 30 days | immediate, per user |
+| Scope | one subscription | one person |
+| Safe to quote in support email | yes, by design | **no** |
+
+**The licence gate stays exactly as it is.** Nothing above changes it.
+
+## The extension is what makes the auth choice hard
+
+A profile living server-side behind a session means **the side panel needs a
+session** — a login flow inside a Chrome side panel, plus amending the hard rule
+that `chrome.storage` holds the licence key and nothing else so it can hold a
+refresh token. That is a lot of new surface in the place with the least room for
+it.
+
+**The shape proposed instead, not yet chosen: treat the doctor's details exactly
+like the patient's.** Patient demographics never travel with a claim — the panel
+holds them, `assemble_redacted` returns `fill_from` naming the value, and the
+panel fills locally. Practitioner details can work identically
+(`fill_from: "practitioner.full_name"`), which would mean:
+
+- **The website is where you log in** and edit the profile. Accounts belong
+  there, and it is an ordinary web app.
+- **The extension holds a local copy** and fills from it — no session in the
+  panel, and the details never reach the server during a claim at all.
+- The copy arrives by a **one-time sync**: a short-lived single-use code shown
+  on the website after login, pasted into the panel once.
+
+**This needs the `chrome.storage` hard rule amended, deliberately and in that
+rule's own words.** The rule exists to keep *patient* data off disk; a doctor's
+own professional details on their own machine is the category the licence key
+already occupies. Defensible — but written down as a decision, not slipped in.
+
+## Sketch of the schema, for whenever this is picked up
+
+```sql
+-- GLOBAL. The uploader is deliberately NOT recorded: linking a doctor to an
+-- insurer's form is a weak signal about their patients, and nothing needs it.
+create table form_bank (
+  pdf_sha256    text primary key,      -- key_for(pdf), the existing key unchanged
+  schema        jsonb       not null,
+  fill_mode     text        not null,  -- 'acroform' | 'overlay'
+  display_name  text,
+  field_count   int,
+  created_at    timestamptz not null default now(),
+  last_seen_at  timestamptz not null default now()
+);
+
+-- PER DOCTOR. PII, and the reason privacy.html has to change first.
+create table practitioner (
+  user_id          uuid primary key,   -- references auth.users(id) if Supabase Auth
+  subscription_id  text,               -- which clinic pays; links to the licence
+  full_name        text not null,
+  mcr_number       text,
+  clinic_name      text,
+  clinic_address   text,
+  clinic_phone     text,
+  updated_at       timestamptz not null default now()
+);
+
+-- RLS ON, DENY BY DEFAULT, on both. Supabase exposes Postgres to the browser
+-- through PostgREST with an anon key, and a table with RLS off is readable by
+-- anyone holding it. Only the backend's service-role key should touch these.
+alter table form_bank    enable row level security;
+alter table practitioner enable row level security;
+```
+
+**Size is a non-issue**: ~9 MB of schema JSON per 1,000 banked forms, against a
+500 MB free tier. The form bank will not be what is outgrown.
+
+## The question that decides the auth shape, and is unanswered
+
+**How many doctors share one subscription?** Pricing is per clinic.
+
+- **One** — the pilot, a solo GP — and the profile is per subscription, the
+  panel needs no session, and the sync code may be unnecessary.
+- **Several** — a clinic with a locum — and something must identify *which*
+  doctor is filling this form, which is where per-user auth genuinely earns its
+  place rather than being assumed into the design.
+
+Do not build the profile table until this is answered; it changes the primary
+key.
+
 ## Order of work, when this is picked up
 
+0. **Answer "how many doctors per subscription".** One question, and it decides
+   the primary key of the profile table and whether the panel needs a session
+   at all. Everything below is cheaper once it is answered.
 1. **Rewrite `privacy.html` and `Landing.tsx`** onto the patient-data promise.
    Cheapest, unblocks everything, and it is a store-review risk while it is
-   wrong.
-2. **Decide the profile's home** — client-side or a database. This is the fork;
-   everything else follows it.
+   wrong. `privacy.html` currently says "no database, no account" outright.
+2. **Decide the profile's home** — server-fetched, or a local copy synced once.
+   This is the fork; everything else follows it. The DB choice (Supabase or
+   otherwise) is still open and is the smaller half of this decision.
 3. **Build the practitioner mapping layer.** Storage-agnostic, so it can be done
    in parallel with 2 and wired to whichever wins.
 4. **Then the bank's storage.** One table in the user database if there is one;
