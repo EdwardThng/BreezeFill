@@ -79,19 +79,25 @@
 <main>
 
 <h1>BreezeFill Privacy Policy</h1>
-<p class="updated">Last updated 9 August 2026</p>
+<p class="updated">Last updated 10 October 2026</p>
 
 <div class="lede">
   <p><strong>The short version.</strong> BreezeFill helps a doctor fill an
-  insurer's claim form from a consultation note. To do that, the note is sent to
-  the BreezeFill server, which strips out the patient's identifying details and
-  sends only the de-identified remainder to an AI model to answer the form's
-  questions.</p>
-  <p>Nothing is stored. There is no database, no account, and no file on disk —
-  the note exists only for the seconds it takes to answer one request, and is
-  gone when that request finishes. The patient's name, NRIC, date of birth,
-  phone, address and policy number are <strong>never</strong> sent to the AI
-  model at all.</p>
+  insurer's claim form from a consultation note. The patient's identifying
+  details are stripped out of that note, and only the de-identified remainder is
+  sent to an AI model to answer the form's questions. In the Chrome extension
+  that stripping happens <strong>inside your own browser</strong>, before
+  anything is sent anywhere; on the website it happens on the BreezeFill server
+  the moment the note arrives. Both are described in full below.</p>
+  <p><strong>Nothing about a patient is kept.</strong> There is no patient
+  record and no claim record: a note exists only for the seconds it takes to
+  answer one request, and is gone when that request finishes. There is nothing
+  to export and nothing to delete, because nothing about a patient was stored.
+  The patient's name, NRIC, date of birth, phone, address and policy number are
+  <strong>never</strong> sent to the model that answers the form.</p>
+  <p>Some things that are <em>not</em> about a patient are kept, and they are
+  listed plainly under <a href="#retention">Retention</a> rather than left for
+  you to discover: your licence key, and blank insurer forms.</p>
 </div>
 
 <h2>Who this covers</h2>
@@ -326,25 +332,65 @@ deciding whether to use BreezeFill for a given patient.</p>
 than protect it, which is the cleaner resolution and is the direction being
 taken. This section will be updated when that lands — openly, not quietly.</p>
 
-<h2>Retention</h2>
+<h2 id="retention">Retention</h2>
 
-<p><strong>BreezeFill stores nothing.</strong> Every part of the server is
-stateless: there is no database, no session, no claim record, and no uploaded
-file. A note exists in server memory for the duration of the one request that
-carried it, and is gone when the response is sent. There is nothing to export
-and nothing to delete, because nothing was kept.</p>
+<p><strong>Nothing about a patient is retained.</strong> No patient record, no
+claim record, no consultation note and no filled form is written to a database
+or to a disk. A note exists in server memory for the duration of the one request
+that carried it, and is gone when the response is sent. There is nothing to
+export and nothing to delete, because nothing about a patient was stored.</p>
+
+<p>Two things <strong>are</strong> kept. Neither is about a patient, and both are
+listed here rather than described as nothing:</p>
+
+<ul>
+  <li><strong>Your licence key</strong>, saved by the extension on your own
+  computer so that you do not have to retype it between patients. It names your
+  subscription. It does not name you, and it does not name a patient. It is the
+  only thing the extension writes to your computer.</li>
+  <li><strong>Blank insurer forms.</strong> When a doctor uploads a blank claim
+  form, BreezeFill may keep that empty form together with a description of where
+  its boxes are, so that the next doctor to use the same form does not wait for
+  it to be read again. A blank claim form is a published document the insurer
+  hands to anybody who asks for one. A form that arrives with answers already
+  filled in is somebody's completed claim, and it is refused outright rather
+  than kept.</li>
+</ul>
 
 <p>Error logs record the <em>type</em> of a failure and nothing else — never the
 text that caused it, because that text is the clinical note.</p>
 
-<p>In the extension, the note lives in the side panel's memory while it is open.
-The extension does not request permission to write to disk and cannot do so;
-closing the panel discards the note.</p>
+<p>In the extension, the note lives in the side panel's memory while it is open,
+and closing the panel discards it. No part of a consultation note, and no
+patient detail, is ever written to your disk or to ours.</p>
+
+<!-- WHEN ACCOUNTS SHIP, a third bullet and a section of its own belong here:
+     the doctor's own professional details (name, MCR number, clinic name,
+     address, telephone), entered once and copied onto every form, plus the
+     Stripe subscription reference.
+
+     It is deliberately NOT written yet. This file is served from production and
+     every push to `main` deploys it, so a paragraph describing an account that
+     does not exist would be live the moment it is committed — the same mistake
+     as naming privacy@breezefill.com here before the mailbox existed, which
+     blocked the store listing. Land that paragraph in the SAME commit as the
+     feature, not ahead of it.
+
+     What was removed on 2026-10-10 to make room for it: "there is no database,
+     no account, and no file on disk", and "BreezeFill stores nothing". Both
+     were absolute, both were about to become false, and one of them already
+     was — the extension has written a licence key to chrome.storage since
+     2026-08-17 and blank forms have been bankable since 2026-08-18. The
+     promise worth keeping is the PATIENT one, and it survives accounts
+     untouched. Do not restore the absolute version. -->
+
 
 <h2>What the extension can and cannot do</h2>
 
-<p>The extension requests three permissions: <code>activeTab</code>,
-<code>scripting</code> and <code>sidePanel</code>.</p>
+<p>The extension requests four permissions: <code>activeTab</code>,
+<code>scripting</code>, <code>sidePanel</code> and <code>storage</code>. It
+requests no access to any website in advance, and no access to your browsing
+history or your other tabs.</p>
 
 <ul>
   <li>It can read and fill the page <strong>only on the tab where you clicked
@@ -352,7 +398,10 @@ closing the panel discards the note.</p>
   clicking again.</li>
   <li>It cannot see your browsing history, your other tabs, or their addresses.
   It does not request the permission that would allow this.</li>
-  <li>It cannot store anything on your computer.</li>
+  <li>The only thing it stores on your computer is your licence key, which is
+  what <code>storage</code> is for. No part of a consultation note and no
+  patient detail is ever written there — the claim lives in the panel's memory
+  while it is open and is discarded when you close it.</li>
   <li><strong>It never submits a form.</strong> It writes proposed answers into
   the fields and stops. You review them, correct them, and submit the form
   yourself.</li>
