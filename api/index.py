@@ -30,9 +30,30 @@ the bundle by `includeFiles` in vercel.json — a function bundle contains only
 what it is told to, and a missing `forms/` directory would surface as a 500 on
 the first PDF fill rather than at deploy time.
 
-`frontend/dist` is deliberately NOT included: on Vercel the static site is
-served from the CDN, never through this function. `main.py` already guards that
-mount with `is_dir()`, so it simply does not mount here.
+`frontend/dist` IS included, and this paragraph said the opposite until
+2026-10-11. It used to be true: the static site came off the CDN and never
+through this function, so the bundle excluded it and `main.py`'s `is_dir()`
+guard simply did not mount.
+
+Vercel changed underneath that. A FastAPI project is now detected as a "backend
+framework project" and EVERY request is routed to the function — its own build
+log warns that "internal rewrites in backend framework projects now route
+requests using the rewritten destination path". Static files in `public/` stopped
+being served ahead of this function, so `/`, `/privacy`, `/robots.txt` and every
+hashed asset arrived here, found no mount, and got FastAPI's generic 404. The
+whole website was down while `/health` answered normally, which is why it read
+as a routing problem rather than an outage.
+
+So the single-origin arrangement that already worked locally is now the one in
+production too: the bundle carries `frontend/dist` and `main.py:1422` mounts it
+at `/`. 292 KB.
+
+Two consequences to accept rather than route around. Every page view is now a
+function invocation, so a cold start lands on the landing page rather than only
+on an API call. And the `/privacy` -> `/privacy.html` rewrite in vercel.json is
+applied by the platform BEFORE this function sees the path, which is the only
+reason that URL still resolves — `StaticFiles` would not serve an extensionless
+path by itself.
 """
 
 import sys
