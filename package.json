@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Tests for the browser-extension side of BreezeFill (learn-mode dumper, and the portal filler later). Deliberately separate from frontend/package.json: the extension is not part of the served bundle, and the Dockerfile copies only backend/, frontend/ and forms/, so nothing here reaches the image.",
+  "description": "Tests for the browser-extension side of BreezeFill (learn-mode dumper, and the portal filler later). Deliberately separate from frontend/package.json, and at the repo root rather than inside extension/: everything under extension/ that is not a *.test.js ships in the store zip, so a package.json or node_modules there would ship too.",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
