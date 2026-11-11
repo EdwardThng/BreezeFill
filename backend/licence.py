@@ -33,7 +33,7 @@ strength of the paragraph directly above: no revocation short of rotating the
 secret for everyone, a 30-day window, and a token that by design gets pasted
 into support email. Those are fine costs for a paywall and disqualifying for
 PII. It is also per-SUBSCRIPTION, so it cannot tell two doctors at one clinic
-apart. See the IMPORTANT section at the end of CLAUDE.md.
+apart. See docs/decisions/system-design-open.md.
 
 WHAT A TOKEN CARRIES: a Stripe subscription id and two timestamps. Nothing else.
 No email, no name, no clinic. The payload is base64, not encryption — anyone

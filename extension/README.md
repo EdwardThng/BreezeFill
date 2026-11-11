@@ -407,7 +407,7 @@ and what is deliberately left out. Read it before changing a label there.
   Developer Mode is not something a GP will do, which is exactly why that is a
   stopgap and not a plan. Every string to paste is in
   `../docs/release/chrome-web-store-submission.md`; the version table is at the top of
-  Status in `../CLAUDE.md`.
+  `../docs/decisions/status-2026-08-18.md`.
 
 ## Assumptions that jsdom cannot test
 

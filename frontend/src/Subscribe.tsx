@@ -21,7 +21,7 @@ import { openCheckout, claimLicence } from "./api";
  * of this file can change that.
  *
  * The gate that would work lives in the panel: a licence key checked against
- * Stripe before the extension will map anything (CLAUDE.md, next steps 2c). It
+ * Stripe before the extension will map anything (docs/decisions/next-steps.md, 2c). It
  * is not built. Until it is, **the extension works without paying**, and this
  * page is a funnel rather than a lock.
  *
