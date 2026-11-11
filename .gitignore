@@ -17,9 +17,15 @@ frontend/dist/
 # the extension zip; this keeps them out of the history.
 .DS_Store
 
-# Env & secrets
-.env
-.env.*
+# Env & secrets. `.env*` also covers what `vercel env pull` writes.
+.env*
+
+# Vercel's local project link, written by `vercel link`.
+.vercel
+
+# Claude Code's per-machine permission list. Local by definition — the shared
+# settings file, if there is ever one, is .claude/settings.json.
+.claude/settings.local.json
 
 # Never commit generated/filled PDFs or anything derived from patient data
 forms/output/
@@ -29,6 +35,3 @@ forms/output/
 # manifest version changes, which is exactly when someone would reach for a
 # committed one by mistake. Rebuild it, never read it out of the history.
 /breezefill-store-*.zip
-
-.vercel
-.env*
