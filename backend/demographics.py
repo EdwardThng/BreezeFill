@@ -828,7 +828,7 @@ def _parse_patient_line(value: str, known_name: str = "") -> dict[str, tuple[str
 def _logical_lines(text: str) -> list[str]:
     """Rejoin a patient block that wrapped.
 
-    A long header line arrives wrapped as often as not — docs/test_notes.md
+    A long header line arrives wrapped as often as not — docs/testing/test_notes.md
     itself breaks mid-block, right after the phone number — and the half that
     ends up on the second physical line carries no label, so a strictly
     line-based parser drops the address and the policy number silently.
@@ -1143,7 +1143,7 @@ def _birth_date_candidates(text: str) -> list[str]:
 #
 # So a value with one of these words in front of it on the same line is known
 # not to be the patient's, and is dropped before the count is taken. Case 5 of
-# docs/patient_details_cases.md is the whole argument: `Clinic tel 62551234`
+# docs/testing/patient_details_cases.md is the whole argument: `Clinic tel 62551234`
 # and `Next of kin contact 91112233` were only ever saved by there being two of
 # them.
 #

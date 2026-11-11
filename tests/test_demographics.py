@@ -6,7 +6,7 @@ a wrong NRIC or a neighbour's phone number gets written onto a claim and
 signed, while a blank costs the doctor a line of typing. Every test named
 "refuses" or "leaves" is that second guarantee.
 
-The fixtures follow docs/test_notes.md, because that is the shape the pilot
+The fixtures follow docs/testing/test_notes.md, because that is the shape the pilot
 actually pastes. Every identifier here is synthetic.
 """
 
@@ -20,7 +20,7 @@ from demographics import parse_date, parse_demographics
 from redaction import PatientRecord, redact
 
 
-# The header format used throughout docs/test_notes.md: the whole patient
+# The header format used throughout docs/testing/test_notes.md: the whole patient
 # block on one labelled line, middot-separated.
 CASE_1 = """\
 Patient: Chua Beng Huat · S7211043C · 04/11/1972 · 91112233 ·
@@ -73,7 +73,7 @@ class TestCompoundPatientLine:
         assert parse_demographics(CASE_1).dob == "1972-11-04"
 
     def test_a_wrapped_patient_line_keeps_its_tail(self) -> None:
-        # CASE_1 wraps after the phone number, exactly as docs/test_notes.md
+        # CASE_1 wraps after the phone number, exactly as docs/testing/test_notes.md
         # renders it, so the address and policy number arrive on a second
         # physical line with no label of their own.
         parsed = parse_demographics(CASE_1)
@@ -890,7 +890,7 @@ class TestAValueSomebodyElseOwns:
     """
 
     def test_a_lone_clinic_number_is_not_the_patients(self) -> None:
-        # docs/patient_details_cases.md case 6, and the defect it recorded.
+        # docs/testing/patient_details_cases.md case 6, and the defect it recorded.
         text = (
             "Patient: Goh Siew Lan\n"
             "Seen 11/08/2026. Follow-up of type 2 diabetes.\n"

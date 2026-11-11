@@ -14,7 +14,7 @@ import { useState } from "react";
  * value needing confirmation, a field left deliberately blank) are the ones an
  * animation would carry past before they were read.
  *
- * THE PATIENT IS INVENTED. Same synthetic case as docs/test_notes.md, so a
+ * THE PATIENT IS INVENTED. Same synthetic case as docs/testing/test_notes.md, so a
  * repo fixture and the public demo cannot drift into disagreeing. Never put a
  * real note here — this file is served to the public internet.
  */

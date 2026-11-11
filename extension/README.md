@@ -32,7 +32,7 @@ FORMFILL_SHOW_INTERNAL=1 FORMFILL_DISABLE_SWEEP=1 \
 ```
 
 Then open <https://www.roboform.com/filling-test-all-fields>, click the
-BreezeFill icon **on that tab**, paste a case from `docs/test_notes.md`, and
+BreezeFill icon **on that tab**, paste a case from `docs/testing/test_notes.md`, and
 Map. Five fields fill; Date Of Birth is reported ambiguous, because three
 `<select>`s there share that one label and picking one of them would be a
 guess.
@@ -406,7 +406,7 @@ and what is deliberately left out. Read it before changing a label there.
   step 2 downloads the current build instead of linking the store — a zip plus
   Developer Mode is not something a GP will do, which is exactly why that is a
   stopgap and not a plan. Every string to paste is in
-  `../docs/chrome-web-store-submission.md`; the version table is at the top of
+  `../docs/release/chrome-web-store-submission.md`; the version table is at the top of
   Status in `../CLAUDE.md`.
 
 ## Assumptions that jsdom cannot test

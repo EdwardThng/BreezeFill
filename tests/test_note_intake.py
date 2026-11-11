@@ -90,7 +90,7 @@ class TestExtractingTheText:
 
     def test_the_floor_is_low_enough_for_a_short_real_note(self) -> None:
         # The positive case beside the refusal. A one-line note is a real
-        # thing a GP writes, and `docs/test_notes.md` case 5 is exactly that.
+        # thing a GP writes, and `docs/testing/test_notes.md` case 5 is exactly that.
         short = "Seen 03/07/2026. URTI, symptomatic treatment, MC 1 day given."
         assert len(short) > MIN_NOTE_CHARS
         assert "URTI" in extract_note_text(note_pdf([short]))
