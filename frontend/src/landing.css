@@ -179,6 +179,15 @@
   transform: translateY(-1px);
 }
 
+/* The lift is the only movement on the page not driven by the scroll demo,
+   which already checks this preference in Landing.tsx. Colour changes stay. */
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .btn:hover {
+    transform: none;
+  }
+}
+
 /* Scoped, because these buttons are <a> elements and `.landing a { color:
    inherit }` above is specificity 0,1,1 — it outranks a bare `.btn-primary`
    at 0,1,0 and the label inherited --ink instead of --accent-ink. That put
