@@ -58,7 +58,7 @@ export default function Pricing() {
             read in that order. One funnel; see GET_ROUTE. */}
         {subscribeUrl() ? (
           <>
-            <a className="btn btn-primary" href={GET_ROUTE}>
+            <a className="act act-navy" href={GET_ROUTE}>
               Subscribe
             </a>
             <p className="price-note">
@@ -72,7 +72,7 @@ export default function Pricing() {
               Subscriptions are not open yet. The extension is on the Chrome Web
               Store and free to install during the pilot.
             </p>
-            <a className="btn btn-primary" href={GET_ROUTE}>
+            <a className="act act-navy" href={GET_ROUTE}>
               Get BreezeFill
               <Arrow />
             </a>
