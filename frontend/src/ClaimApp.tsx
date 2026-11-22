@@ -118,7 +118,7 @@ export default function ClaimApp() {
       <main>
         <Header />
         <Stepper current={1} />
-        <div className="card center waiting">
+        <div className="card center waiting" role="status">
           <div className="spinner" aria-hidden="true" />
           <h2>Reading the notes…</h2>
           <p className="hint">
@@ -137,7 +137,7 @@ export default function ClaimApp() {
 
       {stage.name === "input" && (
         <>
-          {error && <div className="error">{error}</div>}
+          {error && <div className="error" role="alert">{error}</div>}
           <PatientForm onSubmit={handleCreate} />
         </>
       )}
