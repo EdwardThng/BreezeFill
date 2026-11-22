@@ -25,13 +25,25 @@ export function routeOf(hash: string): Route {
   return "landing";
 }
 
+/**
+ * A hash like #pricing names a place on the landing page, not a screen.
+ *
+ * The browser scrolls to it on its own; the hashchange handler must leave that
+ * alone rather than reset to the top as it does for a change of screen.
+ */
+export function sectionOf(hash: string): string | null {
+  const match = /^#([^/?].*)$/.exec(String(hash || ""));
+  return match && routeOf(hash) === "landing" ? match[1] : null;
+}
+
 export default function App() {
   const [route, setRoute] = useState<Route>(() => routeOf(window.location.hash));
 
   useEffect(() => {
     const onHashChange = () => {
-      setRoute(routeOf(window.location.hash));
-      window.scrollTo({ top: 0 });
+      const hash = window.location.hash;
+      setRoute(routeOf(hash));
+      if (!sectionOf(hash)) window.scrollTo({ top: 0 });
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
