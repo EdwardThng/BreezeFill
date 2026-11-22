@@ -185,7 +185,7 @@ export default function ReviewScreen({ claim, busy, error, onApprove, onDiscard 
         </section>
       )}
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" role="alert">{error}</div>}
 
       <div className="actions">
         <button type="button" className="secondary" onClick={onDiscard} disabled={busy}>
