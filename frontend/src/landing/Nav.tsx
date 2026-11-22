@@ -1,8 +1,19 @@
+import { useEffect, useState } from "react";
 import Logo from "./Logo";
 
 export default function Nav() {
+  // The pill tightens once the page has scrolled, so it stops competing with
+  // the hero's headline and reads as chrome over everything below it.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <nav className="nav" aria-label="Main">
+    <nav className={"nav" + (scrolled ? " is-scrolled" : "")} aria-label="Main">
       <a className="brand" href="#/">
         <Logo />
         <span>BreezeFill</span>
@@ -13,7 +24,7 @@ export default function Nav() {
         <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
       </div>
-      <a className="btn btn-small" href="#/demo">
+      <a className="nav-cta" href="#/demo">
         See the demo
       </a>
     </nav>
