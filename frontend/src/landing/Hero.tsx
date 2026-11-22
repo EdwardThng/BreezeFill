@@ -32,7 +32,7 @@ export default function Hero() {
             in only what you confirm. It never submits.
           </p>
           <div className="cta-row">
-            <a className="act act-navy" href={GET_ROUTE}>
+            <a className="act act-white" href={GET_ROUTE}>
               Get BreezeFill
               <Arrow />
             </a>
@@ -364,12 +364,28 @@ function SampleClaim() {
           <span className="sc-count" aria-live="polite">
             {done} of {answerable} confirmed · nothing submitted
           </span>
-          <button type="button" className="sc-replay" onClick={replay}>
-            Replay
+          {/* The same action the sample runs by itself when it first comes
+              into view: one name, whether the page or the visitor pressed it. */}
+          <button
+            type="button"
+            className="sc-fill"
+            onClick={replay}
+            disabled={phase === "proposing"}
+          >
+            <WindGlyph />
+            Fill from note
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function WindGlyph() {
+  return (
+    <svg className="sc-fill-glyph" viewBox="0 0 24 16" aria-hidden="true" focusable="false">
+      <path d="M2 11 H17 A4 4 0 1 0 13 7" />
+    </svg>
   );
 }
 
