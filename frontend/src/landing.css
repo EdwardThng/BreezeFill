@@ -180,7 +180,8 @@
 }
 
 /* The lift is the only movement on the page not driven by the scroll demo,
-   which already checks this preference in Landing.tsx. Colour changes stay. */
+   which already checks this preference in landing/ScrollDemo.tsx. Colour
+   changes stay. */
 @media (prefers-reduced-motion: reduce) {
   .btn,
   .btn:hover {
