@@ -34,7 +34,7 @@ export default function HowItWorks() {
     <section className="section how" id="how" aria-labelledby="how-title">
       <div className="how-head">
         <h2 id="how-title">Three steps, and you can stop at any of them.</h2>
-        <a className="btn btn-sky" href="#/demo">
+        <a className="act act-sky" href="#/demo">
           Watch it happen on a sample claim
           <Arrow />
         </a>
