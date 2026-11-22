@@ -110,8 +110,12 @@ export default function ScrollDemo() {
       <div className="scroll-demo-sticky">
         <div className="scroll-demo-grid">
           <div className="scroll-demo-copy">
-            <p className="eyebrow">Watch it fill</p>
-            <h2>{stage.title}</h2>
+            <ol className="scroll-demo-pips" aria-hidden="true">
+              {DEMO_STAGES.map((s, i) => (
+                <li key={s.title} className={i <= stageIndex ? "is-on" : ""} />
+              ))}
+            </ol>
+            <h2 key={stage.title}>{stage.title}</h2>
             <p>{stage.body}</p>
             <div className="scroll-demo-bar" aria-hidden="true">
               <div style={{ width: `${Math.round(progress * 100)}%` }} />
