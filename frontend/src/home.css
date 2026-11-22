@@ -362,10 +362,10 @@ html:has(.home) {
 
 .home .hero-mark {
   position: absolute;
-  top: 2%;
-  right: -7%;
+  top: 3%;
+  right: 0;
   z-index: -1;
-  width: min(66vw, 980px);
+  width: min(54vw, 780px);
   color: #fff;
   opacity: 0.24;
   animation: drift 22s ease-in-out infinite alternate;
@@ -869,7 +869,7 @@ html:has(.home) {
 
 .home .scroll-demo {
   position: relative;
-  height: 320vh;
+  height: 260vh;
 }
 
 .home .scroll-demo-sticky {
