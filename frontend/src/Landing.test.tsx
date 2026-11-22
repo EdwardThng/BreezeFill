@@ -11,7 +11,7 @@
 
 import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import App, { routeOf } from "./App";
+import App, { routeOf, sectionOf } from "./App";
 import Landing, {
   DEMO_VIDEO,
   DEMO_VIDEO_POSTER,
@@ -45,6 +45,41 @@ describe("routing", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: /you already wrote this/i }),
     ).toBeDefined();
+  });
+
+  test.each([
+    ["#pricing", "pricing"],
+    ["#how", "how"],
+    ["#faq", "faq"],
+    ["", null],
+    ["#", null],
+    ["#/", null],
+    ["#/get?paid=1", null],
+    // #demo is a screen, not the scroll demo's section id.
+    ["#demo", null],
+  ])("section of %s -> %s", (hash, expected) => {
+    expect(sectionOf(hash)).toBe(expected);
+  });
+
+  test("a nav link to a section is not thrown back to the top", () => {
+    // The browser scrolls to #pricing itself; a scrollTo(0) on the same
+    // hashchange undid it, so every nav link landed on the hero.
+    window.location.hash = "";
+    render(<App />);
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    act(() => {
+      window.location.hash = "#pricing";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    act(() => {
+      window.location.hash = "#/demo";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    scrollTo.mockRestore();
+    window.location.hash = "";
   });
 
   test("the claim form is still reachable, just not advertised", () => {
