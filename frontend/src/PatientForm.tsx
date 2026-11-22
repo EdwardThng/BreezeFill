@@ -270,12 +270,12 @@ function FormUpload({
         />
       </label>
       {busy && (
-        <p className="hint">
+        <p className="hint" role="status">
           Reading the form… the first time anyone sends in a particular form this
           takes a few seconds per page.
         </p>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
 }
@@ -407,7 +407,7 @@ function NoteFiles({ onExtracted }: { onExtracted: (text: string) => void }) {
           disabled={busy !== null}
         />
       </label>
-      {busy && <p className="hint">Reading {busy}…</p>}
+      {busy && <p className="hint" role="status">Reading {busy}…</p>}
       {done.length > 0 && (
         <ul className="attached">
           {done.map((name, i) => (
@@ -416,7 +416,7 @@ function NoteFiles({ onExtracted }: { onExtracted: (text: string) => void }) {
         </ul>
       )}
       {errors.map((message) => (
-        <p className="error" key={message}>
+        <p className="error" role="alert" key={message}>
           {message}
         </p>
       ))}
@@ -468,7 +468,7 @@ function ProofCheck({ formId }: { formId: string }) {
       <button type="button" className="upload-open" onClick={show} disabled={busy}>
         {busy ? "Preparing…" : "Show me where the answers will go"}
       </button>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
 }
