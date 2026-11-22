@@ -12,7 +12,8 @@
  * that plainly; for a doctor signing the result, it is the selling point.
  *
  * Each section lives in `landing/`, one file per section, with its copy beside
- * it. The URLs, price and asset paths live in `landing/config.ts` and are
+ * it, and the page's styles live in `home.css`, scoped under `.home` (the
+ * `#/get` and `#/demo` pages keep `landing.css`). The URLs, price and asset paths live in `landing/config.ts` and are
  * re-exported here, so `Subscribe.tsx` and the tests import them from this
  * file as before.
  */
@@ -21,7 +22,6 @@ import Closing from "./landing/Closing";
 import Faq from "./landing/Faq";
 import Hero from "./landing/Hero";
 import HowItWorks from "./landing/HowItWorks";
-import Marquee from "./landing/Marquee";
 import Nav from "./landing/Nav";
 import Pricing from "./landing/Pricing";
 import Privacy from "./landing/Privacy";
@@ -43,13 +43,14 @@ export {
 
 export default function Landing() {
   return (
-    <div className="landing">
+    <div className="home">
       <Nav />
       <Hero />
-      <Marquee />
       <Problem />
-      <ScrollDemo />
-      <HowItWorks />
+      <div className="band">
+        <ScrollDemo />
+        <HowItWorks />
+      </div>
       <Privacy />
       <VideoDemo />
       <Pricing />
