@@ -66,11 +66,11 @@ function FinalCta() {
         was ever saved.
       </p>
       <div className="cta-row">
-        <a className="btn btn-sky" href={GET_ROUTE}>
+        <a className="act act-sky" href={GET_ROUTE}>
           Get BreezeFill
           <Arrow />
         </a>
-        <a className="btn btn-quiet-dark" href="#/demo">
+        <a className="act act-quiet-dark" href="#/demo">
           See the demo first
         </a>
       </div>
