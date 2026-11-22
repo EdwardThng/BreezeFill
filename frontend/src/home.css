@@ -364,10 +364,10 @@ html:has(.home) {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: clamp(28px, 4vh, 48px);
+  gap: clamp(20px, 3vh, 36px);
   min-height: calc(100svh - 2 * var(--inset));
   margin: var(--inset);
-  padding: clamp(104px, 13vh, 132px) clamp(20px, 4.5vw, 72px) clamp(24px, 4vh, 48px);
+  padding: clamp(96px, 11vh, 120px) clamp(20px, 4.5vw, 72px) clamp(20px, 3vh, 40px);
   border-radius: var(--radius-tile);
   background:
     radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, 0.34), transparent 55%),
@@ -416,12 +416,12 @@ html:has(.home) {
 
 .home .hero-copy {
   display: grid;
-  gap: clamp(20px, 3vh, 32px);
+  gap: clamp(18px, 2.6vh, 28px);
 }
 
 .home .hero h1 {
   max-width: 12ch;
-  font-size: clamp(3rem, 6.6vw, 5.5rem);
+  font-size: clamp(3rem, 6vw, 5rem);
   font-weight: 800;
   line-height: 0.94;
   letter-spacing: -0.04em;
@@ -455,7 +455,7 @@ html:has(.home) {
 .home .hero-sub {
   display: grid;
   justify-items: start;
-  gap: 26px;
+  gap: 22px;
 }
 
 .home .hero-lede {
@@ -498,7 +498,7 @@ html:has(.home) {
 
 .home .sc-note {
   grid-column: 1;
-  margin-top: 34px;
+  margin-top: 20px;
   padding: 18px 22px 22px;
 }
 
