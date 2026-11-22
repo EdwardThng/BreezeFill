@@ -1,0 +1,555 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-22T23:48:36+00:00",
+  "title": "Design System: BreezeFill",
+  "extensions": {
+    "colorMeta": {
+      "sky-hi": {
+        "role": "primary",
+        "displayName": "Morning Sky",
+        "canonical": "#74c6f1",
+        "tonalRamp": [
+          "#020d14",
+          "#0a2937",
+          "#18475e",
+          "#276989",
+          "#398cb4",
+          "#70aed0",
+          "#a2d1eb",
+          "#d4f4ff"
+        ]
+      },
+      "sky": {
+        "role": "primary",
+        "displayName": "Logo Sky",
+        "canonical": "#3aa0dc",
+        "tonalRamp": [
+          "#010d17",
+          "#03283d",
+          "#084768",
+          "#116896",
+          "#208bc5",
+          "#64aede",
+          "#9ad1f7",
+          "#cff4ff"
+        ]
+      },
+      "sky-lo": {
+        "role": "primary",
+        "displayName": "Deep Sky",
+        "canonical": "#2b92da",
+        "tonalRamp": [
+          "#010c19",
+          "#032741",
+          "#08466e",
+          "#11669e",
+          "#2089cf",
+          "#63ace7",
+          "#99d0fe",
+          "#cef4ff"
+        ]
+      },
+      "sky-tint": {
+        "role": "neutral",
+        "displayName": "Sky Tint",
+        "canonical": "#e3f2fc",
+        "tonalRamp": [
+          "#090c0d",
+          "#212629",
+          "#3c4348",
+          "#58636a",
+          "#77858d",
+          "#9ca7ae",
+          "#c2cbd0",
+          "#e9eff4"
+        ]
+      },
+      "sky-wash": {
+        "role": "neutral",
+        "displayName": "Sky Wash",
+        "canonical": "#f2f9fe",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#232527",
+          "#3f4245",
+          "#5d6265",
+          "#7d8388",
+          "#a1a6a9",
+          "#c6cacd",
+          "#eceff1"
+        ]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#d6ebfa",
+        "tonalRamp": [
+          "#080c0e",
+          "#1f262b",
+          "#39444b",
+          "#55646e",
+          "#728593",
+          "#98a8b3",
+          "#bfcbd4",
+          "#e7f0f6"
+        ]
+      },
+      "navy": {
+        "role": "secondary",
+        "displayName": "Night Navy",
+        "canonical": "#0a2238",
+        "tonalRamp": [
+          "#070c10",
+          "#1d2630",
+          "#354453",
+          "#4f6479",
+          "#6b85a0",
+          "#92a8be",
+          "#bacbdd",
+          "#e4f0fd"
+        ]
+      },
+      "navy-2": {
+        "role": "secondary",
+        "displayName": "Lifted Navy",
+        "canonical": "#12304d",
+        "tonalRamp": [
+          "#060c12",
+          "#1b2632",
+          "#324457",
+          "#4a647e",
+          "#6686a7",
+          "#8da8c4",
+          "#b7cce2",
+          "#e2f0ff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#0a2238",
+        "tonalRamp": [
+          "#070c10",
+          "#1d2630",
+          "#354453",
+          "#4f6479",
+          "#6b85a0",
+          "#92a8be",
+          "#bacbdd",
+          "#e4f0fd"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Slate Ink",
+        "canonical": "#3a5570",
+        "tonalRamp": [
+          "#070c11",
+          "#1c2631",
+          "#344454",
+          "#4d647a",
+          "#6985a2",
+          "#90a8c0",
+          "#b9ccdf",
+          "#e3f0fe"
+        ]
+      },
+      "ink-on-sky": {
+        "role": "neutral",
+        "displayName": "Ink on Sky",
+        "canonical": "#0b2a47",
+        "tonalRamp": [
+          "#060c12",
+          "#1a2633",
+          "#314457",
+          "#4a647f",
+          "#6586a8",
+          "#8da8c5",
+          "#b7cce2",
+          "#e1f0ff"
+        ]
+      },
+      "on-navy": {
+        "role": "neutral",
+        "displayName": "On Navy",
+        "canonical": "#eaf4fc",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#222528",
+          "#3e4347",
+          "#5b6268",
+          "#7b848b",
+          "#9fa6ac",
+          "#c4cacf",
+          "#ebeff2"
+        ]
+      },
+      "on-navy-2": {
+        "role": "neutral",
+        "displayName": "On Navy Secondary",
+        "canonical": "#a9c8e2",
+        "tonalRamp": [
+          "#070c10",
+          "#1c262f",
+          "#344452",
+          "#4d6477",
+          "#69869e",
+          "#91a8bd",
+          "#b9ccdc",
+          "#e3f0fc"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#d7e6f2",
+        "tonalRamp": [
+          "#090b0d",
+          "#21262a",
+          "#3b4349",
+          "#58636b",
+          "#77848f",
+          "#9ba7b0",
+          "#c2cad2",
+          "#e9eff4"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Pale Sky Ground",
+        "canonical": "#f3f8fc",
+        "tonalRamp": [
+          "#080c0e",
+          "#222628",
+          "#3f4346",
+          "#5e6265",
+          "#7e8386",
+          "#a1a6a9",
+          "#c5cace",
+          "#eaeff3"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "amber": {
+        "role": "tertiary",
+        "displayName": "Inferred Amber",
+        "canonical": "#8a5a00",
+        "tonalRamp": [
+          "#120901",
+          "#332107",
+          "#583c12",
+          "#7f581f",
+          "#a9772f",
+          "#c69d67",
+          "#e4c39a",
+          "#ffebce"
+        ]
+      },
+      "amber-line": {
+        "role": "tertiary",
+        "displayName": "Inferred Amber Line",
+        "canonical": "#c98a1a",
+        "tonalRamp": [
+          "#130900",
+          "#362000",
+          "#5c3a00",
+          "#865600",
+          "#b17400",
+          "#cd9b51",
+          "#e9c28c",
+          "#ffeac5"
+        ]
+      },
+      "amber-wash": {
+        "role": "tertiary",
+        "displayName": "Inferred Amber Wash",
+        "canonical": "#fff6e3",
+        "tonalRamp": [
+          "#0c0b08",
+          "#28251f",
+          "#464138",
+          "#676153",
+          "#898171",
+          "#aba496",
+          "#cec9be",
+          "#f2eee6"
+        ]
+      },
+      "link-blue": {
+        "role": "neutral",
+        "displayName": "Link Blue",
+        "canonical": "#1a6fb8",
+        "tonalRamp": [
+          "#020c19",
+          "#0a2641",
+          "#17446e",
+          "#25649e",
+          "#3886d0",
+          "#6eaae7",
+          "#a0cefe",
+          "#d2f2ff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero h1 only; the closing headline and price numeral share its weight and tracking."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section h2s."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and step h3s."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Section ledes beside headlines, max 52ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Card heads, field labels, status lines, counts."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Pasted note, URLs, redacted lines, candidate values. Never headings."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-on-sky",
+        "value": "0 1px 0 rgba(255,255,255,0.6) inset, 0 24px 48px -24px rgba(10,34,56,0.5)",
+        "purpose": "White note and form cards on the hero tile."
+      },
+      {
+        "name": "button-lift",
+        "value": "0 10px 24px -12px rgba(10,34,56,0.6)",
+        "purpose": "Navy and white actions at rest; deepens on hover."
+      },
+      {
+        "name": "button-lift-hover",
+        "value": "0 16px 30px -14px rgba(10,34,56,0.65)",
+        "purpose": "Navy action on hover."
+      },
+      {
+        "name": "nav-scrolled",
+        "value": "0 0 0 1px rgba(255,255,255,0.06), 0 14px 34px -14px rgba(10,34,56,0.55)",
+        "purpose": "Top-bar pill once the page has scrolled."
+      },
+      {
+        "name": "stacked-card",
+        "value": "0 -18px 48px -24px rgba(0,0,0,0.55)",
+        "purpose": "Sticky step cards, cast upward onto the card beneath."
+      },
+      {
+        "name": "form-on-navy",
+        "value": "0 40px 80px -40px rgba(0,0,0,0.7)",
+        "purpose": "The walkthrough form on the navy band."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The single easing for every transition and draw."
+      },
+      {
+        "name": "stroke-draw",
+        "value": "stroke-dashoffset 1s-1.8s, stagger 0.2s (marks) / 0.42s (claim connectors)",
+        "purpose": "Wind strokes drawing on."
+      },
+      {
+        "name": "rise",
+        "value": "opacity 0 + translateY(5-12px) -> settled, 0.45-0.6s",
+        "purpose": "Values, statuses, headings and FAQ answers arriving."
+      },
+      {
+        "name": "state",
+        "value": "0.2s-0.35s",
+        "purpose": "Hover fills, lifts, arrow-disc nudge (3px)."
+      },
+      {
+        "name": "drift",
+        "value": "22s ease-in-out infinite alternate, translate(-3.5%, 2%)",
+        "purpose": "The giant hero wind mark only."
+      },
+      {
+        "name": "panel-open",
+        "value": "flex-grow 0.7s; body reveal delayed 0.28s",
+        "purpose": "Privacy accordion panels."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "all animation and transition off; strokes shown fully drawn",
+        "purpose": "prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-nav",
+        "value": "1080px"
+      },
+      {
+        "name": "single-column",
+        "value": "860px"
+      },
+      {
+        "name": "no-hero-mark",
+        "value": "600px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Navy Action",
+      "kind": "button",
+      "refersTo": "button-navy",
+      "description": "Primary action on pale surfaces: navy pill with a sky arrow disc.",
+      "html": "<button class=\"ds-act ds-act-navy\">Get BreezeFill <span class=\"ds-act-arrow\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M3 8h10M9 4l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></span></button>",
+      "css": ".ds-act { display:inline-flex; align-items:center; gap:12px; min-height:52px; padding:0 8px 0 24px; border:0; border-radius:999px; font-family:Figtree, ui-sans-serif, system-ui, sans-serif; font-weight:650; font-size:1rem; letter-spacing:-0.005em; cursor:pointer; transition: background-color .25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .35s cubic-bezier(0.16, 1, 0.3, 1), transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act-arrow { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; transition: transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act:hover .ds-act-arrow { transform: translateX(3px); } .ds-act:hover { transform: translateY(-1px); } .ds-act:focus-visible { outline:3px solid #0a2238; outline-offset:3px; } .ds-act-navy { background:#0a2238; color:#fff; box-shadow:0 10px 24px -12px rgba(10,34,56,.6); } .ds-act-navy .ds-act-arrow { background:#3aa0dc; color:#0a2238; } .ds-act-navy:hover { background:#12304d; box-shadow:0 16px 30px -14px rgba(10,34,56,.65); }"
+    },
+    {
+      "name": "White Action",
+      "kind": "button",
+      "refersTo": "button-white",
+      "description": "Primary action on a sky tile: white pill, navy label and arrow disc.",
+      "html": "<div style=\"padding:24px;border-radius:32px;background:linear-gradient(140deg,#74c6f1,#3aa0dc 46%,#2b92da)\"><button class=\"ds-act ds-act-white\">Get BreezeFill <span class=\"ds-act-arrow\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M3 8h10M9 4l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></span></button></div>",
+      "css": ".ds-act { display:inline-flex; align-items:center; gap:12px; min-height:52px; padding:0 8px 0 24px; border:0; border-radius:999px; font-family:Figtree, ui-sans-serif, system-ui, sans-serif; font-weight:650; font-size:1rem; letter-spacing:-0.005em; cursor:pointer; transition: background-color .25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .35s cubic-bezier(0.16, 1, 0.3, 1), transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act-arrow { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; transition: transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act:hover .ds-act-arrow { transform: translateX(3px); } .ds-act:hover { transform: translateY(-1px); } .ds-act:focus-visible { outline:3px solid #0a2238; outline-offset:3px; } .ds-act-white { background:#fff; color:#0a2238; box-shadow:0 12px 26px -14px rgba(10,34,56,.55); } .ds-act-white .ds-act-arrow { background:#0a2238; color:#fff; } .ds-act-white:hover { background:#f2f9fe; box-shadow:0 18px 32px -16px rgba(10,34,56,.6); }"
+    },
+    {
+      "name": "Sky Action",
+      "kind": "button",
+      "refersTo": "button-sky",
+      "description": "Primary action on the navy band and closing.",
+      "html": "<div style=\"padding:24px;border-radius:32px;background:#0a2238\"><button class=\"ds-act ds-act-sky\">Get BreezeFill <span class=\"ds-act-arrow\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M3 8h10M9 4l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></span></button></div>",
+      "css": ".ds-act { display:inline-flex; align-items:center; gap:12px; min-height:52px; padding:0 8px 0 24px; border:0; border-radius:999px; font-family:Figtree, ui-sans-serif, system-ui, sans-serif; font-weight:650; font-size:1rem; letter-spacing:-0.005em; cursor:pointer; transition: background-color .25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .35s cubic-bezier(0.16, 1, 0.3, 1), transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act-arrow { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; transition: transform .35s cubic-bezier(0.16, 1, 0.3, 1); } .ds-act:hover .ds-act-arrow { transform: translateX(3px); } .ds-act:hover { transform: translateY(-1px); } .ds-act:focus-visible { outline:3px solid #0a2238; outline-offset:3px; } .ds-act-sky { background:#3aa0dc; color:#0a2238; } .ds-act-sky .ds-act-arrow { background:#0a2238; color:#fff; } .ds-act-sky:hover { background:#74c6f1; } .ds-act-sky:focus-visible { outline-color:#3aa0dc; }"
+    },
+    {
+      "name": "Quiet Action",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary underlined text action; navy on sky.",
+      "html": "<a class=\"ds-quiet\" href=\"#\">Watch it fill a form</a>",
+      "css": ".ds-quiet { display:inline-flex; align-items:center; min-height:44px; padding:0 6px; color:#0b2a47; font-family:Figtree, ui-sans-serif, sans-serif; font-weight:650; text-decoration:underline; text-decoration-thickness:1.5px; text-underline-offset:.3em; } .ds-quiet:hover { text-decoration-thickness:3px; } .ds-quiet:focus-visible { outline:3px solid #0a2238; outline-offset:3px; border-radius:10px; }"
+    },
+    {
+      "name": "Nav Pill",
+      "kind": "nav",
+      "refersTo": "nav-pill",
+      "description": "Floating navy pill at top centre with links and a sky CTA.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-brand\" href=\"#\">BreezeFill</a><a class=\"ds-nav-link\" href=\"#\">How it works</a><a class=\"ds-nav-link\" href=\"#\">Privacy</a><a class=\"ds-nav-link\" href=\"#\">Pricing</a><a class=\"ds-nav-cta\" href=\"#\">Get BreezeFill</a></nav>",
+      "css": ".ds-nav { display:inline-flex; align-items:center; gap:2px; padding:6px 6px 6px 14px; border-radius:999px; background:#0a2238; color:#eaf4fc; box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 14px 34px -14px rgba(10,34,56,.55); font-family:Figtree, ui-sans-serif, sans-serif; } .ds-nav-brand { margin-right:14px; font-family:'Bricolage Grotesque', Figtree, sans-serif; font-weight:700; font-size:1.02rem; letter-spacing:-0.02em; color:inherit; text-decoration:none; } .ds-nav-link { padding:8px 14px; border-radius:999px; font-size:.92rem; color:#a9c8e2; text-decoration:none; transition:color .2s, background-color .2s; } .ds-nav-link:hover { color:#fff; background:rgba(255,255,255,.07); } .ds-nav-cta { margin-left:8px; padding:9px 18px; border-radius:999px; background:#3aa0dc; color:#0a2238; font-weight:650; font-size:.92rem; text-decoration:none; transition:background-color .2s; } .ds-nav-cta:hover { background:#74c6f1; } .ds-nav a:focus-visible { outline:3px solid #3aa0dc; outline-offset:3px; }"
+    },
+    {
+      "name": "Proposal",
+      "kind": "chip",
+      "refersTo": "proposal",
+      "description": "Dashed-until-confirmed answer: proposed (sky), inferred (amber), confirmed (solid navy).",
+      "html": "<div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button class=\"ds-prop\">J06.9 Acute URTI <span class=\"ds-tick\"></span></button><button class=\"ds-prop ds-prop-inferred\">3 days MC <span class=\"ds-tick\"></span></button><button class=\"ds-prop ds-prop-set\">Fever, cough <span class=\"ds-tick\">&#10003;</span></button></div>",
+      "css": ".ds-prop { display:inline-flex; align-items:center; gap:10px; min-height:34px; padding:4px 6px 4px 11px; border:1.5px dashed #3aa0dc; border-radius:10px; background:#f2f9fe; color:#0a2238; font-family:Figtree, ui-sans-serif, sans-serif; font-weight:650; font-size:.92rem; cursor:pointer; transition:background-color .2s, border-color .2s, color .2s; } .ds-prop:hover { background:#e3f2fc; } .ds-prop-inferred { border-color:#c98a1a; background:#fff6e3; } .ds-prop-inferred:hover { background:#ffedc7; } .ds-tick { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; box-shadow:inset 0 0 0 1.5px currentColor; opacity:.55; font-size:12px; } .ds-prop-set, .ds-prop-set:hover { border-style:solid; border-color:#0a2238; background:#0a2238; color:#fff; } .ds-prop-set .ds-tick { background:#3aa0dc; color:#0a2238; box-shadow:none; opacity:1; } .ds-prop:focus-visible { outline:3px solid #0a2238; outline-offset:3px; }"
+    },
+    {
+      "name": "Sky Tile",
+      "kind": "card",
+      "refersTo": "sky-tile",
+      "description": "Drenched 140deg sky gradient tile with a corner highlight, navy text and a faint white wind mark.",
+      "html": "<section class=\"ds-tile\"><svg class=\"ds-tile-mark\" viewBox=\"120 150 360 300\" aria-hidden=\"true\"><g fill=\"none\" stroke=\"#fff\" stroke-width=\"27\" stroke-linecap=\"round\"><path d=\"M193 246 H285 A29 29 0 1 0 258 227\"/><path d=\"M150 303 H401 A29 29 0 1 0 374 284\"/><path d=\"M177 361 H321 A29 29 0 1 1 294 380\"/></g></svg><h2>You already wrote this. Once.</h2><p>Paste the note. Confirm what it found.</p></section>",
+      "css": ".ds-tile { position:relative; overflow:hidden; isolation:isolate; padding:44px; border-radius:32px; background: radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,.34), transparent 55%), linear-gradient(140deg, #74c6f1 0%, #3aa0dc 46%, #2b92da 100%); color:#0b2a47; font-family:Figtree, ui-sans-serif, sans-serif; } .ds-tile h2 { margin:0 0 12px; max-width:12ch; font-family:'Bricolage Grotesque', Figtree, sans-serif; font-weight:800; font-size:2.8rem; line-height:.94; letter-spacing:-0.04em; } .ds-tile p { margin:0; } .ds-tile-mark { position:absolute; top:4%; right:-4%; z-index:-1; width:60%; opacity:.24; }"
+    },
+    {
+      "name": "Paper Card",
+      "kind": "card",
+      "refersTo": "paper-card",
+      "description": "White note/form card with a sky-wash head and hairline-divided rows.",
+      "html": "<figure class=\"ds-paper\"><div class=\"ds-paper-head\"><span>Claim form</span><span>3 of 5</span></div><ul><li><span>Diagnosis</span><b>Acute URTI</b></li><li><span>Onset</span><b>3 days ago</b></li></ul></figure>",
+      "css": ".ds-paper { margin:0; overflow:hidden; border-radius:22px; background:#fff; color:#0a2238; font-family:Figtree, ui-sans-serif, sans-serif; box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 24px 48px -24px rgba(10,34,56,.5); } .ds-paper-head { display:flex; justify-content:space-between; padding:13px 20px; border-bottom:1px solid #d7e6f2; background:#f2f9fe; font-size:.8rem; font-weight:650; color:#3a5570; } .ds-paper ul { margin:0; padding:4px 20px; list-style:none; } .ds-paper li { display:flex; justify-content:space-between; padding:9px 0; } .ds-paper li + li { box-shadow:0 -1px 0 #d7e6f2; } .ds-paper li span { font-size:.84rem; font-weight:600; color:#3a5570; }"
+    },
+    {
+      "name": "Navy Band",
+      "kind": "card",
+      "refersTo": "navy-band",
+      "description": "Inset night-navy band with a faint sky glow; hosts the walkthrough, stacked steps and closing.",
+      "html": "<section class=\"ds-band\"><h2>Three steps, and you sign.</h2><p>It reads, it proposes, you confirm.</p></section>",
+      "css": ".ds-band { padding:56px 44px; border-radius:32px; background: radial-gradient(70% 40% at 80% 0%, rgba(58,160,220,.22), transparent 70%), #0a2238; color:#eaf4fc; font-family:Figtree, ui-sans-serif, sans-serif; } .ds-band h2 { margin:0 0 14px; font-family:'Bricolage Grotesque', Figtree, sans-serif; font-weight:700; font-size:2.4rem; line-height:1.04; letter-spacing:-0.03em; color:#fff; } .ds-band p { margin:0; color:#a9c8e2; font-size:1.1rem; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cut From the Logo Tile",
+    "overview": "The homepage is built out of the logo: saturated sky-blue gradient tiles with big rounded corners, inset a few pixels from the viewport on a pale blue-tinted ground, and the logo's white wind strokes, a straight run ending in a curl, as the only line ornament. The strokes carry meaning: in the sample claim and the step art, a white stroke runs from the sentence in the note to the box on the form, so the ornament is the product's source links made visible. Deep night navy takes the parts that scroll (the walkthrough and stacked steps) and the closing.\n\nThe page is drenched rather than tinted. Colour comes in whole panels, not accents scattered on white, and the panels are few and large. White cards sit on the sky for anything a doctor reads at length. The look is confident and warm-weather, not clinical, but every readable word sits at a contrast a tired GP can read.\n\nScope: this system governs the homepage (`#/`, `frontend/src/home.css`, scoped under `.home`). `#/get` and `#/demo` still use the older pale-blue `landing.css` / `demo.css` and have not been migrated; the claim UI at `#/app` (`styles.css`) and the extension panel are separate operational surfaces with their own styles.",
+    "keyCharacteristics": [
+      "Inset sky tiles (32px radius, 12px from the viewport edge) on a pale ground.",
+      "White wind strokes with round caps and a curled terminal, drawn on with stroke-dashoffset.",
+      "Navy text on sky; white only for strokes, cards and fills.",
+      "Proposed answers in dashed outlines; confirmed answers go solid navy.",
+      "Bricolage Grotesque display, Figtree text, JetBrains Mono only for pasted note data."
+    ],
+    "rules": [
+      {
+        "name": "The Navy-on-Sky Rule",
+        "body": "White text on Logo Sky measures 2.9:1 and fails even at display size; navy on it is 5.5:1. Every readable word on a sky surface is navy (ink-on-sky). White on sky is for strokes, the giant mark, cards and fills only.",
+        "section": "colors"
+      },
+      {
+        "name": "The Drench Rule",
+        "body": "Sky arrives as whole tiles with the 140deg gradient (sky-hi to sky to sky-lo) plus a soft white radial highlight in one corner. It is not used as a thin accent line or a coloured word on white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Amber Means Inferred Rule",
+        "body": "Amber appears only on an answer that was inferred. It is never decoration and never a warning for anything else.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Is Data Rule",
+        "body": "Monospace appears only where the text is data a doctor pasted or a system produced (the note, a URL, a redacted line, a candidate value). Never for headings, labels or decoration.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tight Display Rule",
+        "body": "Display and headline sizes track negative (-0.03em to -0.04em) with balanced wrapping; body text keeps default tracking with pretty wrapping.",
+        "section": "typography"
+      },
+      {
+        "name": "The Soft Navy Shadow Rule",
+        "body": "Every shadow is tinted navy (or black on navy), blurred wide and pulled in by a negative spread. No hard offset shadows, no grey ambient glows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** set every readable word on a sky surface in navy (ink-on-sky, `#0b2a47`); keep white on sky for strokes, marks, cards and fills.",
+      "**Do** inset tiles and bands 12px from the viewport with the 32px tile radius (8px and 24px under 860px).",
+      "**Do** draw any connector or ornament as the wind stroke: round caps, a straight run into a curl, animated by stroke-dashoffset on `cubic-bezier(0.16, 1, 0.3, 1)`.",
+      "**Do** show a proposed value dashed and a confirmed value solid navy; show an inferred value in amber; show a refused value as an empty hatched field.",
+      "**Do** use JetBrains Mono only for note text, URLs, redacted lines and candidate values.",
+      "**Do** make every motion settle to its finished state under `prefers-reduced-motion`."
+    ],
+    "donts": [
+      "**Don't** put white text on Logo Sky (2.9:1); it fails at every size.",
+      "**Don't** use sky as a thin accent on white; it comes as whole gradient tiles.",
+      "**Don't** use amber for anything except an inferred answer.",
+      "**Don't** use hard offset shadows or grey glows; shadows are soft, navy-tinted and negatively spread.",
+      "**Don't** use dashed borders for decoration; dashed means proposed, unconfirmed, closed or not yet done (the \"today\" problem card).",
+      "**Don't** add a second decorative line motif (squiggles, waves, swooshes) beside the wind stroke; hairline dividers are structure, not ornament."
+    ]
+  }
+}
