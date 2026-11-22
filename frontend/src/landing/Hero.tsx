@@ -25,18 +25,18 @@ export default function Hero() {
           You already wrote this. <span className="hero-once">Once.</span>
         </h1>
         <div className="hero-sub">
-          <p className="lede">
+          <p className="hero-lede">
             Paste the consultation into a panel beside the insurer's form.
             BreezeFill reads the questions on that form, proposes an answer to
             each one with the line from your note that supports it, and writes
             in only what you confirm. It never submits.
           </p>
           <div className="cta-row">
-            <a className="btn btn-primary" href={GET_ROUTE}>
+            <a className="act act-navy" href={GET_ROUTE}>
               Get BreezeFill
               <Arrow />
             </a>
-            <a className="btn btn-quiet" href="#/demo">
+            <a className="act act-quiet" href="#/demo">
               Watch it fill a form
             </a>
           </div>
@@ -49,7 +49,7 @@ export default function Hero() {
 
 export function Arrow() {
   return (
-    <span className="btn-arrow" aria-hidden="true">
+    <span className="act-arrow" aria-hidden="true">
       <svg viewBox="0 0 16 16" focusable="false">
         <path
           d="M3 8h9M8.5 4.5 12 8l-3.5 3.5"
