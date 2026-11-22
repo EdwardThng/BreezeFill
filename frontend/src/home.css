@@ -221,6 +221,23 @@ html:has(.home) {
   box-shadow: 0 16px 30px -14px rgba(10, 34, 56, 0.65);
 }
 
+.home .act-white {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 12px 26px -14px rgba(10, 34, 56, 0.55);
+}
+
+.home .act-white .act-arrow {
+  background: var(--navy);
+  color: #fff;
+}
+
+.home .act-white:hover {
+  background: #f2f9fe;
+  transform: translateY(-1px);
+  box-shadow: 0 18px 32px -16px rgba(10, 34, 56, 0.6);
+}
+
 .home .act-sky {
   background: var(--sky);
   color: var(--navy);
@@ -362,10 +379,10 @@ html:has(.home) {
 
 .home .hero-mark {
   position: absolute;
-  top: 3%;
-  right: 0;
+  top: 4%;
+  right: 1%;
   z-index: -1;
-  width: min(54vw, 780px);
+  width: min(46vw, 680px);
   color: #fff;
   opacity: 0.24;
   animation: drift 22s ease-in-out infinite alternate;
@@ -436,11 +453,9 @@ html:has(.home) {
 }
 
 .home .hero-sub {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px 48px;
+  display: grid;
+  justify-items: start;
+  gap: 26px;
 }
 
 .home .hero-lede {
@@ -782,13 +797,42 @@ html:has(.home) {
   font-variant-numeric: tabular-nums;
 }
 
-.home button.sc-replay {
-  padding: 6px 2px;
-  font-size: 0.8rem;
+.home button.sc-fill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 8px 12px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 0.86rem;
   font-weight: 650;
-  color: var(--link-blue);
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
+  transition:
+    background-color 0.2s,
+    transform 0.3s var(--ease-out);
+}
+
+.home button.sc-fill:hover:not(:disabled) {
+  background: var(--navy-2);
+  border-radius: 999px;
+  transform: translateY(-1px);
+}
+
+.home button.sc-fill:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.home .sc-fill-glyph {
+  width: 22px;
+  height: 15px;
+}
+
+.home .sc-fill-glyph path {
+  fill: none;
+  stroke: var(--sky);
+  stroke-width: 2.2;
+  stroke-linecap: round;
 }
 
 /* --- sections on the pale ground --------------------------------------- */
@@ -1359,7 +1403,7 @@ html:has(.home) {
 .home .guarantees {
   display: flex;
   gap: 12px;
-  height: 520px;
+  height: 480px;
   margin-top: clamp(40px, 6vw, 72px);
 }
 
@@ -1367,9 +1411,9 @@ html:has(.home) {
   position: relative;
   flex: 1 1 0;
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1.5px dashed var(--sky);
   border-radius: 26px;
-  background: #fff;
+  background: var(--sky-tint);
   overflow: hidden;
   transition:
     flex-grow 0.7s var(--ease-out),
@@ -1378,11 +1422,26 @@ html:has(.home) {
 }
 
 .home .guarantee:not(.is-open):hover {
-  background: var(--sky-wash);
+  background: var(--mist);
+}
+
+/* A curl at the top of each closed tile: the logo's terminal, saying "open
+   me" in the page's own line. */
+.home .guarantee:not(.is-open)::before {
+  content: "";
+  position: absolute;
+  top: 26px;
+  left: 24px;
+  width: 44px;
+  height: 26px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 26'%3E%3Cpath d='M3 20 H30 A8 8 0 1 0 22 12' fill='none' stroke='%233aa0dc' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+  pointer-events: none;
 }
 
 .home .guarantee.is-open {
   flex-grow: 3.6;
+  border-style: solid;
   border-color: var(--navy);
   background: var(--navy);
   color: var(--on-navy);
@@ -1523,10 +1582,10 @@ html:has(.home) {
 
 .home .price-mark {
   position: absolute;
-  top: -12%;
-  right: -16%;
+  top: -30%;
+  right: -26%;
   z-index: -1;
-  width: 78%;
+  width: 70%;
   color: #fff;
   opacity: 0.28;
 }
@@ -1697,8 +1756,7 @@ html:has(.home) {
   right: -10%;
   z-index: -1;
   width: min(72vw, 960px);
-  color: var(--sky);
-  opacity: 0.32;
+  color: #1c4d77;
 }
 
 .home .closing-wind path {
@@ -1779,7 +1837,7 @@ html:has(.home) {
   font-size: clamp(4rem, 17.5vw, 16rem);
   line-height: 0.8;
   letter-spacing: -0.04em;
-  color: rgba(58, 160, 220, 0.2);
+  color: #173f63;
   user-select: none;
   white-space: nowrap;
 }
@@ -1789,7 +1847,6 @@ html:has(.home) {
   height: 0.72em;
   margin-bottom: 0.06em;
   border-radius: 0.18em;
-  opacity: 0.3;
 }
 
 /* --- smaller screens ---------------------------------------------------- */
@@ -1821,6 +1878,23 @@ html:has(.home) {
   .home {
     --inset: 8px;
     --radius-tile: 24px;
+  }
+
+  .home .art-read-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .home .art-read-wind {
+    display: none;
+  }
+
+  .home .art-read-page {
+    justify-self: start;
+  }
+
+  .home .guarantee:not(.is-open)::before {
+    display: none;
   }
 
   .home .topbar {
@@ -1916,6 +1990,12 @@ html:has(.home) {
 
   .home .faq-list details p {
     padding-right: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .home .hero-mark {
+    display: none;
   }
 }
 
