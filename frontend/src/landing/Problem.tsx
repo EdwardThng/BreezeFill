@@ -19,7 +19,7 @@ export default function Problem() {
             The insurer emails a link. You open it beside the clinical record
             and copy across the same facts you already documented — name, NRIC,
             policy number, diagnosis, dates of admission and discharge, the ICD
-            code. Fifteen minutes of transcription, per claim, for information
+            code. Minutes of transcription, per claim, for information
             that is already written down.
           </p>
         </article>
