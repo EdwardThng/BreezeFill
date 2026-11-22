@@ -404,7 +404,7 @@ html:has(.home) {
 
 .home .hero h1 {
   max-width: 12ch;
-  font-size: clamp(3rem, 7.4vw, 6rem);
+  font-size: clamp(3rem, 6.6vw, 5.5rem);
   font-weight: 800;
   line-height: 0.94;
   letter-spacing: -0.04em;
@@ -610,12 +610,11 @@ html:has(.home) {
 
 .home .sc-fields li {
   display: grid;
-  grid-template-columns: minmax(7.5rem, 0.8fr) minmax(0, 1.4fr);
-  grid-template-rows: auto auto;
-  column-gap: 16px;
-  row-gap: 3px;
+  grid-template-columns: minmax(6.5rem, 0.7fr) minmax(0, 1fr) minmax(0, 0.72fr);
+  align-items: center;
+  column-gap: 14px;
   margin: 0 -10px;
-  padding: 9px 10px;
+  padding: 7px 10px;
   border-radius: 12px;
   transition: background-color 0.25s var(--ease-out);
 }
@@ -629,16 +628,17 @@ html:has(.home) {
 }
 
 .home .sc-label {
-  grid-row: 1 / 3;
-  align-self: center;
   font-size: 0.84rem;
   font-weight: 600;
   color: var(--ink-2);
 }
 
+.home .sc-value {
+  justify-self: start;
+}
+
 .home .sc-value,
 .home .sc-status {
-  grid-column: 2;
   transition:
     opacity 0.5s var(--ease-out) calc(0.75s + var(--i) * 0.42s),
     transform 0.5s var(--ease-out) calc(0.75s + var(--i) * 0.42s);
@@ -651,8 +651,10 @@ html:has(.home) {
 }
 
 .home .sc-status {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
   color: var(--link-blue);
 }
 
@@ -757,6 +759,7 @@ html:has(.home) {
 
 .home .sc-value.is-blank {
   display: block;
+  justify-self: stretch;
   height: 34px;
   border: 1.5px solid #e1e9f0;
   border-radius: 10px;
@@ -1842,13 +1845,12 @@ html:has(.home) {
     grid-template-columns: 1fr;
   }
 
-  .home .sc-label {
-    grid-row: auto;
+  .home .sc-fields li {
+    row-gap: 6px;
   }
 
-  .home .sc-value,
   .home .sc-status {
-    grid-column: 1;
+    text-align: left;
   }
 
   .home .problem-head,
