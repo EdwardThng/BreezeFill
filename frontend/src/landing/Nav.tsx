@@ -13,18 +13,18 @@ export default function Nav() {
   }, []);
 
   return (
-    <nav className={"nav" + (scrolled ? " is-scrolled" : "")} aria-label="Main">
-      <a className="brand" href="#/">
+    <nav className={"topbar" + (scrolled ? " is-scrolled" : "")} aria-label="Main">
+      <a className="topbar-brand" href="#/">
         <Logo />
         <span>BreezeFill</span>
       </a>
-      <div className="nav-links">
+      <div className="topbar-links">
         <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
         <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
       </div>
-      <a className="nav-cta" href="#/demo">
+      <a className="topbar-cta" href="#/demo">
         See the demo
       </a>
     </nav>
