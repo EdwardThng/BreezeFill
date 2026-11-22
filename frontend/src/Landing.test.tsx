@@ -354,10 +354,13 @@ describe("hero shot, scroll demo and video", () => {
     expect(container.querySelectorAll(".shot-frame .url")).toHaveLength(1);
   });
 
-  test("the video area says where to put the file", () => {
+  test("with no recording, there is no video section at all", () => {
+    // It used to render "Demo video goes here — put the file in…", which every
+    // visitor to the live site read. Absent is honest; a placeholder is not.
+    expect(DEMO_VIDEO).toBe("");
     render(<Landing />);
-    expect(screen.getByText(/demo video goes here/i)).toBeDefined();
-    expect(document.querySelector(".video-frame video")).toBeNull();
+    expect(screen.queryByText(/demo video goes here/i)).toBeNull();
+    expect(document.querySelector(".video-frame")).toBeNull();
   });
 
   test("no asset is loaded from another origin", () => {
