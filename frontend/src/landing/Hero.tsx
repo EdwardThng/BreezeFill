@@ -110,19 +110,20 @@ interface Field {
 
 const FIELDS: Field[] = [
   {
+    id: "tel",
+    label: "Contact number",
+    value: "",
+    status: "choose",
+    sources: ["hp", "tel"],
+    note: "Two in the note — pick the patient's",
+    choices: ["9123 4567", "6123 4567"],
+  },
+  {
     id: "dx",
     label: "Diagnosis",
     value: "Acute tonsillitis",
     status: "quoted",
     sources: ["imp"],
-    note: "Quoted from your note",
-  },
-  {
-    id: "adm",
-    label: "Date of admission",
-    value: "02/08/2026",
-    status: "quoted",
-    sources: ["adm"],
     note: "Quoted from your note",
   },
   {
@@ -134,21 +135,20 @@ const FIELDS: Field[] = [
     note: "Inferred — needs your click",
   },
   {
+    id: "adm",
+    label: "Date of admission",
+    value: "02/08/2026",
+    status: "quoted",
+    sources: ["adm"],
+    note: "Quoted from your note",
+  },
+  {
     id: "dis",
     label: "Date of discharge",
     value: "",
     status: "missing",
     sources: [],
     note: "Not in your note — left blank",
-  },
-  {
-    id: "tel",
-    label: "Contact number",
-    value: "",
-    status: "choose",
-    sources: ["hp", "tel"],
-    note: "Two in the note — pick the patient's",
-    choices: ["9123 4567", "6123 4567"],
   },
 ];
 
@@ -231,7 +231,7 @@ function SampleClaim() {
         const s = span.getBoundingClientRect();
         const sx = n.right - b.left + 2;
         const sy = s.top + s.height / 2 - b.top;
-        const ex = f.left - b.left - 16;
+        const ex = f.left - b.left - 26;
         const ey = f.top + 22 - b.top;
         const gap = ex - sx;
         const d =
