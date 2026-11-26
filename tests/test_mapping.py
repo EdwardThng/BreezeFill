@@ -615,6 +615,22 @@ def test_the_prompt_lets_a_field_override_the_date_format():
     assert "unless the field's own description states a different" in SYSTEM_PROMPT
 
 
+def test_the_prompt_says_a_stated_absence_answers_no_detail_field():
+    # Whole-form eval cases 3 and 12: "Not admitted" came back as an admission
+    # PERIOD and "No medical leave issued" as a leave period, both `extracted`.
+    # Nothing downstream can tell a sentence reporting an absence from a
+    # sentence reporting a value, so the rule has to reach the model. Checked
+    # on the prompt map_fields actually sends, not just the constant.
+    client = FakeClient(GOOD_LLM_JSON)
+    map_fields(SAMPLE_SCHEMA, "notes", client=client)
+    sent = client.last_kwargs["system"]
+    assert "says something did not happen" in sent
+    assert '"Not admitted"' in sent
+    # The positive half: a question that is itself yes/no is still answered.
+    # Without this the rule would blank "Self-inflicted? No" as well.
+    assert "yes/no question is still answered" in sent
+
+
 def test_a_field_asking_for_a_short_year_gets_one():
     # The exact production failure: the model answered in full-year form for a
     # field whose box holds two digits.
