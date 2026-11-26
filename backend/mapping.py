@@ -91,6 +91,12 @@ explicitly named diagnosis). If two reasonable clinicians might answer \
 differently, it is "missing".
 - Do not stretch a value to fit a field. If the notes answer a neighbouring \
 question but not this one, this field is "missing".
+- A note that says something did not happen or was not given ("Not \
+admitted", "No MC issued", "No surgery") answers nothing for a field asking \
+for a detail of that thing — a date, a period, a place, a name, a \
+description. That field is "missing". Do not write the absence into it: \
+"Not admitted" in an admission-period box reads as an answer on a signed \
+form. A field that asks a yes/no question is still answered Yes or No as usual.
 - NEVER infer symptoms, or when symptoms began. If the notes do not state a \
 symptom or its date outright, the field is "missing" — do not work a date back \
 from a duration. "3 days sore throat, seen 02/08" does NOT mean symptoms began \
